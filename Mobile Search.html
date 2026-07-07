@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin:0; background:#f7f9fd; }
+    .hero { background:#1f3b73; color:white; padding:22px; text-align:center; }
+    .hero h1 { margin:0; font-size:24px; }
+    .search { padding:16px; }
+    input { width:100%; padding:14px; font-size:16px; border-radius:12px; border:1px solid #ccc; box-sizing:border-box; }
+    button { width:100%; margin-top:10px; padding:14px; background:#1f3b73; color:white; border:0; border-radius:12px; font-weight:bold; font-size:16px; }
+    .card { background:white; margin:12px 16px; padding:14px; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.12); border-left:6px solid #8bbcff; }
+    .title { font-weight:bold; font-size:17px; margin-bottom:6px; }
+    .meta { font-size:13px; color:#444; line-height:1.5; }
+    .status { padding:0 16px; color:#657189; font-size:13px; }
+  </style>
+</head>
+
+<body>
+  <div class="hero">
+    <h1>Schools Spectacular Directory</h1>
+    <div>Participant Search</div>
+  </div>
+
+  <div class="search">
+    <input id="q" placeholder="Search name, school, category, item or teacher">
+    <button onclick="runSearch()">Search</button>
+  </div>
+
+  <div id="status" class="status"></div>
+  <div id="results"></div>
+
+  <script>
+    function runSearch() {
+      const q = document.getElementById("q").value.trim();
+      if (!q) return;
+
+      document.getElementById("status").innerHTML = "Searching...";
+      document.getElementById("results").innerHTML = "";
+
+      google.script.run
+        .withSuccessHandler(showResults)
+        .withFailureHandler(err => {
+          document.getElementById("status").innerHTML = "Error: " + err.message;
+        })
+        .mobileSearch(q);
+    }
+
+    function showResults(results) {
+      document.getElementById("status").innerHTML =
+        (results || []).length + " result/s found";
+
+      document.getElementById("results").innerHTML = (results || []).map(r => `
+        <div class="card">
+          <div class="title">${r.icon || ""} ${escapeHtml(r.title || "")}</div>
+          <div class="meta">
+            <strong>Type:</strong> ${escapeHtml(r.type || "")}<br>
+            <strong>School:</strong> ${escapeHtml(r.school || "")}<br>
+            <strong>Category:</strong> ${escapeHtml(r.category || "")}<br>
+            <strong>Email:</strong> ${escapeHtml(r.email || "")}<br>
+            <strong>Phone:</strong> ${escapeHtml(r.phone || "")}<br>
+            <strong>Status:</strong> ${escapeHtml(r.status || "")}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+  </script>
+</body>
+</html>

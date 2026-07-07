@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --blue: #1f6fff;
+      --deep-blue: #1f3b73;
+      --yellow: #f6c945;
+      --ink: #1d2b46;
+      --muted: #657189;
+      --line: #dce5f5;
+      --bg: #f7f9fd;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Poppins', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    .hero {
+      background: var(--deep-blue);
+      padding: 18px;
+      text-align: center;
+      border-bottom: 5px solid var(--yellow);
+    }
+
+    .logo {
+      width: 190px;
+      max-width: 100%;
+      margin-bottom: 8px;
+    }
+
+    .title {
+      font-size: 21px;
+      font-weight: 800;
+      color: white;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--yellow);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .panel {
+      padding: 15px;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 11px;
+      color: var(--deep-blue);
+      text-transform: uppercase;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      font-size: 14px;
+      margin-top: 5px;
+      outline: none;
+      background: white;
+      font-family: 'Poppins', Arial, sans-serif;
+    }
+
+    input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 2px rgba(31,111,255,0.12);
+    }
+
+    button {
+      width: 100%;
+      margin-top: 14px;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: var(--deep-blue);
+      color: white;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      font-family: 'Poppins', Arial, sans-serif;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .tile {
+      background: white;
+      border: 1px solid var(--line);
+      border-left: 7px solid var(--blue);
+      border-radius: 12px;
+      padding: 11px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    .tile:hover {
+      background: #fcfdff;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+    }
+
+    .student { border-left-color: #8bbcff; }
+    .group { border-left-color: #f6c945; }
+    .category { border-left-color: #9fd3c7; }
+    .item { border-left-color: #f7b7d2; }
+    .school { border-left-color: #d9c2ff; }
+    .teacher { border-left-color: #7fc8a9; }
+
+    .tile-title {
+      font-weight: 800;
+      color: var(--ink);
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .tile-meta {
+      font-size: 12px;
+      color: #4b5568;
+      line-height: 1.45;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 5px;
+      background: #eef5ff;
+      color: var(--deep-blue);
+    }
+
+    .empty {
+      font-size: 12px;
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="hero">
+    <img
+      src="https://drive.google.com/thumbnail?id=16Yd2MUy4tNCEvptLXTwXXXNcr2gnGhxT&sz=w600"
+      class="logo"
+    >
+    <div class="title">Participant Search</div>
+    <div class="subtitle">Schools Spectacular 2026</div>
+  </div>
+
+  <div class="panel">
+    <label>Search Everything</label>
+    <input id="everything" placeholder="Name, school, category, item, teacher, email, phone">
+
+    <label>School</label>
+    <input id="school" placeholder="School name">
+
+    <label>Person</label>
+    <input id="person" placeholder="Student, teacher, email or phone">
+
+    <label>Group / Category / Item</label>
+    <input id="group" placeholder="Choir, Featured Dance, Good Things Grow">
+
+    <button onclick="runSearch(true)">SEARCH 🔍</button>
+
+    <div id="status" class="status"></div>
+    <div id="results"></div>
+  </div>
+
+  <script>
+    let typingTimer;
+    let lastQuery = "";
+
+    document.querySelectorAll("input").forEach(input => {
+      input.addEventListener("input", () => {
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => runSearch(false), 300);
+      });
+
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter") runSearch(true);
+      });
+    });
+
+    function getFilters() {
+      return {
+        everything: document.getElementById("everything").value.trim(),
+        school: document.getElementById("school").value.trim(),
+        person: document.getElementById("person").value.trim(),
+        group: document.getElementById("group").value.trim()
+      };
+    }
+
+    function runSearch(force) {
+      const filters = getFilters();
+      const joined = [filters.everything, filters.school, filters.person, filters.group].join("|");
+
+      if (!joined.replace(/\|/g, "").trim()) {
+        lastQuery = "";
+        document.getElementById("status").innerHTML = "";
+        document.getElementById("results").innerHTML = "";
+        return;
+      }
+
+      if (!force) {
+        const shortestUseful = [filters.everything, filters.school, filters.person, filters.group]
+          .filter(Boolean)
+          .some(value => value.length >= 2);
+
+        if (!shortestUseful) return;
+      }
+
+      if (joined === lastQuery) return;
+      lastQuery = joined;
+
+      document.getElementById("status").innerHTML = "Searching...";
+
+      google.script.run
+        .withSuccessHandler(showTiles)
+        .withFailureHandler(error => {
+          document.getElementById("status").innerHTML = "Search failed.";
+          document.getElementById("results").innerHTML =
+            `<div class="empty">${escapeHtml(error.message || error)}</div>`;
+        })
+        .searchParticipantsForTiles(filters);
+    }
+
+    function showTiles(results) {
+      const status = document.getElementById("status");
+      const container = document.getElementById("results");
+
+      if (!results || results.length === 0) {
+        status.innerHTML = "";
+        container.innerHTML = `<div class="empty">No results found.</div>`;
+        return;
+      }
+
+      status.innerHTML = `${results.length} result/s found. Select a tile to view details.`;
+      window.currentResults = results;
+
+      container.innerHTML = results.map((r, index) => {
+        const typeClass = String(r.type || "")
+          .toLowerCase()
+          .replace("school group", "group");
+
+        return `
+          <div class="tile ${typeClass}" onclick="selectRecord(${index})">
+            <div class="badge">${escapeHtml(r.type)}</div>
+            <div class="tile-title">${escapeHtml(r.icon)} ${escapeHtml(r.title)}</div>
+            <div class="tile-meta">
+              ${r.collectionType ? "Click to view all matching records." : `
+                <strong>School:</strong> ${escapeHtml(r.school)}<br>
+                <strong>Category:</strong> ${escapeHtml(r.category)}<br>
+                <strong>Item:</strong> ${escapeHtml(r.item)}<br>
+                <strong>Phone:</strong> ${escapeHtml(r.phone)}<br>
+                <strong>Status / Count:</strong> ${escapeHtml(r.status)}
+              `}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function selectRecord(index) {
+      const record = window.currentResults[index];
+
+      document.getElementById("status").innerHTML =
+        `Loading ${escapeHtml(record.title)}...`;
+
+      google.script.run
+        .withSuccessHandler(() => {
+          document.getElementById("status").innerHTML =
+            `${escapeHtml(record.title)} loaded on Participant Search sheet.`;
+        })
+        .withFailureHandler(error => {
+          document.getElementById("status").innerHTML =
+            `Could not load record: ${escapeHtml(error.message || error)}`;
+        })
+        .writeSelectedParticipant(record);
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
