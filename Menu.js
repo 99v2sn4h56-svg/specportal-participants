@@ -5,11 +5,11 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
 
-  // Participant Search Menu
-  ui.createMenu("Participant Search 🔍")
-    .addItem("Open Search Sidebar", "openParticipantSearchSidebar")
-    .addToUi();
 
+  // Participant Search Menu
+ ui.createMenu("Participant Search 🔍")
+  .addItem("Open Spec Portal", "openSpecPortalHome")
+  .addToUi();
   // Spec Tools Menu
   ui.createMenu("Spec Tools")
     .addItem("Mobile Search 📱", "showMobileSearch")
@@ -37,5 +37,5 @@ function onOpen() {
     .addToUi();
 
   // Auto-open Participant Search when spreadsheet opens
-  openParticipantSearchSidebar();
+ openSpecPortalOnOpen_();
 }

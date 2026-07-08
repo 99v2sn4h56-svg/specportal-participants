@@ -1,0 +1,1919 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --blue: #2d67b2;
+      --yellow: #fbcc39;
+      --red: #ef4343;
+      --purple: #bb529e;
+      --sky: #44c2f0;
+      --orange: #f79420;
+      --magenta: #ef509c;
+      --mint: #9dd085;
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #667085;
+      --border: #e5e7eb;
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      font-family: Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+      box-sizing: border-box;
+    }
+
+    .header {
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      color: white;
+      padding: 20px 18px 18px;
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+    }
+
+    .kicker {
+      font-size: 11px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      opacity: 0.85;
+      margin-bottom: 4px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.1;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      font-size: 13px;
+      opacity: 0.9;
+    }
+
+    .wrap {
+      padding: 14px;
+      box-sizing: border-box;
+      width: 100%;
+      overflow-x: hidden;
+    }
+
+    .searchBox {
+      width: 100%;
+      box-sizing: border-box;
+      border: 2px solid transparent;
+      border-radius: 16px;
+      padding: 13px 14px;
+      font-size: 14px;
+      outline: none;
+      background: white;
+      box-shadow: 0 4px 14px rgba(16, 24, 40, 0.08);
+    }
+
+    .searchBox:focus {
+      border-color: var(--blue);
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 12px 2px;
+    }
+
+    .sectionTitle {
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin: 18px 2px 8px;
+    }
+
+    .result {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 13px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .result:hover {
+      border-color: var(--blue);
+      transform: translateY(-1px);
+      box-shadow: 0 7px 18px rgba(45, 103, 178, 0.16);
+    }
+
+    .resultTop {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+  .avatar {
+
+  width: 42px;
+
+  height: 42px;
+
+  border-radius: 50%;
+
+  overflow: hidden;
+
+  border: 2px solid rgba(255,255,255,.85);
+
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+
+  background: var(--blue);
+
+  color: white;
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: center;
+
+  font-family: Poppins, Helvetica, Arial, sans-serif;
+
+  font-weight: 700;
+
+  flex-shrink: 0;
+
+}
+
+    .name {
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-weight: 600;
+      color: var(--blue);
+      font-size: 14px;
+      margin-bottom: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    .meta {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .pillRow {
+      margin-top: 9px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pill {
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #eef4ff;
+      color: var(--blue);
+    }
+
+    .disciplineBadge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 12px;
+      border-radius: 999px;
+      color: #fff;
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      margin-top: 12px;
+    }
+
+    .empty {
+      background: white;
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .profile {
+      display: none;
+      height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .back {
+      border: 0;
+      background: white;
+      color: var(--blue);
+      border-radius: 999px;
+      padding: 8px 11px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+
+    .profileSearchBox {
+      width: 100%;
+      box-sizing: border-box;
+      border: 2px solid transparent;
+      border-radius: 14px;
+      padding: 11px 13px;
+      font-size: 13px;
+      outline: none;
+      background: white;
+      margin-bottom: 12px;
+      box-shadow: 0 3px 10px rgba(16, 24, 40, 0.07);
+    }
+
+    .profileSearchBox:focus {
+      border-color: var(--blue);
+    }
+
+    .profileActions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .actionButton {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #eef4ff;
+      color: var(--blue);
+      text-align: center;
+    }
+
+    .actionButton:hover {
+      background: var(--blue);
+      color: white;
+    }
+
+    .profileSection {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 14px rgba(16,24,40,.04);
+    }
+
+    .profileSection:nth-of-type(1) {
+      background: linear-gradient(180deg,#fff7fd,#fff);
+      border-color:#f3d7ec;
+    }
+
+    .profileSection:nth-of-type(2) {
+      background: linear-gradient(180deg,#f2f8ff,#fff);
+      border-color:#d7e7fb;
+    }
+
+    .profileSection:nth-of-type(3) {
+      background: linear-gradient(180deg,#f4fbf2,#fff);
+      border-color:#d9efd2;
+    }
+
+    .profileSection:nth-of-type(4) {
+      background: linear-gradient(180deg,#fff8ee,#fff);
+      border-color:#f8dfbd;
+    }
+
+    .profileCard {
+      background: white;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .profileHero {
+      padding: 18px;
+      background: linear-gradient(135deg, var(--blue), var(--sky));
+      color: white;
+      text-align: center;
+    }
+
+    .profileHero h2 {
+      margin: 0;
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 22px;
+      margin-top: 12px;
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }
+
+    .profileHero div {
+      margin-top: 5px;
+      font-size: 13px;
+      opacity: 0.92;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
+
+    .profileBody {
+      padding: 14px;
+      overflow-x: hidden;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 2px;
+    }
+
+    .value {
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    .sectionHeader {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text);
+      margin-bottom: 10px;
+    }
+
+    .infoLine {
+      display: flex;
+      gap: 9px;
+      align-items: flex-start;
+      padding: 7px 0;
+      border-top: 1px solid rgba(102, 112, 133, 0.12);
+    }
+
+    .infoLine:first-of-type {
+      border-top: 0;
+    }
+
+    .infoIcon {
+      width: 20px;
+      flex-shrink: 0;
+      text-align: center;
+    }
+
+    .infoContent {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .infoLabel {
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 2px;
+    }
+
+    .infoValue {
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .notePill {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #fff4d6;
+      color: #8a5a00;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .parentCard {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(102, 112, 133, 0.16);
+      border-radius: 14px;
+      padding: 11px;
+      margin-top: 10px;
+    }
+
+    .parentCard:first-of-type {
+      margin-top: 0;
+    }
+
+    .linkValue {
+      color: var(--blue);
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .linkValue:hover {
+      text-decoration: underline;
+    }
+
+    .schoolStats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 4px;
+      margin-top: 14px;
+    }
+
+    .schoolStat {
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.28);
+      border-radius: 14px;
+      padding: 10px 8px;
+      text-align: center;
+    }
+
+    .schoolStatNumber {
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .schoolStatLabel {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      opacity: .9;
+      margin-top: 4px;
+    }
+
+    .schoolActions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .schoolActionButton {
+      border: 1px solid #d7e7fb;
+      border-radius: 16px;
+      padding: 12px 10px;
+      background: linear-gradient(180deg, #ffffff, #f4f8ff);
+      color: var(--blue);
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: left;
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.05);
+    }
+
+    .schoolActionButton:hover {
+      border-color: var(--blue);
+      box-shadow: 0 7px 18px rgba(45, 103, 178, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .schoolActionLabel {
+      display: block;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 4px;
+      font-family: Helvetica, Arial, sans-serif;
+      font-weight: 700;
+    }
+
+    .schoolItemCard {
+      background: rgba(255, 255, 255, 0.75);
+      border: 1px solid rgba(102, 112, 133, 0.16);
+      border-radius: 14px;
+      padding: 11px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .schoolItemCard:first-of-type {
+      margin-top: 0;
+    }
+
+    .schoolItemCard:hover {
+      border-color: var(--blue);
+      box-shadow: 0 6px 14px rgba(45, 103, 178, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .schoolItemTitle {
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .schoolItemMeta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 3px;
+      line-height: 1.35;
+    }
+
+    .disciplineTile {
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(102, 112, 133, 0.16);
+      border-left: 5px solid var(--purple);
+      border-radius: 14px;
+      padding: 11px;
+      margin-top: 10px;
+    }
+
+    .disciplineTile:first-of-type {
+      margin-top: 0;
+    }
+
+    .disciplineTitle {
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .disciplineMeta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 3px;
+      line-height: 1.35;
+    }
+
+    .schoolParticipantCard {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 11px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .schoolParticipantCard:first-of-type {
+      margin-top: 0;
+    }
+
+    .schoolParticipantCard:hover {
+      border-color: var(--blue);
+      box-shadow: 0 6px 14px rgba(45, 103, 178, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .schoolParticipantTop {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .schoolParticipantText {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .itemParticipantCard {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 11px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .itemParticipantCard:first-of-type {
+      margin-top: 0;
+    }
+
+    .itemParticipantCard:hover {
+      border-color: var(--blue);
+      box-shadow: 0 6px 14px rgba(45, 103, 178, 0.12);
+      transform: translateY(-1px);
+    }
+
+    .itemSchoolCard {
+      background: rgba(255, 255, 255, 0.75);
+      border: 1px solid rgba(102, 112, 133, 0.16);
+      border-radius: 14px;
+      padding: 11px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .itemSchoolCard:first-of-type {
+      margin-top: 0;
+    }
+
+    .itemSchoolCard:hover {
+      border-color: var(--blue);
+      box-shadow: 0 6px 14px rgba(45, 103, 178, 0.12);
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="searchView" style="height:100vh;overflow-y:auto;overflow-x:hidden;">
+    <div class="header">
+      <div class="kicker">Schools Spectacular</div>
+      <h1>Spec Portal</h1>
+      <div class="subtitle">Search participants by name, school, item or category.</div>
+    </div>
+
+    <div class="wrap">
+      <input
+        id="search"
+        class="searchBox"
+        type="text"
+        placeholder="Search participants..."
+        autocomplete="off"
+        autofocus
+      >
+
+      <div id="status" class="status"></div>
+      <div id="results"></div>
+    </div>
+  </div>
+
+  <div id="profileView" class="profile">
+    <div class="wrap">
+      <button class="back" onclick="showSearch()">← Back to search</button>
+      <input
+        id="profileSearch"
+        class="profileSearchBox"
+        type="text"
+        placeholder="Search another participant..."
+        autocomplete="off"
+        oninput="profileQuickSearch(this.value)"
+      >
+      <div id="profile"></div>
+    </div>
+  </div>
+
+  <script>
+    const searchInput = document.getElementById("search");
+    const resultsEl = document.getElementById("results");
+    const statusEl = document.getElementById("status");
+    const searchView = document.getElementById("searchView");
+    const profileView = document.getElementById("profileView");
+    const profileEl = document.getElementById("profile");
+    const profileSearchInput = document.getElementById("profileSearch");
+
+let timer = null;
+let latestResults = [];
+let selectedResultIndex = -1;
+let allParticipants = [];
+let allGroups = [];
+let allSchools = [];
+let participantsBySchool = new Map();
+let participantsByItem = new Map();
+let participantsByTeacher = new Map();
+let groupsBySchool = new Map();
+let groupsByItem = new Map();
+let searchIndex = [];
+let photoCache = {};
+let portalReady = false;
+
+    searchInput.addEventListener("input", () => {
+      clearTimeout(timer);
+      selectedResultIndex = -1;
+      timer = setTimeout(runSearch, 220);
+    });
+
+    searchInput.addEventListener("keydown", (e) => {
+      if (!latestResults.length) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        selectedResultIndex = Math.min(selectedResultIndex + 1, latestResults.length - 1);
+        updateSelectedResult();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        selectedResultIndex = Math.max(selectedResultIndex - 1, 0);
+        updateSelectedResult();
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (selectedResultIndex < 0) selectedResultIndex = 0;
+        openProfile(selectedResultIndex);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        searchInput.value = "";
+        latestResults = [];
+        selectedResultIndex = -1;
+        resultsEl.innerHTML = "";
+        statusEl.textContent = portalReady
+          ? `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`
+          : "Loading participant data...";
+      }
+    });
+
+    loadPortalData();
+
+    function addToIndex(map, key, value) {
+      const k = String(key || "").trim().toLowerCase();
+      if (!k) return;
+
+      if (!map.has(k)) {
+        map.set(k, []);
+      }
+
+      map.get(k).push(value);
+    }
+
+    function buildPortalIndexes() {
+      participantsBySchool = new Map();
+      participantsByItem = new Map();
+      participantsByTeacher = new Map();
+
+      allParticipants.forEach(p => {
+        addToIndex(participantsBySchool, p.school, p);
+        addToIndex(participantsByItem, p.item, p);
+        addToIndex(participantsByTeacher, p.teacherEmail || p.teacherName, p);
+      });
+
+      groupsBySchool = new Map();
+      groupsByItem = new Map();
+
+      allGroups.forEach(g => {
+        addToIndex(groupsBySchool, g.school, g);
+        addToIndex(groupsByItem, g.item, g);
+      });
+
+      searchIndex = allParticipants.map(p => ({
+        participant: p,
+        fullName: fullName(p).toLowerCase(),
+        firstName: String(p.firstName || "").toLowerCase(),
+        lastName: String(p.lastName || "").toLowerCase(),
+        school: String(p.school || "").toLowerCase(),
+        item: String(p.item || "").toLowerCase(),
+        discipline: String(p.discipline || "").toLowerCase(),
+        subDiscipline: String(p.subDiscipline || "").toLowerCase(),
+        teacherName: String(p.teacherName || "").toLowerCase(),
+        teacherEmail: String(p.teacherEmail || "").toLowerCase(),
+        studentEmail: String(p.studentEmail || "").toLowerCase(),
+        parentName: String(p.parentName || "").toLowerCase(),
+        parentEmail: String(p.parentEmail || "").toLowerCase(),
+        additionalParentName: String(p.additionalParentName || "").toLowerCase(),
+        additionalParentEmail: String(p.additionalParentEmail || "").toLowerCase()
+      }));
+    }
+    function loadPortalData() {
+      statusEl.textContent = "Loading participant data...";
+
+      google.script.run
+        .withSuccessHandler(data => {
+          data = data || {};
+          photoCache = data.photos || {};
+          allParticipants = data.participants || [];
+          allGroups = data.groups || [];
+          allSchools = data.schools || [];
+
+          allParticipants.forEach(p => {
+            const key = fullName(p)
+              .toLowerCase()
+              .replace(/[\-_]+/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+
+            p.photoUrl = photoCache[key]?.url || "";
+          });
+
+          buildPortalIndexes();
+          portalReady = true;
+          statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"}, ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} and ${allSchools.length} school${allSchools.length === 1 ? "" : "s"} loaded`;
+        })
+        .withFailureHandler(error => {
+          portalReady = false;
+          statusEl.textContent = "Error loading participant data: " + error.message;
+        })
+        .portalGetPortalData();
+    }
+
+    function loadGroupData() {
+      statusEl.textContent = "Loading group data...";
+
+      google.script.run
+        .withSuccessHandler(data => {
+          allGroups = data || [];
+          portalReady = true;
+          statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} and ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} loaded`;
+        })
+        .withFailureHandler(error => {
+          allGroups = [];
+          portalReady = true;
+          statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded · group data unavailable`;
+        })
+        .portalGetAllGroups();
+    }
+
+    function runSearch() {
+      const query = searchInput.value.trim();
+
+      if (query.length < 2) {
+        statusEl.textContent = portalReady
+          ? `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`
+          : "Loading participant data...";
+        resultsEl.innerHTML = "";
+        return;
+      }
+
+      if (!portalReady) {
+        statusEl.textContent = "Still loading participant data...";
+        return;
+      }
+
+      showResults(searchParticipantsLocally(query));
+    }
+
+    function searchParticipantsLocally(query) {
+      const q = String(query || "").toLowerCase().trim();
+      if (!q) return [];
+
+      const schoolResults = buildSchoolSearchResults(q);
+      const groupResults = buildGroupSearchResults(q);
+
+      const participantResults = searchIndex
+        .map(entry => ({
+          ...entry.participant,
+          resultType: "participant",
+          searchScore: getParticipantSearchScore(entry, q)
+        }))
+        .filter(p => String(fullName(p) || "").trim().length > 0)
+        .filter(p => p.searchScore > 0)
+        .sort((a, b) => b.searchScore - a.searchScore || String(fullName(a)).localeCompare(String(fullName(b))))
+        .slice(0, 75);
+
+      return [...schoolResults, ...groupResults, ...participantResults].slice(0, 75);
+    }
+
+    function buildSchoolSearchResults(q) {
+      return allSchools
+        .map(s => {
+          const schoolName = String(s.schoolName || "").trim();
+          const key = schoolName.toLowerCase();
+          const participantCount = (participantsBySchool.get(key) || []).length;
+
+          return {
+            resultType: "school",
+            schoolName,
+            participantCount,
+            searchScore: getTextSearchScore(key, q) + 20
+          };
+        })
+        .filter(s => s.schoolName && s.searchScore > 20)
+        .sort((a, b) => b.searchScore - a.searchScore || a.schoolName.localeCompare(b.schoolName))
+        .slice(0, 8);
+    }
+
+    function buildGroupSearchResults(q) {
+      return allGroups
+        .map(g => {
+          const title = [g.item, g.groupName].filter(Boolean).join(" · ") || g.category || "Unnamed group";
+          const searchText = [g.item, g.groupName, g.category, g.school, g.teacherName].join(" ").toLowerCase();
+
+          return {
+            resultType: "group",
+            title,
+            school: g.school || "",
+            teacherName: g.teacherName || "",
+            count: g.count || "",
+            group: g,
+            searchScore: getTextSearchScore(searchText, q) + 15
+          };
+        })
+        .filter(g => g.searchScore > 15)
+        .sort((a,b) => b.searchScore - a.searchScore || a.title.localeCompare(b.title))
+        .slice(0,8);
+    }
+
+    function getParticipantSearchScore(entry, q) {
+      let score = 0;
+
+      score += getTextSearchScore(entry.fullName, q) * 8;
+      score += getTextSearchScore(entry.lastName, q) * 6;
+      score += getTextSearchScore(entry.firstName, q) * 6;
+      score += getTextSearchScore(entry.school, q) * 5;
+      score += getTextSearchScore(entry.item, q) * 4;
+      score += getTextSearchScore(entry.discipline, q) * 3;
+      score += getTextSearchScore(entry.subDiscipline, q) * 3;
+      score += getTextSearchScore(entry.teacherName, q) * 2;
+      score += getTextSearchScore(entry.teacherEmail, q) * 2;
+      score += getTextSearchScore(entry.studentEmail, q);
+      score += getTextSearchScore(entry.parentName, q);
+      score += getTextSearchScore(entry.parentEmail, q);
+      score += getTextSearchScore(entry.additionalParentName, q);
+      score += getTextSearchScore(entry.additionalParentEmail, q);
+
+      return score;
+    }
+
+    function getTextSearchScore(value, q) {
+      const text = String(value || "").toLowerCase().trim();
+      if (!text || !q) return 0;
+      if (text === q) return 100;
+      if (text.startsWith(q)) return 75;
+      if (text.split(/\s+/).some(part => part.startsWith(q))) return 55;
+      if (text.includes(q)) return 30;
+      return 0;
+    }
+
+    function showResults(data) {
+      latestResults = data || [];
+      statusEl.textContent = latestResults.length
+        ? `${latestResults.length} result${latestResults.length === 1 ? "" : "s"}`
+        : "";
+
+      if (!latestResults.length) {
+        resultsEl.innerHTML = `<div class="empty">No matches found.</div>`;
+        return;
+      }
+
+      resultsEl.innerHTML = `
+        <div class="sectionTitle">Results</div>
+        ${latestResults.map((p, index) => renderResult(p, index)).join("")}
+      `;
+    }
+
+
+    function updateSelectedResult() {
+      document.querySelectorAll('.result').forEach((el, i) => {
+        if (i === selectedResultIndex) {
+          el.style.borderColor = 'var(--blue)';
+          el.style.boxShadow = '0 0 0 2px rgba(45,103,178,.25)';
+          el.scrollIntoView({block:'nearest'});
+        } else {
+          el.style.borderColor = '';
+          el.style.boxShadow = '';
+        }
+      });
+    }
+
+    function renderResult(p, index) {
+      if (p.resultType === "group") {
+        const title = p.title || "Unnamed group";
+        const meta = [p.school, p.teacherName].filter(Boolean).join(" · ");
+        const countLine = p.count ? `${p.count} student${Number(p.count) === 1 ? "" : "s"}` : "Group record";
+
+        return `
+          <div class="result" onclick="openGroupProfile(${index})">
+            <div class="resultTop">
+              <div class="avatar">GR</div>
+              <div>
+                <div class="name">${escapeHtml(title)}</div>
+                <div class="meta">${escapeHtml(meta)}</div>
+                <div class="meta">${escapeHtml(countLine)}</div>
+              </div>
+            </div>
+            <div class="pillRow"><span class="pill">Group</span></div>
+          </div>
+        `;
+      }
+      const name = fullName(p) || p.schoolName || "Unknown";
+      const initials = getInitials(p);
+      const line1 = [p.school, p.year ? "Year " + p.year : ""].filter(Boolean).join(" · ");
+      const line2 = [p.discipline, p.subDiscipline, p.item].filter(Boolean).join(" · ");
+
+      return `
+        <div class="result" onclick="openProfile(${index})">
+          <div class="resultTop">
+            <div class="avatar">
+              ${p.photoUrl
+                ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                : escapeHtml(initials)}
+            </div>
+            <div>
+              <div class="name">${escapeHtml(name || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line1)}</div>
+              <div class="meta">${escapeHtml(line2)}</div>
+            </div>
+          </div>
+
+          <div class="pillRow">
+            ${p.item ? `<span class="pill">${escapeHtml(p.item)}</span>` : ""}
+            ${p.discipline ? `<span class="pill">${escapeHtml(p.discipline)}</span>` : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    function disciplineColour(name) {
+      const key = String(name || '').toLowerCase();
+      if (key.includes('dance')) return '#2d67b2';
+      if (key.includes('drama')) return '#bb529e';
+      if (key.includes('choir') || key.includes('vocal')) return '#9dd085';
+      if (key.includes('orchestra') || key.includes('band') || key.includes('instrument')) return '#f79420';
+      if (key.includes('circus')) return '#ef4343';
+      if (key.includes('aboriginal')) return '#7b5c2e';
+      return '#667085';
+    }
+
+    function openProfile(index) {
+      const p = latestResults[index];
+      if (!p) return;
+
+      if (p.resultType === "school") {
+        openSchoolProfile(p.schoolName);
+        return;
+      }
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      const name = fullName(p) || "Unnamed participant";
+      const yearLine = [p.school, p.year ? "Year " + p.year : ""].filter(Boolean).join(" · ");
+      const disciplineLine = [p.discipline, p.subDiscipline].filter(Boolean).join(" · ");
+      const itemLine = [p.item, disciplineLine].filter(Boolean).join(" · ");
+      const familyEmails = [p.studentEmail, p.parentEmail, p.additionalParentEmail].filter(Boolean).join(";");
+      const sharedStudentPhone = isSamePhone(p.studentMobile, p.parentPhone) || isSamePhone(p.studentMobile, p.additionalParentPhone);
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero">
+            <div style="display:flex;justify-content:center;margin-bottom:16px;">
+              ${p.photoUrl
+                ? `<img src="${escapeHtml(p.photoUrl)}" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid rgba(255,255,255,.35);box-shadow:0 8px 24px rgba(0,0,0,.18);">`
+                : `<div class="avatar" style="width:110px;height:110px;font-size:34px;margin:0 auto;">${escapeHtml(getInitials(p))}</div>`}
+            </div>
+            <h2>${escapeHtml(name)}</h2>
+            <div>${escapeHtml(yearLine)}</div>
+            ${disciplineLine ? `<div class="disciplineBadge" style="background:${disciplineColour(p.discipline)}">${escapeHtml(disciplineLine)}</div>` : ""}
+          </div>
+
+          <div class="profileBody">
+            <div class="profileActions">
+              ${familyEmails ? `<button class="actionButton" onclick="copyText('${escapeJs(familyEmails)}')">Copy family emails</button>` : ""}
+              ${p.teacherEmail ? `<button class="actionButton" onclick="copyText('${escapeJs(p.teacherEmail)}')">Copy teacher email</button>` : ""}
+              ${p.teacherEmail ? `<button class="actionButton" onclick="openEmail('${escapeJs(p.teacherEmail)}')">Email teacher</button>` : ""}
+              ${p.parentPhone ? `<button class="actionButton" onclick="copyText('${escapeJs(p.parentPhone)}')">Copy parent phone</button>` : ""}
+            </div>
+
+            <div class="sectionTitle">Participation</div>
+            <div class="profileSection">
+              ${itemLinkLine(p.item)}
+              ${infoLine("", "Discipline", disciplineLine)}
+            </div>
+
+            <div class="sectionTitle">School & Teacher</div>
+            <div class="profileSection">
+              ${schoolLinkLine(p.school)}
+              ${infoLine("", "Year", p.year ? "Year " + p.year : "")}
+              ${teacherLinkLine(p.teacherName, p.teacherEmail)}
+              ${infoLine("", "Teacher Email", p.teacherEmail)}
+            </div>
+
+            <div class="sectionTitle">Student Details</div>
+            <div class="profileSection">
+              ${infoLine("", "Student Email", p.studentEmail)}
+              ${infoLine("", "Student Mobile", p.studentMobile, sharedStudentPhone ? "Shared with parent/carer" : "")}
+              ${infoLine("", "Student ID", p.studentId)}
+              ${infoLine("", "SRN", p.srn)}
+            </div>
+
+            <div class="sectionTitle">Parents / Carers</div>
+            <div class="profileSection">
+              ${parentCard("Parent / Carer 1", p.parentName, "", p.parentEmail, p.parentPhone)}
+              ${parentCard("Parent / Carer 2", p.additionalParentName, p.additionalParentRelationship, p.additionalParentEmail, p.additionalParentPhone)}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function showSearch() {
+      profileView.style.display = "none";
+      searchView.style.display = "block";
+      profileSearchInput.value = "";
+      selectedResultIndex = -1;
+      updateSelectedResult();
+      searchInput.focus();
+    }
+
+    function profileQuickSearch(value) {
+      const query = String(value || "").trim();
+      if (query.length < 2) return;
+
+      profileView.style.display = "none";
+      searchView.style.display = "block";
+      searchInput.value = query;
+      searchInput.focus();
+      runSearch();
+    }
+
+    function openSchoolProfile(schoolName) {
+      const target = String(schoolName || "").trim();
+      if (!target) return;
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+      profileEl.innerHTML = `<div class="empty">Loading school profile...</div>`;
+
+      if (!portalReady) {
+        profileEl.innerHTML = `<div class="empty">Still loading participant data...</div>`;
+        return;
+      }
+
+      showSchoolProfile(buildSchoolProfileLocally(target));
+    }
+
+    function buildSchoolProfileLocally(schoolName) {
+      const target = String(schoolName || "").trim();
+      const targetLower = target.toLowerCase();
+      const participants = participantsBySchool.get(targetLower) || [];
+
+      const groups = groupsBySchool.get(targetLower) || [];
+
+      const master = allSchools.find(s =>
+        String(s.schoolName || "").trim().toLowerCase() === target.toLowerCase()
+      ) || null;
+
+      const teacherMap = new Map();
+      const itemMap = new Map();
+      const disciplineMap = new Map();
+      const teacherEmails = new Set();
+      const familyEmails = new Set();
+
+      participants.forEach(p => {
+        const teacherKey = String(p.teacherEmail || p.teacherName || "").trim().toLowerCase();
+
+        if (teacherKey && !teacherMap.has(teacherKey)) {
+          teacherMap.set(teacherKey, {
+            name: p.teacherName || "",
+            email: p.teacherEmail || ""
+          });
+        }
+
+        if (p.teacherEmail) teacherEmails.add(p.teacherEmail);
+
+        [p.studentEmail, p.parentEmail, p.additionalParentEmail].forEach(email => {
+          if (email) familyEmails.add(email);
+        });
+
+        const discipline = p.discipline || "Unspecified";
+        if (!disciplineMap.has(discipline)) {
+          disciplineMap.set(discipline, {
+            name: discipline,
+            count: 0,
+            items: new Set()
+          });
+        }
+
+        const disciplineRecord = disciplineMap.get(discipline);
+        disciplineRecord.count++;
+
+        if (p.item) {
+          disciplineRecord.items.add(p.item);
+
+          if (!itemMap.has(p.item)) {
+            itemMap.set(p.item, {
+              name: p.item,
+              discipline: p.discipline || "",
+              count: 0
+            });
+          }
+          itemMap.get(p.item).count++;
+        }
+      });
+
+      return {
+        schoolName: target,
+        master: master,
+        groups: groups,
+        groupCount: groups.length,
+        participantCount: participants.length,
+        teacherCount: teacherMap.size,
+        itemCount: itemMap.size,
+        teachers: Array.from(teacherMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        items: Array.from(itemMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        disciplines: Array.from(disciplineMap.values()).map(d => ({
+          name: d.name,
+          count: d.count,
+          items: Array.from(d.items).sort()
+        })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        participants: participants.sort((a, b) => String(fullName(a)).localeCompare(String(fullName(b)))),
+        teacherEmails: Array.from(teacherEmails).sort(),
+        familyEmails: Array.from(familyEmails).sort()
+      };
+    }
+
+    function buildItemProfileLocally(itemName) {
+      const target = String(itemName || "").trim();
+      const participants = participantsByItem.get(target.toLowerCase()) || [];
+      const groups = groupsByItem.get(target.toLowerCase()) || [];
+
+      const schoolMap = new Map();
+      const teacherMap = new Map();
+      const disciplineMap = new Map();
+      const teacherEmails = new Set();
+      const familyEmails = new Set();
+
+      participants.forEach(p => {
+        const schoolKey = String(p.school || "Unknown school").trim();
+        if (!schoolMap.has(schoolKey)) {
+          schoolMap.set(schoolKey, { name: schoolKey, count: 0 });
+        }
+        schoolMap.get(schoolKey).count++;
+
+        const teacherKey = String(p.teacherEmail || p.teacherName || "").trim().toLowerCase();
+        if (teacherKey && !teacherMap.has(teacherKey)) {
+          teacherMap.set(teacherKey, {
+            name: p.teacherName || "",
+            email: p.teacherEmail || ""
+          });
+        }
+
+        if (p.teacherEmail) teacherEmails.add(p.teacherEmail);
+
+        [p.studentEmail, p.parentEmail, p.additionalParentEmail].forEach(email => {
+          if (email) familyEmails.add(email);
+        });
+
+        const discipline = p.discipline || "Unspecified";
+        disciplineMap.set(discipline, (disciplineMap.get(discipline) || 0) + 1);
+      });
+
+      return {
+        itemName: target,
+        participantCount: participants.length,
+        schoolCount: schoolMap.size,
+        teacherCount: teacherMap.size,
+        schools: Array.from(schoolMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        teachers: Array.from(teacherMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        disciplines: Array.from(disciplineMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        participants: participants.sort((a, b) => String(fullName(a)).localeCompare(String(fullName(b)))),
+        teacherEmails: Array.from(teacherEmails).sort(),
+        familyEmails: Array.from(familyEmails).sort()
+      };
+    }
+
+    function buildTeacherProfileLocally(teacherKey) {
+      const target = String(teacherKey || "").trim().toLowerCase();
+      const participants = participantsByTeacher.get(target) || [];
+
+      const groups = allGroups.filter(g => {
+        const email = String(g.teacherEmail || "").trim().toLowerCase();
+        const name = String(g.teacherName || "").trim().toLowerCase();
+        return target && (email === target || name === target);
+      });
+
+      const firstParticipant = participants[0] || {};
+      const firstGroup = groups[0] || {};
+      const teacherName = firstParticipant.teacherName || firstGroup.teacherName || teacherKey;
+      const teacherEmail = firstParticipant.teacherEmail || firstGroup.teacherEmail || "";
+
+      const schoolMap = new Map();
+      const itemMap = new Map();
+      const familyEmails = new Set();
+
+      participants.forEach(p => {
+        if (p.school) schoolMap.set(p.school, (schoolMap.get(p.school) || 0) + 1);
+        if (p.item) itemMap.set(p.item, (itemMap.get(p.item) || 0) + 1);
+        [p.studentEmail, p.parentEmail, p.additionalParentEmail].forEach(email => {
+          if (email) familyEmails.add(email);
+        });
+      });
+
+      groups.forEach(g => {
+        if (g.school) schoolMap.set(g.school, (schoolMap.get(g.school) || 0) + 1);
+        if (g.item) itemMap.set(g.item, (itemMap.get(g.item) || 0) + 1);
+      });
+
+      return {
+        teacherName,
+        teacherEmail,
+        participants: participants.sort((a, b) => String(fullName(a)).localeCompare(String(fullName(b)))),
+        groups,
+        participantCount: participants.length,
+        groupCount: groups.length,
+        schoolCount: schoolMap.size,
+        itemCount: itemMap.size,
+        schools: Array.from(schoolMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        items: Array.from(itemMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        familyEmails: Array.from(familyEmails).sort()
+      };
+    }
+
+    function openTeacherProfile(teacherKey) {
+      const target = String(teacherKey || "").trim();
+      if (!target) return;
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      if (!portalReady) {
+        profileEl.innerHTML = `<div class="empty">Still loading participant data...</div>`;
+        return;
+      }
+
+      const teacher = buildTeacherProfileLocally(target);
+      window.currentTeacherParticipants = teacher.participants || [];
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero">
+            <div class="kicker">Teacher Passport</div>
+            <h2>${escapeHtml(teacher.teacherName || "Teacher")}</h2>
+            ${teacher.teacherEmail ? `<div>${escapeHtml(teacher.teacherEmail)}</div>` : ""}
+            <div class="schoolStats">
+              ${schoolStat(teacher.participantCount,"Participants")}
+              ${schoolStat(teacher.groupCount,"Groups")}
+              ${schoolStat(teacher.schoolCount,"Schools")}
+              ${schoolStat(teacher.itemCount,"Items")}
+            </div>
+          </div>
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${teacher.teacherEmail ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(teacher.teacherEmail)}')">Copy teacher email<span class="schoolActionLabel">1 address</span></button>` : ""}
+              ${teacher.familyEmails && teacher.familyEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(teacher.familyEmails.join(';'))}')">Copy family emails<span class="schoolActionLabel">${teacher.familyEmails.length} address${teacher.familyEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+            </div>
+
+            <div class="sectionTitle">Schools</div>
+            <div class="profileSection">
+              ${(teacher.schools || []).map(renderTeacherSchoolCard).join("") || `<div class="empty">No schools found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Items</div>
+            <div class="profileSection">
+              ${(teacher.items || []).map(renderTeacherItemCard).join("") || `<div class="empty">No items found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Groups</div>
+            <div class="profileSection">
+              ${(teacher.groups || []).map(renderSchoolGroupCard).join("") || `<div class="empty">No group records found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Participants</div>
+            <div class="profileSection">
+              ${(teacher.participants || []).map(renderTeacherParticipantCard).join("") || `<div class="empty">No participants found.</div>`}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function showSchoolProfile(school) {
+      if (!school) {
+        profileEl.innerHTML = `<div class="empty">School profile not found.</div>`;
+        return;
+      }
+
+      window.currentSchoolParticipants = school.participants || [];
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero">
+            <div class="kicker">School Passport</div>
+            <h2>${escapeHtml(school.schoolName)}</h2>
+            <div class="schoolStats">
+              ${schoolStat(school.participantCount, "Participants")}
+              ${schoolStat(school.teacherCount, "Teachers")}
+              ${schoolStat(school.itemCount, "Items")}
+              ${schoolStat(school.groupCount, "Groups")}
+            </div>
+            ${school.master ? `<div style="margin-top:14px;font-size:13px;line-height:1.5;opacity:.98;">
+              ${school.master.code ? `<div><strong>Code:</strong> ${escapeHtml(school.master.code)}</div>` : ""}
+              ${school.master.directorate ? `<div><strong>Directorate:</strong> ${escapeHtml(school.master.directorate)}</div>` : ""}
+              ${school.master.schoolEmail ? `<div><strong>Email:</strong> ${escapeHtml(school.master.schoolEmail)}</div>` : ""}
+            </div>` : ""}
+          </div>
+
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${school.teacherEmails && school.teacherEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(school.teacherEmails.join(';'))}')">Copy teacher emails<span class="schoolActionLabel">${school.teacherEmails.length} address${school.teacherEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+              ${school.familyEmails && school.familyEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(school.familyEmails.join(';'))}')">Copy family emails<span class="schoolActionLabel">${school.familyEmails.length} address${school.familyEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+            </div>
+            <div class="sectionTitle">Groups</div>
+            <div class="profileSection">
+              ${(school.groups || []).map(renderSchoolGroupCard).join("") || `<div class="empty">No group records found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Teachers</div>
+            <div class="profileSection">
+              ${(school.teachers || []).map(renderSchoolTeacherCard).join("") || `<div class="empty">No teachers found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Disciplines</div>
+            <div class="profileSection">
+              ${(school.disciplines || []).map(renderDisciplineTile).join("") || `<div class="empty">No disciplines found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Items</div>
+            <div class="profileSection">
+              ${(school.items || []).map(renderSchoolItemCard).join("") || `<div class="empty">No items found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Participants</div>
+            <div class="profileSection">
+              ${(school.participants || []).map(renderSchoolParticipantCard).join("") || `<div class="empty">No participants found.</div>`}
+            </div>
+          </div>
+        </div>`;
+    }
+
+
+
+    function renderSchoolTeacherCard(teacher) {
+      const label = teacher.name || teacher.email || "Unnamed teacher";
+      return `
+        <div class="schoolItemCard" onclick="openTeacherProfile('${escapeJs(teacher.email || teacher.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(label)}</div>
+          ${teacher.email ? `<div class="schoolItemMeta">${escapeHtml(teacher.email)}</div>` : ""}
+        </div>
+      `;
+    }
+
+    function renderSchoolMasterCard(master) {
+      if (!master) return "";
+      return `
+        <div class="sectionTitle">School Details</div>
+        <div class="profileSection">
+          <div class="sectionHeader">School Master Dataset</div>
+          ${infoLine("", "School Code", master.code)}
+          ${infoLine("", "School Email", master.schoolEmail)}
+          ${infoLine("", "Directorate", master.directorate)}
+        </div>
+      `;
+    }
+
+    function classroomBlock(classroom) {
+      if (!classroom) return "";
+      const value = String(classroom || "").trim();
+      const isLink = /^https?:\/\//i.test(value);
+
+      return `
+        <div style="margin-top:8px;padding:8px 10px;border-radius:12px;background:#eef4ff;color:var(--blue);font-size:12px;line-height:1.35;overflow-wrap:anywhere;">
+          <div style="font-weight:800;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Google Classroom</div>
+          ${isLink
+            ? `<a class="linkValue" href="${escapeHtml(value)}" target="_blank">Open classroom link</a>`
+            : escapeHtml(value)}
+        </div>
+      `;
+    }
+
+
+    function renderSchoolGroupCard(group) {
+      const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
+      const meta = [group.category, group.count ? group.count + " students" : "", group.teacherName].filter(Boolean).join(" · ");
+      return `
+        <div class="schoolItemCard" ${group.item ? `onclick="openItemProfile('${escapeJs(group.item)}')"` : ""}>
+          <div class="schoolItemTitle">${escapeHtml(title)}</div>
+          <div class="schoolItemMeta">${escapeHtml(meta)}</div>
+          ${group.teacherEmail ? `<div class="schoolItemMeta">${escapeHtml(group.teacherEmail)}</div>` : ""}
+          ${classroomBlock(group.classroom)}
+        </div>
+      `;
+    }
+
+    function openGroupProfile(index) {
+      const result = latestResults[index];
+      if (!result || result.resultType !== "group") return;
+
+      const group = result.group || {};
+      const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
+      const students = group.item ? (participantsByItem.get(String(group.item || "").toLowerCase()) || []) : [];
+      const matchingStudents = students.filter(p => String(p.school || "").trim().toLowerCase() === String(group.school || "").trim().toLowerCase());
+      const teacherKey = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
+      const teacherStudents = teacherKey
+        ? matchingStudents.filter(p => {
+            const pTeacher = String(p.teacherEmail || p.teacherName || "").trim().toLowerCase();
+            return pTeacher === teacherKey;
+          })
+        : matchingStudents;
+
+      window.currentGroupParticipants = teacherStudents.length ? teacherStudents : matchingStudents;
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      const classroom = group.classroom || "";
+      const classroomButton = classroom
+        ? (/^https?:\/\//i.test(String(classroom))
+          ? `<button class="schoolActionButton" onclick="window.open('${escapeJs(classroom)}','_blank')">Open Google Classroom<span class="schoolActionLabel">Classroom link</span></button>`
+          : `<button class="schoolActionButton" onclick="copyText('${escapeJs(classroom)}')">Copy Google Classroom<span class="schoolActionLabel">Code / details</span></button>`)
+        : "";
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero">
+            <div class="kicker">Group Passport</div>
+            <h2>${escapeHtml(title)}</h2>
+            ${group.school ? `<div>${escapeHtml(group.school)}</div>` : ""}
+            <div class="schoolStats">
+              ${schoolStat(group.count || window.currentGroupParticipants.length, "Students")}
+              ${schoolStat(group.category ? 1 : 0, "Category")}
+              ${schoolStat(group.teacherName || group.teacherEmail ? 1 : 0, "Teacher")}
+              ${schoolStat(classroom ? 1 : 0, "Classroom")}
+            </div>
+          </div>
+
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${group.teacherEmail ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(group.teacherEmail)}')">Copy teacher email<span class="schoolActionLabel">${escapeHtml(group.teacherEmail)}</span></button>` : ""}
+              ${group.teacherEmail ? `<button class="schoolActionButton" onclick="openEmail('${escapeJs(group.teacherEmail)}')">Email teacher<span class="schoolActionLabel">Open email</span></button>` : ""}
+              ${classroomButton}
+            </div>
+
+            <div class="sectionTitle">Group Details</div>
+            <div class="profileSection">
+              ${infoLine("", "Item", group.item)}
+              ${infoLine("", "Category", group.category)}
+              ${infoLine("", "Group Name", group.groupName)}
+              ${schoolLinkLine(group.school)}
+            </div>
+
+            <div class="sectionTitle">Teacher</div>
+            <div class="profileSection">
+              ${teacherLinkLine(group.teacherName, group.teacherEmail)}
+              ${infoLine("", "Teacher Email", group.teacherEmail)}
+            </div>
+
+            <div class="sectionTitle">Google Classroom</div>
+            <div class="profileSection">
+              ${classroomBlock(classroom) || `<div class="empty">No Google Classroom details found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Students</div>
+            <div class="profileSection">
+              ${(window.currentGroupParticipants || []).map(renderGroupParticipantCard).join("") || `<div class="empty">No matching student records found for this group yet.</div>`}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+
+    function openItemProfile(itemName) {
+      const target = String(itemName || "").trim();
+      if (!target) return;
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      if (!portalReady) {
+        profileEl.innerHTML = `<div class="empty">Still loading participant data...</div>`;
+        return;
+      }
+
+      showItemProfile(buildItemProfileLocally(target));
+    }
+
+    function showItemProfile(item) {
+      if (!item) {
+        profileEl.innerHTML = `<div class="empty">Item profile not found.</div>`;
+        return;
+      }
+
+      window.currentItemParticipants = item.participants || [];
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero">
+            <div class="kicker">Item Passport</div>
+            <h2>${escapeHtml(item.itemName)}</h2>
+            <div class="schoolStats">
+              ${schoolStat(item.participantCount, "Participants")}
+              ${schoolStat(item.schoolCount, "Schools")}
+              ${schoolStat(item.teacherCount, "Teachers")}
+            </div>
+          </div>
+
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${item.teacherEmails && item.teacherEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(item.teacherEmails.join(';'))}')">Copy teacher emails<span class="schoolActionLabel">${item.teacherEmails.length} address${item.teacherEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+              ${item.familyEmails && item.familyEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(item.familyEmails.join(';'))}')">Copy family emails<span class="schoolActionLabel">${item.familyEmails.length} address${item.familyEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+            </div>
+
+            <div class="sectionTitle">Disciplines</div>
+            <div class="profileSection">
+              ${(item.disciplines || []).map(d => `
+                <div class="disciplineTile">
+                  <div class="disciplineTitle">${escapeHtml(d.name || "Unspecified")}</div>
+                  <div class="disciplineMeta">${escapeHtml(d.count || 0)} participant${Number(d.count) === 1 ? "" : "s"}</div>
+                </div>
+              `).join("") || `<div class="empty">No disciplines found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Schools</div>
+            <div class="profileSection">
+              ${(item.schools || []).map(renderItemSchoolCard).join("") || `<div class="empty">No schools found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Teachers</div>
+            <div class="profileSection">
+              ${(item.teachers || []).map(renderSchoolTeacherCard).join("") || `<div class="empty">No teachers found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Participants</div>
+            <div class="profileSection">
+              ${(item.participants || []).map(renderItemParticipantCard).join("") || `<div class="empty">No participants found.</div>`}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderTeacherSchoolCard(school) {
+      return `
+        <div class="itemSchoolCard" onclick="openSchoolProfile('${escapeJs(school.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(school.name || "Unknown school")}</div>
+          <div class="schoolItemMeta">${escapeHtml(school.count || 0)} participant${Number(school.count) === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }
+
+    function renderTeacherItemCard(item) {
+      return `
+        <div class="schoolItemCard" onclick="openItemProfile('${escapeJs(item.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(item.name || "Unnamed item")}</div>
+          <div class="schoolItemMeta">${escapeHtml(item.count || 0)} record${Number(item.count) === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }
+
+    function renderTeacherParticipantCard(p, index) {
+      const line = [p.school, p.year ? "Year " + p.year : "", p.item].filter(Boolean).join(" · ");
+      return `
+        <div class="itemParticipantCard" onclick="openTeacherParticipant(${index})">
+          <div class="schoolParticipantTop">
+            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="schoolParticipantText">
+              <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openTeacherParticipant(index) {
+      const p = (window.currentTeacherParticipants || [])[index];
+      if (!p) return;
+
+      latestResults = [p];
+      openProfile(0);
+    }
+
+    function renderItemSchoolCard(school) {
+      return `
+        <div class="itemSchoolCard" onclick="openSchoolProfile('${escapeJs(school.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(school.name || "Unknown school")}</div>
+          <div class="schoolItemMeta">${escapeHtml(school.count || 0)} participant${Number(school.count) === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }
+
+    function renderItemParticipantCard(p, index) {
+      const line = [p.school, p.year ? "Year " + p.year : "", p.discipline].filter(Boolean).join(" · ");
+      return `
+        <div class="itemParticipantCard" onclick="openItemParticipant(${index})">
+          <div class="schoolParticipantTop">
+            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="schoolParticipantText">
+              <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openItemParticipant(index) {
+      const p = (window.currentItemParticipants || [])[index];
+      if (!p) return;
+
+      latestResults = [p];
+      openProfile(0);
+    }
+
+    function renderSchoolParticipantCard(p, index) {
+      const line = [p.year ? "Year " + p.year : "", p.discipline, p.item].filter(Boolean).join(" · ");
+      return `
+        <div class="schoolParticipantCard" onclick="openSchoolParticipant(${index})">
+          <div class="schoolParticipantTop">
+            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="schoolParticipantText">
+              <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDisciplineTile(discipline) {
+      return `
+        <div class="disciplineTile">
+          <div class="disciplineTitle">${escapeHtml(discipline.name || "Unspecified")}</div>
+          <div class="disciplineMeta">${escapeHtml(discipline.count || 0)} participant${Number(discipline.count) === 1 ? "" : "s"}</div>
+          <div class="pillRow">
+            ${(discipline.items || []).map(item => `<span class="pill">${escapeHtml(item)}</span>`).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSchoolItemCard(item) {
+      return `
+        <div class="schoolItemCard" onclick="openItemProfile('${escapeJs(item.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(item.name || "Unnamed item")}</div>
+          <div class="schoolItemMeta">${escapeHtml(item.discipline || "")} · ${escapeHtml(item.count || 0)} participant${Number(item.count) === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }
+
+    function schoolStat(number, label) {
+      return `
+        <div class="schoolStat">
+          <div class="schoolStatNumber">${escapeHtml(number || 0)}</div>
+          <div class="schoolStatLabel">${escapeHtml(label)}</div>
+        </div>
+      `;
+    }
+
+    function openSchoolParticipant(index) {
+      const p = (window.currentSchoolParticipants || [])[index];
+      if (!p) return;
+
+      latestResults = [p];
+      openProfile(0);
+    }
+
+    function copyText(value) {
+      if (!value) return;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value);
+        return;
+      }
+
+      const temp = document.createElement("textarea");
+      temp.value = value;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand("copy");
+      document.body.removeChild(temp);
+    }
+
+    function openEmail(email) {
+      if (!email) return;
+      window.open("mailto:" + encodeURIComponent(email), "_blank");
+    }
+
+    function field(label, value) {
+      return `
+        <div class="field">
+          <span class="label">${escapeHtml(label)}</span>
+          <div class="value">${escapeHtml(value || "—")}</div>
+        </div>
+      `;
+    }
+
+    function fullName(p) {
+      return [p.firstName, p.lastName].filter(Boolean).join(" ");
+    }
+
+    function getInitials(p) {
+      return `${(p.firstName || "").charAt(0)}${(p.lastName || "").charAt(0)}`.toUpperCase() || "SP";
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function escapeJs(value) {
+      return String(value || "")
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/"/g, "&quot;")
+        .replace(/\n/g, " ")
+        .replace(/\r/g, " ");
+    }
+
+    function schoolLinkLine(schoolName) {
+      if (!schoolName) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoIcon"></div>
+          <div class="infoContent">
+            <div class="infoLabel">School</div>
+            <div class="infoValue">
+              <span class="linkValue" onclick="openSchoolProfile('${escapeJs(schoolName)}')">
+                ${escapeHtml(schoolName)} →
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function itemLinkLine(itemName) {
+      if (!itemName) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoIcon"></div>
+          <div class="infoContent">
+            <div class="infoLabel">Item</div>
+            <div class="infoValue">
+              <span class="linkValue" onclick="openItemProfile('${escapeJs(itemName)}')">
+                ${escapeHtml(itemName)} →
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function teacherLinkLine(teacherName, teacherEmail) {
+      const label = teacherName || teacherEmail;
+      if (!label) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoIcon"></div>
+          <div class="infoContent">
+            <div class="infoLabel">Teacher</div>
+            <div class="infoValue">
+              <span class="linkValue" onclick="openTeacherProfile('${escapeJs(teacherEmail || teacherName)}')">
+                ${escapeHtml(label)} →
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function infoLine(icon, label, value, note) {
+      if (!value) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoContent">
+            <div class="infoLabel">${escapeHtml(label)}</div>
+            <div class="infoValue">${escapeHtml(value)}</div>
+            ${note ? `<div class="notePill">${escapeHtml(note)}</div>` : ""}
+          </div>
+        </div>`;
+    }
+
+    function parentCard(title, name, relationship, email, phone) {
+      if (!name && !relationship && !email && !phone) return "";
+      return `
+        <div class="parentCard">
+          <div class="sectionHeader">${escapeHtml(title)}</div>
+          ${infoLine("👤", "Name", name)}
+          ${infoLine("🔗", "Relationship", relationship)}
+          ${infoLine("✉️", "Email", email)}
+          ${infoLine("📱", "Phone", phone)}
+        </div>
+      `;
+    }
+
+    function normalisePhone(value) {
+      return String(value || "").replace(/[^0-9]/g, "");
+    }
+
+    function isSamePhone(a, b) {
+      const phoneA = normalisePhone(a);
+      const phoneB = normalisePhone(b);
+      return phoneA && phoneB && phoneA === phoneB;
+    }
+  </script>
+</body>
+</html>
