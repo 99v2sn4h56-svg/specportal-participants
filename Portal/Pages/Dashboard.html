@@ -1,0 +1,296 @@
+<script>
+    function safeLoadJson(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (err) {
+        return fallback;
+      }
+    }
+
+    function safeSaveJson(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (err) {
+        // Ignore storage errors in restricted sidebar contexts.
+      }
+    }
+
+    function getGreeting() {
+      const hour = new Date().getHours();
+      if (hour < 12) return "Good morning";
+      if (hour < 18) return "Good afternoon";
+      return "Good evening";
+    }
+
+    function renderDashboard() {
+      if (greetingEl) {
+        greetingEl.textContent = getGreeting();
+      }
+
+      renderDashboardStats();
+      renderRecentlyViewed();
+      renderRecentSearches();
+    }
+
+    function renderDashboardStats() {
+      const teachers = new Set();
+      const items = new Set();
+
+      allParticipants.forEach(p => {
+        const teacher = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
+        const item = String(getParticipantItem(p) || "").trim().toLowerCase();
+        if (teacher) teachers.add(teacher);
+        if (item) items.add(item);
+      });
+
+      allGroups.forEach(g => {
+        const teacher = String(g.teacherEmail || g.teacherName || "").trim().toLowerCase();
+        const item = String(g.item || "").trim().toLowerCase();
+        if (teacher) teachers.add(teacher);
+        if (item) items.add(item);
+      });
+
+      const stats = [
+        ["Participants", allParticipants.length],
+        ["Schools", allSchools.length],
+        ["Groups", allGroups.length],
+        ["Teachers", teachers.size],
+        ["Items", items.size]
+      ];
+
+      dashboardStatsEl.innerHTML = stats.map(([label, value]) => `
+        <div class="statCard">
+          <div class="statNumber">${escapeHtml(value)}</div>
+          <div class="statLabel">${escapeHtml(label)}</div>
+        </div>
+      `).join("");
+    }
+
+    function setDashboardVisible(visible) {
+      dashboardEl.style.display = visible ? "block" : "none";
+    }
+
+    function focusPortalSearch() {
+      if (window.event && window.event.target.closest("button") && !window.event.target.classList.contains("heroSearchButton")) {
+        return;
+      }
+
+      setDashboardVisible(false);
+      searchInput.focus();
+    }
+
+    function getParticipantRecentKey(p) {
+      return [
+        getParticipantStudentId(p),
+        getParticipantSrn(p),
+        getParticipantName(p),
+        getParticipantSchool(p),
+        getParticipantItem(p)
+      ].filter(Boolean).join("|").toLowerCase();
+    }
+
+    function getGroupRecentKey(group) {
+      return [
+        group.item,
+        group.groupName,
+        group.category,
+        group.school,
+        group.teacherEmail
+      ].filter(Boolean).join("|").toLowerCase();
+    }
+
+    function saveRecentlyViewed(record) {
+      if (!record || !record.type || !record.label) return;
+
+      const key = record.key || `${record.type}:${record.label}`.toLowerCase();
+      const current = safeLoadJson(RECENTLY_VIEWED_KEY, []);
+      const next = [
+        { ...record, key },
+        ...current.filter(item => item.key !== key)
+      ].slice(0, 8);
+
+      safeSaveJson(RECENTLY_VIEWED_KEY, next);
+      renderRecentlyViewed();
+    }
+
+    function renderRecentlyViewed() {
+      const items = safeLoadJson(RECENTLY_VIEWED_KEY, []);
+
+      if (!items.length) {
+        recentlyViewedEl.innerHTML = `<div class="empty">No recently viewed profiles yet.</div>`;
+        return;
+      }
+
+      recentlyViewedEl.innerHTML = items.map((item, index) => `
+        <button class="recentCard" type="button" onclick="openRecentlyViewed(${index})">
+          <div class="recentTitle">${escapeHtml(item.label)}</div>
+          <div class="recentMeta">${escapeHtml(item.meta || item.type)}</div>
+        </button>
+      `).join("");
+    }
+
+    function openRecentlyViewed(index) {
+      const item = safeLoadJson(RECENTLY_VIEWED_KEY, [])[index];
+      if (!item) return;
+
+      if (item.type === "school") {
+        openSchoolProfile(item.schoolName);
+        return;
+      }
+
+      if (item.type === "item") {
+        openItemProfile(item.itemName);
+        return;
+      }
+
+      if (item.type === "teacher") {
+        openTeacherProfile(item.teacherKey);
+        return;
+      }
+
+      if (item.type === "group") {
+        const group = allGroups.find(g => getGroupRecentKey(g) === item.groupKey);
+
+        if (group) {
+          latestResults = [{
+            resultType: "group",
+            title: [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group",
+            school: group.school || "",
+            teacherName: group.teacherName || "",
+            count: group.count || "",
+            group,
+            searchScore: 100
+          }];
+          openGroupProfile(0);
+        }
+        return;
+      }
+
+      if (item.type === "participant") {
+        const participant = allParticipants.find(p => getParticipantRecentKey(p) === item.participantKey);
+        if (participant) {
+          latestResults = [participant];
+          openProfile(0);
+        }
+      }
+    }
+
+    function saveRecentSearch(query) {
+      const term = String(query || "").trim();
+      if (!term) return;
+
+      const current = safeLoadJson(RECENT_SEARCHES_KEY, []);
+      const next = [
+        term,
+        ...current.filter(item => item.toLowerCase() !== term.toLowerCase())
+      ].slice(0, 10);
+
+      safeSaveJson(RECENT_SEARCHES_KEY, next);
+      renderRecentSearches();
+    }
+
+    function renderRecentSearches() {
+      const searches = safeLoadJson(RECENT_SEARCHES_KEY, []);
+
+      if (!searches.length) {
+        recentSearchesEl.innerHTML = `<div class="empty">No recent searches yet.</div>`;
+        return;
+      }
+
+      recentSearchesEl.innerHTML = searches.map(term => `
+        <button class="searchChip" type="button" onclick="runRecentSearch('${escapeJs(term)}')">${escapeHtml(term)}</button>
+      `).join("");
+    }
+
+    function runRecentSearch(term) {
+      searchInput.value = term;
+      setDashboardVisible(false);
+      searchInput.focus();
+      runSearch();
+    }
+
+    function browseDashboard(type) {
+      setDashboardVisible(false);
+      searchInput.value = "";
+      selectedResultIndex = -1;
+
+      if (type === "schools") {
+        latestResults = allSchools
+          .map(school => {
+            const schoolName = getSchoolName(school);
+            return {
+              resultType: "school",
+              schoolName,
+              participantCount: (participantsBySchool.get(String(schoolName || "").toLowerCase()) || []).length,
+              searchScore: 100
+            };
+          })
+          .filter(school => school.schoolName)
+          .sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+          .slice(0, 50);
+        statusEl.textContent = `${latestResults.length} school${latestResults.length === 1 ? "" : "s"}`;
+        renderSearchResults();
+        return;
+      }
+
+      if (type === "items") {
+        const itemMap = new Map();
+        allParticipants.forEach(p => {
+          const item = getParticipantItem(p);
+          if (!item) return;
+          itemMap.set(item, (itemMap.get(item) || 0) + 1);
+        });
+        allGroups.forEach(g => {
+          if (!g.item || itemMap.has(g.item)) return;
+          itemMap.set(g.item, 0);
+        });
+
+        latestResults = Array.from(itemMap.entries())
+          .map(([name, count]) => ({ resultType: "item", itemName: name, count }))
+          .sort((a, b) => a.itemName.localeCompare(b.itemName))
+          .slice(0, 50);
+        statusEl.textContent = `${latestResults.length} item${latestResults.length === 1 ? "" : "s"}`;
+        renderSearchResults();
+        return;
+      }
+
+      if (type === "teachers") {
+        const teacherMap = new Map();
+        allParticipants.forEach(p => {
+          const key = getParticipantTeacherEmail(p) || getParticipantTeacherName(p);
+          if (!key) return;
+          if (!teacherMap.has(key)) {
+            teacherMap.set(key, {
+              resultType: "teacher",
+              teacherName: getParticipantTeacherName(p) || key,
+              teacherEmail: getParticipantTeacherEmail(p) || "",
+              count: 0
+            });
+          }
+          teacherMap.get(key).count++;
+        });
+        allGroups.forEach(g => {
+          const key = g.teacherEmail || g.teacherName;
+          if (!key || teacherMap.has(key)) return;
+          teacherMap.set(key, {
+            resultType: "teacher",
+            teacherName: g.teacherName || key,
+            teacherEmail: g.teacherEmail || "",
+            count: 0
+          });
+        });
+
+        latestResults = Array.from(teacherMap.values())
+          .sort((a, b) => String(a.teacherName).localeCompare(String(b.teacherName)))
+          .slice(0, 50);
+        statusEl.textContent = `${latestResults.length} teacher${latestResults.length === 1 ? "" : "s"}`;
+        renderSearchResults();
+        return;
+      }
+
+      latestResults = [];
+      resultsEl.innerHTML = `<div class="empty">Rehearsals are not loaded in this sidebar yet.</div>`;
+      statusEl.textContent = "Rehearsals";
+    }
+</script>
