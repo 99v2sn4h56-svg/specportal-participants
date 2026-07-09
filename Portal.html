@@ -642,6 +642,123 @@
       box-shadow: 0 6px 14px rgba(45, 103, 178, 0.12);
       transform: translateY(-1px);
     }
+
+    .dashboard {
+      padding-bottom: 4px;
+    }
+
+    .heroSearchButton {
+      width: 100%;
+      border: 0;
+      border-radius: 18px;
+      padding: 15px 16px;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      color: #ffffff;
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 18px rgba(45, 103, 178, 0.22);
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .dashboardGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .statCard,
+    .quickAction,
+    .recentCard,
+    .searchChip {
+      border: 1px solid var(--border);
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 4px 14px rgba(16, 24, 40, 0.05);
+    }
+
+    .statCard {
+      padding: 13px 12px;
+    }
+
+    .statNumber {
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--blue);
+    }
+
+    .statLabel {
+      margin-top: 3px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .quickAction {
+      cursor: pointer;
+      padding: 13px 12px;
+      text-align: left;
+      color: var(--text);
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      transition: .15s ease;
+    }
+
+    .quickAction:hover,
+    .recentCard:hover,
+    .searchChip:hover {
+      border-color: var(--blue);
+      transform: translateY(-1px);
+      box-shadow: 0 7px 18px rgba(45, 103, 178, 0.14);
+    }
+
+    .recentList,
+    .searchChipRow {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .recentCard {
+      cursor: pointer;
+      padding: 11px 12px;
+      text-align: left;
+    }
+
+    .recentTitle {
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--blue);
+      line-height: 1.25;
+    }
+
+    .recentMeta {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 3px;
+      line-height: 1.3;
+    }
+
+    .searchChipRow {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .searchChip {
+      cursor: pointer;
+      padding: 10px 11px;
+      color: var(--blue);
+      font-weight: 700;
+      font-size: 12px;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
   </style>
 </head>
 
@@ -649,16 +766,38 @@
   <div id="searchView" style="height:100vh;overflow-y:auto;overflow-x:hidden;">
     <div class="header">
       <div class="kicker">Schools Spectacular</div>
-      <h1>Spec Portal</h1>
-      <div class="subtitle">Search participants by name, school, item or category.</div>
+      <h1>Spec Central</h1>
+      <div id="greeting" class="subtitle">Good morning</div>
+      <div class="subtitle">Your Schools Spectacular operations hub.</div>
     </div>
 
     <div class="wrap">
+      <div id="dashboard" class="dashboard" onclick="focusPortalSearch()">
+        <button class="heroSearchButton" type="button" onclick="focusPortalSearch()">Search Spec Central</button>
+
+        <div class="sectionTitle">Live Statistics</div>
+        <div id="dashboardStats" class="dashboardGrid"></div>
+
+        <div class="sectionTitle">Quick Actions</div>
+        <div class="dashboardGrid">
+          <button class="quickAction" type="button" onclick="browseDashboard('schools')">🏫 Browse Schools</button>
+          <button class="quickAction" type="button" onclick="browseDashboard('items')">🎭 Browse Items</button>
+          <button class="quickAction" type="button" onclick="browseDashboard('teachers')">👩‍🏫 Browse Teachers</button>
+          <button class="quickAction" type="button" onclick="browseDashboard('rehearsals')">📅 Rehearsals</button>
+        </div>
+
+        <div class="sectionTitle">Recently Viewed</div>
+        <div id="recentlyViewed" class="recentList"></div>
+
+        <div class="sectionTitle">Recent Searches</div>
+        <div id="recentSearches" class="searchChipRow"></div>
+      </div>
+
       <input
         id="search"
         class="searchBox"
         type="text"
-        placeholder="Search participants..."
+        placeholder="Search people, schools, items or groups..."
         autocomplete="off"
         autofocus
       >
@@ -675,7 +814,7 @@
         id="profileSearch"
         class="profileSearchBox"
         type="text"
-        placeholder="Search another participant..."
+        placeholder="Search Spec Central..."
         autocomplete="off"
         oninput="profileQuickSearch(this.value)"
       >
@@ -691,6 +830,11 @@
     const profileView = document.getElementById("profileView");
     const profileEl = document.getElementById("profile");
     const profileSearchInput = document.getElementById("profileSearch");
+    const dashboardEl = document.getElementById("dashboard");
+    const dashboardStatsEl = document.getElementById("dashboardStats");
+    const recentlyViewedEl = document.getElementById("recentlyViewed");
+    const recentSearchesEl = document.getElementById("recentSearches");
+    const greetingEl = document.getElementById("greeting");
 
 let timer = null;
 let latestResults = [];
@@ -706,6 +850,8 @@ let groupsByItem = new Map();
 let searchIndex = [];
 let photoCache = {};
 let portalReady = false;
+const RECENTLY_VIEWED_KEY = "specPortalRecentlyViewed";
+const RECENT_SEARCHES_KEY = "specPortalRecentSearches";
 
     function getField(source, names) {
       if (!source) return "";
@@ -819,6 +965,301 @@ let portalReady = false;
         .toLowerCase();
     }
 
+    function safeLoadJson(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (err) {
+        return fallback;
+      }
+    }
+
+    function safeSaveJson(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (err) {
+        // Ignore storage errors in restricted sidebar contexts.
+      }
+    }
+
+    function getGreeting() {
+      const hour = new Date().getHours();
+      if (hour < 12) return "Good morning";
+      if (hour < 18) return "Good afternoon";
+      return "Good evening";
+    }
+
+    function renderDashboard() {
+      if (greetingEl) {
+        greetingEl.textContent = getGreeting();
+      }
+
+      renderDashboardStats();
+      renderRecentlyViewed();
+      renderRecentSearches();
+    }
+
+    function renderDashboardStats() {
+      const teachers = new Set();
+      const items = new Set();
+
+      allParticipants.forEach(p => {
+        const teacher = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
+        const item = String(getParticipantItem(p) || "").trim().toLowerCase();
+        if (teacher) teachers.add(teacher);
+        if (item) items.add(item);
+      });
+
+      allGroups.forEach(g => {
+        const teacher = String(g.teacherEmail || g.teacherName || "").trim().toLowerCase();
+        const item = String(g.item || "").trim().toLowerCase();
+        if (teacher) teachers.add(teacher);
+        if (item) items.add(item);
+      });
+
+      const stats = [
+        ["Participants", allParticipants.length],
+        ["Schools", allSchools.length],
+        ["Groups", allGroups.length],
+        ["Teachers", teachers.size],
+        ["Items", items.size]
+      ];
+
+      dashboardStatsEl.innerHTML = stats.map(([label, value]) => `
+        <div class="statCard">
+          <div class="statNumber">${escapeHtml(value)}</div>
+          <div class="statLabel">${escapeHtml(label)}</div>
+        </div>
+      `).join("");
+    }
+
+    function setDashboardVisible(visible) {
+      dashboardEl.style.display = visible ? "block" : "none";
+    }
+
+    function focusPortalSearch() {
+      if (window.event && window.event.target.closest("button") && !window.event.target.classList.contains("heroSearchButton")) {
+        return;
+      }
+
+      setDashboardVisible(false);
+      searchInput.focus();
+    }
+
+    function getParticipantRecentKey(p) {
+      return [
+        getParticipantStudentId(p),
+        getParticipantSrn(p),
+        getParticipantName(p),
+        getParticipantSchool(p),
+        getParticipantItem(p)
+      ].filter(Boolean).join("|").toLowerCase();
+    }
+
+    function getGroupRecentKey(group) {
+      return [
+        group.item,
+        group.groupName,
+        group.category,
+        group.school,
+        group.teacherEmail
+      ].filter(Boolean).join("|").toLowerCase();
+    }
+
+    function saveRecentlyViewed(record) {
+      if (!record || !record.type || !record.label) return;
+
+      const key = record.key || `${record.type}:${record.label}`.toLowerCase();
+      const current = safeLoadJson(RECENTLY_VIEWED_KEY, []);
+      const next = [
+        { ...record, key },
+        ...current.filter(item => item.key !== key)
+      ].slice(0, 8);
+
+      safeSaveJson(RECENTLY_VIEWED_KEY, next);
+      renderRecentlyViewed();
+    }
+
+    function renderRecentlyViewed() {
+      const items = safeLoadJson(RECENTLY_VIEWED_KEY, []);
+
+      if (!items.length) {
+        recentlyViewedEl.innerHTML = `<div class="empty">No recently viewed profiles yet.</div>`;
+        return;
+      }
+
+      recentlyViewedEl.innerHTML = items.map((item, index) => `
+        <button class="recentCard" type="button" onclick="openRecentlyViewed(${index})">
+          <div class="recentTitle">${escapeHtml(item.label)}</div>
+          <div class="recentMeta">${escapeHtml(item.meta || item.type)}</div>
+        </button>
+      `).join("");
+    }
+
+    function openRecentlyViewed(index) {
+      const item = safeLoadJson(RECENTLY_VIEWED_KEY, [])[index];
+      if (!item) return;
+
+      if (item.type === "school") {
+        openSchoolProfile(item.schoolName);
+        return;
+      }
+
+      if (item.type === "item") {
+        openItemProfile(item.itemName);
+        return;
+      }
+
+      if (item.type === "teacher") {
+        openTeacherProfile(item.teacherKey);
+        return;
+      }
+
+      if (item.type === "group") {
+        const group = allGroups.find(g => getGroupRecentKey(g) === item.groupKey);
+
+        if (group) {
+          latestResults = [{
+            resultType: "group",
+            title: [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group",
+            school: group.school || "",
+            teacherName: group.teacherName || "",
+            count: group.count || "",
+            group,
+            searchScore: 100
+          }];
+          openGroupProfile(0);
+        }
+        return;
+      }
+
+      if (item.type === "participant") {
+        const participant = allParticipants.find(p => getParticipantRecentKey(p) === item.participantKey);
+        if (participant) {
+          latestResults = [participant];
+          openProfile(0);
+        }
+      }
+    }
+
+    function saveRecentSearch(query) {
+      const term = String(query || "").trim();
+      if (!term) return;
+
+      const current = safeLoadJson(RECENT_SEARCHES_KEY, []);
+      const next = [
+        term,
+        ...current.filter(item => item.toLowerCase() !== term.toLowerCase())
+      ].slice(0, 10);
+
+      safeSaveJson(RECENT_SEARCHES_KEY, next);
+      renderRecentSearches();
+    }
+
+    function renderRecentSearches() {
+      const searches = safeLoadJson(RECENT_SEARCHES_KEY, []);
+
+      if (!searches.length) {
+        recentSearchesEl.innerHTML = `<div class="empty">No recent searches yet.</div>`;
+        return;
+      }
+
+      recentSearchesEl.innerHTML = searches.map(term => `
+        <button class="searchChip" type="button" onclick="runRecentSearch('${escapeJs(term)}')">${escapeHtml(term)}</button>
+      `).join("");
+    }
+
+    function runRecentSearch(term) {
+      searchInput.value = term;
+      setDashboardVisible(false);
+      searchInput.focus();
+      runSearch();
+    }
+
+    function browseDashboard(type) {
+      setDashboardVisible(false);
+      searchInput.value = "";
+      selectedResultIndex = -1;
+
+      if (type === "schools") {
+        latestResults = allSchools
+          .map(school => {
+            const schoolName = getSchoolName(school);
+            return {
+              resultType: "school",
+              schoolName,
+              participantCount: (participantsBySchool.get(String(schoolName || "").toLowerCase()) || []).length,
+              searchScore: 100
+            };
+          })
+          .filter(school => school.schoolName)
+          .sort((a, b) => a.schoolName.localeCompare(b.schoolName))
+          .slice(0, 50);
+        statusEl.textContent = `${latestResults.length} school${latestResults.length === 1 ? "" : "s"}`;
+        renderSearchResults();
+        return;
+      }
+
+      if (type === "items") {
+        const itemMap = new Map();
+        allParticipants.forEach(p => {
+          const item = getParticipantItem(p);
+          if (!item) return;
+          itemMap.set(item, (itemMap.get(item) || 0) + 1);
+        });
+        allGroups.forEach(g => {
+          if (!g.item || itemMap.has(g.item)) return;
+          itemMap.set(g.item, 0);
+        });
+
+        latestResults = Array.from(itemMap.entries())
+          .map(([name, count]) => ({ resultType: "item", itemName: name, count }))
+          .sort((a, b) => a.itemName.localeCompare(b.itemName))
+          .slice(0, 50);
+        statusEl.textContent = `${latestResults.length} item${latestResults.length === 1 ? "" : "s"}`;
+        renderSearchResults();
+        return;
+      }
+
+      if (type === "teachers") {
+        const teacherMap = new Map();
+        allParticipants.forEach(p => {
+          const key = getParticipantTeacherEmail(p) || getParticipantTeacherName(p);
+          if (!key) return;
+          if (!teacherMap.has(key)) {
+            teacherMap.set(key, {
+              resultType: "teacher",
+              teacherName: getParticipantTeacherName(p) || key,
+              teacherEmail: getParticipantTeacherEmail(p) || "",
+              count: 0
+            });
+          }
+          teacherMap.get(key).count++;
+        });
+        allGroups.forEach(g => {
+          const key = g.teacherEmail || g.teacherName;
+          if (!key || teacherMap.has(key)) return;
+          teacherMap.set(key, {
+            resultType: "teacher",
+            teacherName: g.teacherName || key,
+            teacherEmail: g.teacherEmail || "",
+            count: 0
+          });
+        });
+
+        latestResults = Array.from(teacherMap.values())
+          .sort((a, b) => String(a.teacherName).localeCompare(String(b.teacherName)))
+          .slice(0, 50);
+        statusEl.textContent = `${latestResults.length} teacher${latestResults.length === 1 ? "" : "s"}`;
+        renderSearchResults();
+        return;
+      }
+
+      latestResults = [];
+      resultsEl.innerHTML = `<div class="empty">Rehearsals are not loaded in this sidebar yet.</div>`;
+      statusEl.textContent = "Rehearsals";
+    }
+
     searchInput.addEventListener("input", () => {
       clearTimeout(timer);
       selectedResultIndex = -1;
@@ -826,6 +1267,19 @@ let portalReady = false;
     });
 
     searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        searchInput.value = "";
+        latestResults = [];
+        selectedResultIndex = -1;
+        resultsEl.innerHTML = "";
+        setDashboardVisible(true);
+        statusEl.textContent = portalReady
+          ? `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`
+          : "Loading participant data...";
+        return;
+      }
+
       if (!latestResults.length) return;
 
       if (e.key === "ArrowDown") {
@@ -840,18 +1294,10 @@ let portalReady = false;
         e.preventDefault();
         if (selectedResultIndex < 0) selectedResultIndex = 0;
         openProfile(selectedResultIndex);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        searchInput.value = "";
-        latestResults = [];
-        selectedResultIndex = -1;
-        resultsEl.innerHTML = "";
-        statusEl.textContent = portalReady
-          ? `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`
-          : "Loading participant data...";
       }
     });
 
+    renderDashboard();
     loadPortalData();
 
     function addToIndex(map, key, value) {
@@ -906,19 +1352,19 @@ let portalReady = false;
 
     function loadPortalData() {
       statusEl.textContent = "Loading participant data...";
-      console.log("Spec Portal: requesting portal data...");
+      console.log("Spec Central: requesting portal data...");
 
       const loadingTimeout = setTimeout(() => {
         if (!portalReady) {
           statusEl.textContent = "Still loading participant data... this is taking longer than usual.";
-          console.warn("Spec Portal: portalGetPortalData has not returned yet.");
+          console.warn("Spec Central: portalGetPortalData has not returned yet.");
         }
       }, 12000);
 
       google.script.run
         .withSuccessHandler(data => {
           clearTimeout(loadingTimeout);
-          console.log("Spec Portal: portal data received", data);
+          console.log("Spec Central: portal data received", data);
 
           data = data || {};
           photoCache = data.photos || {};
@@ -929,6 +1375,7 @@ let portalReady = false;
           buildPortalIndexes();
           portalReady = true;
           statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"}, ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} and ${allSchools.length} school${allSchools.length === 1 ? "" : "s"} loaded`;
+          renderDashboard();
 
           if (searchInput.value.trim()) {
             runSearch();
@@ -937,7 +1384,7 @@ let portalReady = false;
         .withFailureHandler(error => {
           clearTimeout(loadingTimeout);
           portalReady = false;
-          console.error("Spec Portal: error loading participant data", error);
+          console.error("Spec Central: error loading participant data", error);
           const message = error && error.message ? error.message : String(error || "Unknown error");
           statusEl.textContent = "Error loading participant data: " + message;
         })
@@ -959,8 +1406,11 @@ let portalReady = false;
         statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`;
         latestResults = [];
         selectedResultIndex = -1;
+        setDashboardVisible(true);
         return;
       }
+
+      setDashboardVisible(false);
 
       // Basic search: match query against name, school, item, discipline, teacher, emails, etc.
       const q = query.toLowerCase();
@@ -1062,6 +1512,7 @@ let portalReady = false;
         resultsEl.innerHTML = `<div class="empty">No matches found.</div>`;
         statusEl.textContent = "No matches found.";
       } else {
+        saveRecentSearch(query);
         statusEl.textContent = `${latestResults.length} result${latestResults.length === 1 ? "" : "s"}`;
       }
     }
@@ -1117,6 +1568,37 @@ let portalReady = false;
               </div>
             </div>
             <div class="pillRow"><span class="pill">Group</span></div>
+          </div>
+        `;
+      }
+
+      if (p.resultType === "item") {
+        return `
+          <div class="result${selectedResultIndex === idx ? " selected" : ""}" tabindex="-1" onclick="openProfile(${idx})" data-result-index="${idx}">
+            <div class="resultTop">
+              <div class="avatar">🎭</div>
+              <div>
+                <div class="name">${escapeHtml(p.itemName || "Unnamed item")}</div>
+                <div class="meta">${escapeHtml(p.count || 0)} participant${Number(p.count) === 1 ? "" : "s"}</div>
+              </div>
+            </div>
+            <div class="pillRow"><span class="pill">Item</span></div>
+          </div>
+        `;
+      }
+
+      if (p.resultType === "teacher") {
+        const meta = [p.teacherEmail, p.count ? p.count + " participant" + (Number(p.count) === 1 ? "" : "s") : ""].filter(Boolean).join(" · ");
+        return `
+          <div class="result${selectedResultIndex === idx ? " selected" : ""}" tabindex="-1" onclick="openProfile(${idx})" data-result-index="${idx}">
+            <div class="resultTop">
+              <div class="avatar">👤</div>
+              <div>
+                <div class="name">${escapeHtml(p.teacherName || p.teacherEmail || "Unnamed teacher")}</div>
+                <div class="meta">${escapeHtml(meta)}</div>
+              </div>
+            </div>
+            <div class="pillRow"><span class="pill">Teacher</span></div>
           </div>
         `;
       }
@@ -1180,6 +1662,16 @@ let portalReady = false;
         return;
       }
 
+      if (p.resultType === "item") {
+        openItemProfile(p.itemName);
+        return;
+      }
+
+      if (p.resultType === "teacher") {
+        openTeacherProfile(p.teacherEmail || p.teacherName);
+        return;
+      }
+
       searchView.style.display = "none";
       profileView.style.display = "block";
       profileSearchInput.value = "";
@@ -1199,6 +1691,14 @@ let portalReady = false;
       const itemLine = [item, disciplineLine].filter(Boolean).join(" · ");
       const familyEmails = [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].filter(Boolean).join(";");
       const sharedStudentPhone = isSamePhone(getParticipantStudentMobile(p), parentPhone) || isSamePhone(getParticipantStudentMobile(p), getParticipantAdditionalParentPhone(p));
+
+      saveRecentlyViewed({
+        type: "participant",
+        key: `participant:${getParticipantRecentKey(p)}`,
+        participantKey: getParticipantRecentKey(p),
+        label: name,
+        meta: [getParticipantSchool(p), item].filter(Boolean).join(" · ")
+      });
 
       profileEl.innerHTML = `
         <div class="profileCard">
@@ -1258,6 +1758,7 @@ let portalReady = false;
       searchView.style.display = "block";
       profileSearchInput.value = "";
       selectedResultIndex = -1;
+      setDashboardVisible(!String(searchInput.value || "").trim());
       updateSelectedResult();
       searchInput.focus();
     }
@@ -1268,6 +1769,7 @@ let portalReady = false;
 
       profileView.style.display = "none";
       searchView.style.display = "block";
+      setDashboardVisible(false);
       searchInput.value = query;
       searchInput.focus();
       runSearch();
@@ -1276,6 +1778,14 @@ let portalReady = false;
     function openSchoolProfile(schoolName) {
       const target = String(schoolName || "").trim();
       if (!target) return;
+
+      saveRecentlyViewed({
+        type: "school",
+        key: `school:${target.toLowerCase()}`,
+        schoolName: target,
+        label: target,
+        meta: "School"
+      });
 
       searchView.style.display = "none";
       profileView.style.display = "block";
@@ -1474,6 +1984,14 @@ let portalReady = false;
       const target = String(teacherKey || "").trim();
       if (!target) return;
 
+      saveRecentlyViewed({
+        type: "teacher",
+        key: `teacher:${target.toLowerCase()}`,
+        teacherKey: target,
+        label: target,
+        meta: "Teacher"
+      });
+
       searchView.style.display = "none";
       profileView.style.display = "block";
       profileSearchInput.value = "";
@@ -1647,6 +2165,14 @@ let portalReady = false;
 
       const group = result.group || {};
       const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
+      saveRecentlyViewed({
+        type: "group",
+        key: `group:${getGroupRecentKey(group)}`,
+        groupKey: getGroupRecentKey(group),
+        label: title,
+        meta: [group.school, group.teacherName].filter(Boolean).join(" · ") || "Group"
+      });
+
       const students = group.item ? (participantsByItem.get(String(group.item || "").toLowerCase()) || []) : [];
       const matchingStudents = students.filter(p => String(getParticipantSchool(p) || "").trim().toLowerCase() === String(group.school || "").trim().toLowerCase());
       const teacherKey = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
@@ -1723,6 +2249,14 @@ let portalReady = false;
     function openItemProfile(itemName) {
       const target = String(itemName || "").trim();
       if (!target) return;
+
+      saveRecentlyViewed({
+        type: "item",
+        key: `item:${target.toLowerCase()}`,
+        itemName: target,
+        label: target,
+        meta: "Item"
+      });
 
       searchView.style.display = "none";
       profileView.style.display = "block";
