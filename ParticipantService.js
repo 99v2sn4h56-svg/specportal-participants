@@ -10,7 +10,8 @@ const ParticipantService = (() => {
 
   const SHEETS = {
     INDIVIDUALS: "INDIVIDUALS(YES)",
-    GROUPS: "GROUPS(YES)"
+    GROUPS: "GROUPS(YES)",
+    SCHOOLS_MASTER: "Schools Master Dataset"
   };
 
   const FIELDS = {
@@ -73,6 +74,13 @@ ParticipantService.getIndividualsSheet = function () {
  */
 ParticipantService.getGroupsSheet = function () {
   return this.getSpreadsheet().getSheetByName(this.SHEETS.GROUPS);
+};
+
+/**
+ * Returns the Schools Master Dataset sheet.
+ */
+ParticipantService.getSchoolsMasterSheet = function () {
+  return this.getSpreadsheet().getSheetByName(this.SHEETS.SCHOOLS_MASTER);
 };
 
 function testParticipantService() {
@@ -178,6 +186,160 @@ ParticipantService.search = function (query) {
       return haystack.includes(q);
     })
     .slice(0, 40);
+};
+
+/**
+ * Returns every group entry as an array of objects.
+ */
+ParticipantService.getGroups = function () {
+  const sheet = this.getGroupsSheet();
+  if (!sheet) return [];
+
+  const values = sheet.getDataRange().getDisplayValues();
+  if (values.length < 2) return [];
+
+  return values.slice(1)
+    .filter(row => row.some(cell => cell !== "" && cell !== null))
+    .map(row => ({
+      school: row[7] || "",
+      category: row[14] || "",
+      item: row[15] || "",
+      groupName: row[16] || "",
+      teacherEmail: row[17] || "",
+      classroom: row[18] || "",
+      count: row[6] || "",
+      teacherName: [row[34], row[35]].filter(Boolean).join(" ")
+    }));
+};
+
+/**
+ * Returns the schools master data used by Spec Portal.
+ */
+ParticipantService.getSchoolsMasterData = function () {
+  const sheet = this.getSchoolsMasterSheet();
+  if (!sheet) return [];
+
+  const values = sheet.getDataRange().getDisplayValues();
+  if (values.length < 2) return [];
+
+  return values.slice(1)
+    .filter(row => row.some(cell => cell !== "" && cell !== null))
+    .map(row => ({
+      code: row[0] || "",
+      schoolName: row[2] || "",
+      schoolEmail: row[7] || "",
+      directorate: row[31] || ""
+    }))
+    .filter(school => school.schoolName);
+};
+
+/**
+ * Returns profile data for one school.
+ */
+ParticipantService.getSchoolProfile = function (schoolName) {
+  const target = String(schoolName || "").trim();
+  const targetLower = target.toLowerCase();
+  if (!target) return null;
+
+  const participants = this.getAll()
+    .filter(p => String(p.school || "").trim().toLowerCase() === targetLower)
+    .sort((a, b) => String(`${a.firstName || ""} ${a.lastName || ""}`).localeCompare(String(`${b.firstName || ""} ${b.lastName || ""}`)));
+
+  const groups = this.getGroups()
+    .filter(g => String(g.school || "").trim().toLowerCase() === targetLower);
+
+  const master = this.getSchoolsMasterData()
+    .find(s => String(s.schoolName || "").trim().toLowerCase() === targetLower) || null;
+
+  const teacherMap = new Map();
+  const itemMap = new Map();
+  const disciplineMap = new Map();
+  const teacherEmails = new Set();
+  const familyEmails = new Set();
+
+  participants.forEach(p => {
+    const teacherKey = String(p.teacherEmail || p.teacherName || "").trim().toLowerCase();
+    if (teacherKey && !teacherMap.has(teacherKey)) {
+      teacherMap.set(teacherKey, {
+        name: p.teacherName || "",
+        email: p.teacherEmail || ""
+      });
+    }
+
+    if (p.teacherEmail) teacherEmails.add(p.teacherEmail);
+
+    [p.studentEmail, p.parentEmail, p.additionalParentEmail].forEach(email => {
+      if (email) familyEmails.add(email);
+    });
+
+    const discipline = p.discipline || "Unspecified";
+    if (!disciplineMap.has(discipline)) {
+      disciplineMap.set(discipline, {
+        name: discipline,
+        count: 0,
+        items: new Set()
+      });
+    }
+
+    const disciplineRecord = disciplineMap.get(discipline);
+    disciplineRecord.count++;
+
+    if (p.item) {
+      disciplineRecord.items.add(p.item);
+
+      if (!itemMap.has(p.item)) {
+        itemMap.set(p.item, {
+          name: p.item,
+          discipline: p.discipline || "",
+          count: 0
+        });
+      }
+
+      itemMap.get(p.item).count++;
+    }
+  });
+
+  return {
+    schoolName: target,
+    master,
+    groups,
+    groupCount: groups.length,
+    participantCount: participants.length,
+    teacherCount: teacherMap.size,
+    itemCount: itemMap.size,
+    teachers: Array.from(teacherMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    items: Array.from(itemMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    disciplines: Array.from(disciplineMap.values()).map(d => ({
+      name: d.name,
+      count: d.count,
+      items: Array.from(d.items).sort()
+    })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    participants,
+    teacherEmails: Array.from(teacherEmails).sort(),
+    familyEmails: Array.from(familyEmails).sort()
+  };
+};
+
+/**
+ * Returns all data needed to initialise Spec Portal in one server call.
+ */
+ParticipantService.getPortalData = function () {
+  let photos = {};
+
+  try {
+    if (typeof ProfilePhotoService !== "undefined" && ProfilePhotoService.getStudentPhotos) {
+      photos = ProfilePhotoService.getStudentPhotos() || {};
+    }
+  } catch (err) {
+    photos = {};
+  }
+
+  return {
+    participants: this.getAll(),
+    groups: this.getGroups(),
+    schools: this.getSchoolsMasterData(),
+    photos
+  };
 };
 function testParticipantSearch() {
   const results = ParticipantService.search("james");

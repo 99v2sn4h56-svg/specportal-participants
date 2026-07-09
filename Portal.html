@@ -707,6 +707,118 @@ let searchIndex = [];
 let photoCache = {};
 let portalReady = false;
 
+    function getField(source, names) {
+      if (!source) return "";
+
+      for (const name of names) {
+        const value = source[name];
+        if (value !== undefined && value !== null && String(value).trim() !== "") {
+          return value;
+        }
+      }
+
+      return "";
+    }
+
+    function getParticipantFirstName(p) {
+      return getField(p, ["firstName", "studentFirstName", "Student First Name"]);
+    }
+
+    function getParticipantLastName(p) {
+      return getField(p, ["lastName", "studentLastName", "Student Last Name"]);
+    }
+
+    function getParticipantName(p) {
+      return getField(p, ["name", "fullName", "studentName", "Student Name"]) ||
+        [getParticipantFirstName(p), getParticipantLastName(p)].filter(Boolean).join(" ");
+    }
+
+    function getParticipantSchool(p) {
+      return getField(p, ["school", "currentSchool", "schoolName", "Current School"]);
+    }
+
+    function getSchoolName(s) {
+      return getField(s, ["schoolName", "school", "currentSchool", "School Name", "Current School"]);
+    }
+
+    function getParticipantYear(p) {
+      return getField(p, ["year", "studentYear", "Student Year"]);
+    }
+
+    function getParticipantItem(p) {
+      return getField(p, ["item", "Item"]);
+    }
+
+    function getParticipantDiscipline(p) {
+      return getField(p, ["discipline", "Discipline"]);
+    }
+
+    function getParticipantSubDiscipline(p) {
+      return getField(p, ["subDiscipline", "subDisciplineName", "Sub-Discipline"]);
+    }
+
+    function getParticipantTeacherName(p) {
+      return getField(p, ["teacherName", "Teacher Name"]);
+    }
+
+    function getParticipantTeacherEmail(p) {
+      return getField(p, ["teacherEmail", "Teacher Email"]);
+    }
+
+    function getParticipantStudentEmail(p) {
+      return getField(p, ["studentEmail", "Student Email"]);
+    }
+
+    function getParticipantStudentMobile(p) {
+      return getField(p, ["studentMobile", "Student Mobile"]);
+    }
+
+    function getParticipantParentName(p) {
+      return getField(p, ["parentName", "Parent Name"]);
+    }
+
+    function getParticipantParentEmail(p) {
+      return getField(p, ["parentEmail", "Parent Email"]);
+    }
+
+    function getParticipantParentPhone(p) {
+      return getField(p, ["parentPhone", "Parent Phone"]);
+    }
+
+    function getParticipantAdditionalParentName(p) {
+      return getField(p, ["additionalParentName", "Additional Parent Name"]);
+    }
+
+    function getParticipantAdditionalParentEmail(p) {
+      return getField(p, ["additionalParentEmail", "Additional Parent Email"]);
+    }
+
+    function getParticipantAdditionalParentPhone(p) {
+      return getField(p, ["additionalParentPhone", "Additional Parent Phone"]);
+    }
+
+    function getParticipantAdditionalParentRelationship(p) {
+      return getField(p, ["additionalParentRelationship", "Additional Parent Relationship"]);
+    }
+
+    function getParticipantStudentId(p) {
+      return getField(p, ["studentId", "Student ID"]);
+    }
+
+    function getParticipantSrn(p) {
+      return getField(p, ["srn", "SRN"]);
+    }
+
+    function getPhotoKey(participant) {
+      return getParticipantName(participant)
+        .replace(/\.[^.]+$/, "")
+        .replace(/\s*-\s*Headshot$/i, "")
+        .replace(/[\-_]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }
+
     searchInput.addEventListener("input", () => {
       clearTimeout(timer);
       selectedResultIndex = -1;
@@ -759,9 +871,9 @@ let portalReady = false;
       participantsByTeacher = new Map();
 
       allParticipants.forEach(p => {
-        addToIndex(participantsBySchool, p.school, p);
-        addToIndex(participantsByItem, p.item, p);
-        addToIndex(participantsByTeacher, p.teacherEmail || p.teacherName, p);
+        addToIndex(participantsBySchool, getParticipantSchool(p), p);
+        addToIndex(participantsByItem, getParticipantItem(p), p);
+        addToIndex(participantsByTeacher, getParticipantTeacherEmail(p) || getParticipantTeacherName(p), p);
       });
 
       groupsBySchool = new Map();
@@ -775,19 +887,19 @@ let portalReady = false;
       searchIndex = allParticipants.map(p => ({
         participant: p,
         fullName: fullName(p).toLowerCase(),
-        firstName: String(p.firstName || "").toLowerCase(),
-        lastName: String(p.lastName || "").toLowerCase(),
-        school: String(p.school || "").toLowerCase(),
-        item: String(p.item || "").toLowerCase(),
-        discipline: String(p.discipline || "").toLowerCase(),
-        subDiscipline: String(p.subDiscipline || "").toLowerCase(),
-        teacherName: String(p.teacherName || "").toLowerCase(),
-        teacherEmail: String(p.teacherEmail || "").toLowerCase(),
-        studentEmail: String(p.studentEmail || "").toLowerCase(),
-        parentName: String(p.parentName || "").toLowerCase(),
-        parentEmail: String(p.parentEmail || "").toLowerCase(),
-        additionalParentName: String(p.additionalParentName || "").toLowerCase(),
-        additionalParentEmail: String(p.additionalParentEmail || "").toLowerCase()
+        firstName: String(getParticipantFirstName(p) || "").toLowerCase(),
+        lastName: String(getParticipantLastName(p) || "").toLowerCase(),
+        school: String(getParticipantSchool(p) || "").toLowerCase(),
+        item: String(getParticipantItem(p) || "").toLowerCase(),
+        discipline: String(getParticipantDiscipline(p) || "").toLowerCase(),
+        subDiscipline: String(getParticipantSubDiscipline(p) || "").toLowerCase(),
+        teacherName: String(getParticipantTeacherName(p) || "").toLowerCase(),
+        teacherEmail: String(getParticipantTeacherEmail(p) || "").toLowerCase(),
+        studentEmail: String(getParticipantStudentEmail(p) || "").toLowerCase(),
+        parentName: String(getParticipantParentName(p) || "").toLowerCase(),
+        parentEmail: String(getParticipantParentEmail(p) || "").toLowerCase(),
+        additionalParentName: String(getParticipantAdditionalParentName(p) || "").toLowerCase(),
+        additionalParentEmail: String(getParticipantAdditionalParentEmail(p) || "").toLowerCase()
       }));
     }
 
@@ -813,16 +925,6 @@ let portalReady = false;
           allParticipants = data.participants || [];
           allGroups = data.groups || [];
           allSchools = data.schools || [];
-
-          allParticipants.forEach(p => {
-            const key = fullName(p)
-              .toLowerCase()
-              .replace(/[\-_]+/g, " ")
-              .replace(/\s+/g, " ")
-              .trim();
-
-            p.photoUrl = photoCache[key]?.url || "";
-          });
 
           buildPortalIndexes();
           portalReady = true;
@@ -862,6 +964,15 @@ let portalReady = false;
 
       // Basic search: match query against name, school, item, discipline, teacher, emails, etc.
       const q = query.toLowerCase();
+      const schoolResults = allSchools
+        .filter(school => String(getSchoolName(school) || "").toLowerCase().includes(q))
+        .slice(0, 8)
+        .map(school => ({
+          resultType: "school",
+          schoolName: getSchoolName(school),
+          participantCount: (participantsBySchool.get(String(getSchoolName(school) || "").toLowerCase()) || []).length
+        }));
+
       const results = [];
       for (const entry of searchIndex) {
         // Match against relevant fields
@@ -886,7 +997,7 @@ let portalReady = false;
       }
 
       // Limit to first 50 results for performance
-      latestResults = results.slice(0, 50);
+      latestResults = [...schoolResults, ...results].slice(0, 50);
       selectedResultIndex = -1;
       renderSearchResults();
       if (latestResults.length === 0) {
@@ -908,12 +1019,31 @@ let portalReady = false;
     }
 
     function renderResultCard(p, idx) {
+      if (p.resultType === "school") {
+        const schoolName = getSchoolName(p) || "Unnamed school";
+        const count = p.participantCount || 0;
+        return `
+          <div class="result${selectedResultIndex === idx ? " selected" : ""}" tabindex="-1" onclick="openProfile(${idx})" data-result-index="${idx}">
+            <div class="resultTop">
+              <div class="avatar">SC</div>
+              <div>
+                <div class="name">${escapeHtml(schoolName)}</div>
+                <div class="meta">${escapeHtml(count)} participant${Number(count) === 1 ? "" : "s"}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       const name = fullName(p) || "Unnamed participant";
-      const meta = [p.school, p.year ? "Year " + p.year : "", p.item, p.discipline].filter(Boolean).join(" · ");
+      const photo = photoCache[getPhotoKey(p)] || {};
+      const photoUrl = photo.url || "";
+      const year = getParticipantYear(p);
+      const meta = [getParticipantSchool(p), year ? "Year " + year : "", getParticipantItem(p), getParticipantDiscipline(p)].filter(Boolean).join(" · ");
       return `
         <div class="result${selectedResultIndex === idx ? " selected" : ""}" tabindex="-1" onclick="openProfile(${idx})" data-result-index="${idx}">
           <div class="resultTop">
-            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="avatar">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
             <div>
               <div class="name">${escapeHtml(name)}</div>
               <div class="meta">${escapeHtml(meta)}</div>
@@ -955,7 +1085,7 @@ let portalReady = false;
       if (!p) return;
 
       if (p.resultType === "school") {
-        openSchoolProfile(p.schoolName);
+        openSchoolProfile(getSchoolName(p));
         return;
       }
 
@@ -964,59 +1094,68 @@ let portalReady = false;
       profileSearchInput.value = "";
 
       const name = fullName(p) || "Unnamed participant";
-      const yearLine = [p.school, p.year ? "Year " + p.year : ""].filter(Boolean).join(" · ");
-      const disciplineLine = [p.discipline, p.subDiscipline].filter(Boolean).join(" · ");
-      const itemLine = [p.item, disciplineLine].filter(Boolean).join(" · ");
-      const familyEmails = [p.studentEmail, p.parentEmail, p.additionalParentEmail].filter(Boolean).join(";");
-      const sharedStudentPhone = isSamePhone(p.studentMobile, p.parentPhone) || isSamePhone(p.studentMobile, p.additionalParentPhone);
+      const photo = photoCache[getPhotoKey(p)] || {};
+      const photoUrl = photo.url || "";
+      const year = getParticipantYear(p);
+      const discipline = getParticipantDiscipline(p);
+      const subDiscipline = getParticipantSubDiscipline(p);
+      const item = getParticipantItem(p);
+      const teacherName = getParticipantTeacherName(p);
+      const teacherEmail = getParticipantTeacherEmail(p);
+      const parentPhone = getParticipantParentPhone(p);
+      const yearLine = [getParticipantSchool(p), year ? "Year " + year : ""].filter(Boolean).join(" · ");
+      const disciplineLine = [discipline, subDiscipline].filter(Boolean).join(" · ");
+      const itemLine = [item, disciplineLine].filter(Boolean).join(" · ");
+      const familyEmails = [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].filter(Boolean).join(";");
+      const sharedStudentPhone = isSamePhone(getParticipantStudentMobile(p), parentPhone) || isSamePhone(getParticipantStudentMobile(p), getParticipantAdditionalParentPhone(p));
 
       profileEl.innerHTML = `
         <div class="profileCard">
           <div class="profileHero">
             <div style="display:flex;justify-content:center;margin-bottom:16px;">
-              ${p.photoUrl
-                ? `<img src="${escapeHtml(p.photoUrl)}" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid rgba(255,255,255,.35);box-shadow:0 8px 24px rgba(0,0,0,.18);">`
+              ${photoUrl
+                ? `<img src="${escapeHtml(photoUrl)}" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid rgba(255,255,255,.35);box-shadow:0 8px 24px rgba(0,0,0,.18);">`
                 : `<div class="avatar" style="width:110px;height:110px;font-size:34px;margin:0 auto;">${escapeHtml(getInitials(p))}</div>`}
             </div>
             <h2>${escapeHtml(name)}</h2>
             <div>${escapeHtml(yearLine)}</div>
-            ${disciplineLine ? `<div class="disciplineBadge" style="background:${disciplineColour(p.discipline)}">${escapeHtml(disciplineLine)}</div>` : ""}
+            ${disciplineLine ? `<div class="disciplineBadge" style="background:${disciplineColour(discipline)}">${escapeHtml(disciplineLine)}</div>` : ""}
           </div>
 
           <div class="profileBody">
             <div class="profileActions">
               ${familyEmails ? `<button class="actionButton" onclick="copyText('${escapeJs(familyEmails)}')">Copy family emails</button>` : ""}
-              ${p.teacherEmail ? `<button class="actionButton" onclick="copyText('${escapeJs(p.teacherEmail)}')">Copy teacher email</button>` : ""}
-              ${p.teacherEmail ? `<button class="actionButton" onclick="openEmail('${escapeJs(p.teacherEmail)}')">Email teacher</button>` : ""}
-              ${p.parentPhone ? `<button class="actionButton" onclick="copyText('${escapeJs(p.parentPhone)}')">Copy parent phone</button>` : ""}
+              ${teacherEmail ? `<button class="actionButton" onclick="copyText('${escapeJs(teacherEmail)}')">Copy teacher email</button>` : ""}
+              ${teacherEmail ? `<button class="actionButton" onclick="openEmail('${escapeJs(teacherEmail)}')">Email teacher</button>` : ""}
+              ${parentPhone ? `<button class="actionButton" onclick="copyText('${escapeJs(parentPhone)}')">Copy parent phone</button>` : ""}
             </div>
 
             <div class="sectionTitle">Participation</div>
             <div class="profileSection">
-              ${itemLinkLine(p.item)}
+              ${itemLinkLine(item)}
               ${infoLine("", "Discipline", disciplineLine)}
             </div>
 
             <div class="sectionTitle">School & Teacher</div>
             <div class="profileSection">
-              ${schoolLinkLine(p.school)}
-              ${infoLine("", "Year", p.year ? "Year " + p.year : "")}
-              ${teacherLinkLine(p.teacherName, p.teacherEmail)}
-              ${infoLine("", "Teacher Email", p.teacherEmail)}
+              ${schoolLinkLine(getParticipantSchool(p))}
+              ${infoLine("", "Year", year ? "Year " + year : "")}
+              ${teacherLinkLine(teacherName, teacherEmail)}
+              ${infoLine("", "Teacher Email", teacherEmail)}
             </div>
 
             <div class="sectionTitle">Student Details</div>
             <div class="profileSection">
-              ${infoLine("", "Student Email", p.studentEmail)}
-              ${infoLine("", "Student Mobile", p.studentMobile, sharedStudentPhone ? "Shared with parent/carer" : "")}
-              ${infoLine("", "Student ID", p.studentId)}
-              ${infoLine("", "SRN", p.srn)}
+              ${infoLine("", "Student Email", getParticipantStudentEmail(p))}
+              ${infoLine("", "Student Mobile", getParticipantStudentMobile(p), sharedStudentPhone ? "Shared with parent/carer" : "")}
+              ${infoLine("", "Student ID", getParticipantStudentId(p))}
+              ${infoLine("", "SRN", getParticipantSrn(p))}
             </div>
 
             <div class="sectionTitle">Parents / Carers</div>
             <div class="profileSection">
-              ${parentCard("Parent / Carer 1", p.parentName, "", p.parentEmail, p.parentPhone)}
-              ${parentCard("Parent / Carer 2", p.additionalParentName, p.additionalParentRelationship, p.additionalParentEmail, p.additionalParentPhone)}
+              ${parentCard("Parent / Carer 1", getParticipantParentName(p), "", getParticipantParentEmail(p), parentPhone)}
+              ${parentCard("Parent / Carer 2", getParticipantAdditionalParentName(p), getParticipantAdditionalParentRelationship(p), getParticipantAdditionalParentEmail(p), getParticipantAdditionalParentPhone(p))}
             </div>
           </div>
         </div>
@@ -1068,7 +1207,7 @@ let portalReady = false;
       const groups = groupsBySchool.get(targetLower) || [];
 
       const master = allSchools.find(s =>
-        String(s.schoolName || "").trim().toLowerCase() === target.toLowerCase()
+        String(getSchoolName(s) || "").trim().toLowerCase() === target.toLowerCase()
       ) || null;
 
       const teacherMap = new Map();
@@ -1078,22 +1217,22 @@ let portalReady = false;
       const familyEmails = new Set();
 
       participants.forEach(p => {
-        const teacherKey = String(p.teacherEmail || p.teacherName || "").trim().toLowerCase();
+        const teacherKey = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
 
         if (teacherKey && !teacherMap.has(teacherKey)) {
           teacherMap.set(teacherKey, {
-            name: p.teacherName || "",
-            email: p.teacherEmail || ""
+            name: getParticipantTeacherName(p) || "",
+            email: getParticipantTeacherEmail(p) || ""
           });
         }
 
-        if (p.teacherEmail) teacherEmails.add(p.teacherEmail);
+        if (getParticipantTeacherEmail(p)) teacherEmails.add(getParticipantTeacherEmail(p));
 
-        [p.studentEmail, p.parentEmail, p.additionalParentEmail].forEach(email => {
+        [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].forEach(email => {
           if (email) familyEmails.add(email);
         });
 
-        const discipline = p.discipline || "Unspecified";
+        const discipline = getParticipantDiscipline(p) || "Unspecified";
         if (!disciplineMap.has(discipline)) {
           disciplineMap.set(discipline, {
             name: discipline,
@@ -1105,17 +1244,18 @@ let portalReady = false;
         const disciplineRecord = disciplineMap.get(discipline);
         disciplineRecord.count++;
 
-        if (p.item) {
-          disciplineRecord.items.add(p.item);
+        const item = getParticipantItem(p);
+        if (item) {
+          disciplineRecord.items.add(item);
 
-          if (!itemMap.has(p.item)) {
-            itemMap.set(p.item, {
-              name: p.item,
-              discipline: p.discipline || "",
+          if (!itemMap.has(item)) {
+            itemMap.set(item, {
+              name: item,
+              discipline: getParticipantDiscipline(p) || "",
               count: 0
             });
           }
-          itemMap.get(p.item).count++;
+          itemMap.get(item).count++;
         }
       });
 
@@ -1152,27 +1292,27 @@ let portalReady = false;
       const familyEmails = new Set();
 
       participants.forEach(p => {
-        const schoolKey = String(p.school || "Unknown school").trim();
+        const schoolKey = String(getParticipantSchool(p) || "Unknown school").trim();
         if (!schoolMap.has(schoolKey)) {
           schoolMap.set(schoolKey, { name: schoolKey, count: 0 });
         }
         schoolMap.get(schoolKey).count++;
 
-        const teacherKey = String(p.teacherEmail || p.teacherName || "").trim().toLowerCase();
+        const teacherKey = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
         if (teacherKey && !teacherMap.has(teacherKey)) {
           teacherMap.set(teacherKey, {
-            name: p.teacherName || "",
-            email: p.teacherEmail || ""
+            name: getParticipantTeacherName(p) || "",
+            email: getParticipantTeacherEmail(p) || ""
           });
         }
 
-        if (p.teacherEmail) teacherEmails.add(p.teacherEmail);
+        if (getParticipantTeacherEmail(p)) teacherEmails.add(getParticipantTeacherEmail(p));
 
-        [p.studentEmail, p.parentEmail, p.additionalParentEmail].forEach(email => {
+        [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].forEach(email => {
           if (email) familyEmails.add(email);
         });
 
-        const discipline = p.discipline || "Unspecified";
+        const discipline = getParticipantDiscipline(p) || "Unspecified";
         disciplineMap.set(discipline, (disciplineMap.get(discipline) || 0) + 1);
       });
 
@@ -1202,17 +1342,19 @@ let portalReady = false;
 
       const firstParticipant = participants[0] || {};
       const firstGroup = groups[0] || {};
-      const teacherName = firstParticipant.teacherName || firstGroup.teacherName || teacherKey;
-      const teacherEmail = firstParticipant.teacherEmail || firstGroup.teacherEmail || "";
+      const teacherName = getParticipantTeacherName(firstParticipant) || firstGroup.teacherName || teacherKey;
+      const teacherEmail = getParticipantTeacherEmail(firstParticipant) || firstGroup.teacherEmail || "";
 
       const schoolMap = new Map();
       const itemMap = new Map();
       const familyEmails = new Set();
 
       participants.forEach(p => {
-        if (p.school) schoolMap.set(p.school, (schoolMap.get(p.school) || 0) + 1);
-        if (p.item) itemMap.set(p.item, (itemMap.get(p.item) || 0) + 1);
-        [p.studentEmail, p.parentEmail, p.additionalParentEmail].forEach(email => {
+        const school = getParticipantSchool(p);
+        const item = getParticipantItem(p);
+        if (school) schoolMap.set(school, (schoolMap.get(school) || 0) + 1);
+        if (item) itemMap.set(item, (itemMap.get(item) || 0) + 1);
+        [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].forEach(email => {
           if (email) familyEmails.add(email);
         });
       });
@@ -1307,7 +1449,7 @@ let portalReady = false;
         <div class="profileCard">
           <div class="profileHero">
             <div class="kicker">School Passport</div>
-            <h2>${escapeHtml(school.schoolName)}</h2>
+            <h2>${escapeHtml(getSchoolName(school))}</h2>
             <div class="schoolStats">
               ${schoolStat(school.participantCount, "Participants")}
               ${schoolStat(school.teacherCount, "Teachers")}
@@ -1415,11 +1557,11 @@ let portalReady = false;
       const group = result.group || {};
       const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
       const students = group.item ? (participantsByItem.get(String(group.item || "").toLowerCase()) || []) : [];
-      const matchingStudents = students.filter(p => String(p.school || "").trim().toLowerCase() === String(group.school || "").trim().toLowerCase());
+      const matchingStudents = students.filter(p => String(getParticipantSchool(p) || "").trim().toLowerCase() === String(group.school || "").trim().toLowerCase());
       const teacherKey = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
       const teacherStudents = teacherKey
         ? matchingStudents.filter(p => {
-            const pTeacher = String(p.teacherEmail || p.teacherName || "").trim().toLowerCase();
+            const pTeacher = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
             return pTeacher === teacherKey;
           })
         : matchingStudents;
@@ -1576,11 +1718,14 @@ let portalReady = false;
     }
 
     function renderTeacherParticipantCard(p, index) {
-      const line = [p.school, p.year ? "Year " + p.year : "", p.item].filter(Boolean).join(" · ");
+      const photo = photoCache[getPhotoKey(p)] || {};
+      const photoUrl = photo.url || "";
+      const year = getParticipantYear(p);
+      const line = [getParticipantSchool(p), year ? "Year " + year : "", getParticipantItem(p)].filter(Boolean).join(" · ");
       return `
         <div class="itemParticipantCard" onclick="openTeacherParticipant(${index})">
           <div class="schoolParticipantTop">
-            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="avatar">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
             <div class="schoolParticipantText">
               <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
               <div class="meta">${escapeHtml(line)}</div>
@@ -1608,11 +1753,14 @@ let portalReady = false;
     }
 
     function renderItemParticipantCard(p, index) {
-      const line = [p.school, p.year ? "Year " + p.year : "", p.discipline].filter(Boolean).join(" · ");
+      const photo = photoCache[getPhotoKey(p)] || {};
+      const photoUrl = photo.url || "";
+      const year = getParticipantYear(p);
+      const line = [getParticipantSchool(p), year ? "Year " + year : "", getParticipantDiscipline(p)].filter(Boolean).join(" · ");
       return `
         <div class="itemParticipantCard" onclick="openItemParticipant(${index})">
           <div class="schoolParticipantTop">
-            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="avatar">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
             <div class="schoolParticipantText">
               <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
               <div class="meta">${escapeHtml(line)}</div>
@@ -1631,11 +1779,14 @@ let portalReady = false;
     }
 
     function renderSchoolParticipantCard(p, index) {
-      const line = [p.year ? "Year " + p.year : "", p.discipline, p.item].filter(Boolean).join(" · ");
+      const photo = photoCache[getPhotoKey(p)] || {};
+      const photoUrl = photo.url || "";
+      const year = getParticipantYear(p);
+      const line = [year ? "Year " + year : "", getParticipantDiscipline(p), getParticipantItem(p)].filter(Boolean).join(" · ");
       return `
         <div class="schoolParticipantCard" onclick="openSchoolParticipant(${index})">
           <div class="schoolParticipantTop">
-            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="avatar">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
             <div class="schoolParticipantText">
               <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
               <div class="meta">${escapeHtml(line)}</div>
@@ -1646,18 +1797,21 @@ let portalReady = false;
     }
 
     function renderGroupParticipantCard(p, index) {
+      const photo = photoCache[getPhotoKey(p)] || {};
+      const photoUrl = photo.url || "";
+      const year = getParticipantYear(p);
       const line = [
-        p.year ? `Year ${p.year}` : "",
-        p.discipline,
-        p.item
+        year ? `Year ${year}` : "",
+        getParticipantDiscipline(p),
+        getParticipantItem(p)
       ].filter(Boolean).join(" · ");
 
       return `
         <div class="schoolParticipantCard" onclick="openGroupParticipant(${index})">
           <div class="schoolParticipantTop">
             <div class="avatar">
-              ${p.photoUrl
-                ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+              ${photoUrl
+                ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
                 : escapeHtml(getInitials(p))}
             </div>
             <div class="schoolParticipantText">
@@ -1746,11 +1900,11 @@ let portalReady = false;
     }
 
     function fullName(p) {
-      return [p.firstName, p.lastName].filter(Boolean).join(" ");
+      return getParticipantName(p);
     }
 
     function getInitials(p) {
-      return `${(p.firstName || "").charAt(0)}${(p.lastName || "").charAt(0)}`.toUpperCase() || "SP";
+      return `${(getParticipantFirstName(p) || "").charAt(0)}${(getParticipantLastName(p) || "").charAt(0)}`.toUpperCase() || "SP";
     }
 
     function escapeHtml(value) {
