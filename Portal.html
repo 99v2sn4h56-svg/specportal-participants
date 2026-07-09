@@ -790,11 +790,24 @@ let portalReady = false;
         additionalParentEmail: String(p.additionalParentEmail || "").toLowerCase()
       }));
     }
+
+
     function loadPortalData() {
       statusEl.textContent = "Loading participant data...";
+      console.log("Spec Portal: requesting portal data...");
+
+      const loadingTimeout = setTimeout(() => {
+        if (!portalReady) {
+          statusEl.textContent = "Still loading participant data... this is taking longer than usual.";
+          console.warn("Spec Portal: portalGetPortalData has not returned yet.");
+        }
+      }, 12000);
 
       google.script.run
         .withSuccessHandler(data => {
+          clearTimeout(loadingTimeout);
+          console.log("Spec Portal: portal data received", data);
+
           data = data || {};
           photoCache = data.photos || {};
           allParticipants = data.participants || [];
@@ -814,33 +827,116 @@ let portalReady = false;
           buildPortalIndexes();
           portalReady = true;
           statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"}, ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} and ${allSchools.length} school${allSchools.length === 1 ? "" : "s"} loaded`;
+
+          if (searchInput.value.trim()) {
+            runSearch();
+          }
         })
         .withFailureHandler(error => {
+          clearTimeout(loadingTimeout);
           portalReady = false;
-          statusEl.textContent = "Error loading participant data: " + error.message;
+          console.error("Spec Portal: error loading participant data", error);
+          const message = error && error.message ? error.message : String(error || "Unknown error");
+          statusEl.textContent = "Error loading participant data: " + message;
         })
         .portalGetPortalData();
     }
 
-    function loadGroupData() {
-      statusEl.textContent = "Loading group data...";
 
-      google.script.run
-        .withSuccessHandler(data => {
-          allGroups = data || [];
-          portalReady = true;
-          statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} and ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} loaded`;
-        })
-        .withFailureHandler(error => {
-          allGroups = [];
-          portalReady = true;
-          statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded · group data unavailable`;
-        })
-        .portalGetAllGroups();
+    // --- Begin Search Page Module Implementation (inlined from Portal/Pages/Search.js) ---
+
+    function runSearch() {
+      const query = String(searchInput.value || "").trim();
+      if (!portalReady) {
+        resultsEl.innerHTML = "";
+        statusEl.textContent = "Loading participant data...";
+        return;
+      }
+      if (!query) {
+        resultsEl.innerHTML = "";
+        statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`;
+        latestResults = [];
+        selectedResultIndex = -1;
+        return;
+      }
+
+      // Basic search: match query against name, school, item, discipline, teacher, emails, etc.
+      const q = query.toLowerCase();
+      const results = [];
+      for (const entry of searchIndex) {
+        // Match against relevant fields
+        if (
+          entry.fullName.includes(q) ||
+          entry.firstName.includes(q) ||
+          entry.lastName.includes(q) ||
+          entry.school.includes(q) ||
+          entry.item.includes(q) ||
+          entry.discipline.includes(q) ||
+          entry.subDiscipline.includes(q) ||
+          entry.teacherName.includes(q) ||
+          entry.teacherEmail.includes(q) ||
+          entry.studentEmail.includes(q) ||
+          entry.parentName.includes(q) ||
+          entry.parentEmail.includes(q) ||
+          entry.additionalParentName.includes(q) ||
+          entry.additionalParentEmail.includes(q)
+        ) {
+          results.push(entry.participant);
+        }
+      }
+
+      // Limit to first 50 results for performance
+      latestResults = results.slice(0, 50);
+      selectedResultIndex = -1;
+      renderSearchResults();
+      if (latestResults.length === 0) {
+        statusEl.textContent = `No participants found for "${escapeHtml(query)}"`;
+      } else {
+        statusEl.textContent = `${latestResults.length} participant${latestResults.length === 1 ? "" : "s"} found`;
+      }
     }
 
-<?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Search').getContent(); ?>
-    <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Search').getContent(); ?>
+    function renderSearchResults() {
+      if (!latestResults.length) {
+        resultsEl.innerHTML = "";
+        return;
+      }
+      resultsEl.innerHTML = latestResults
+        .map((p, idx) => renderResultCard(p, idx))
+        .join("");
+      updateSelectedResult();
+    }
+
+    function renderResultCard(p, idx) {
+      const name = fullName(p) || "Unnamed participant";
+      const meta = [p.school, p.year ? "Year " + p.year : "", p.item, p.discipline].filter(Boolean).join(" · ");
+      return `
+        <div class="result${selectedResultIndex === idx ? " selected" : ""}" tabindex="-1" onclick="openProfile(${idx})" data-result-index="${idx}">
+          <div class="resultTop">
+            <div class="avatar">${p.photoUrl ? `<img src="${escapeHtml(p.photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div>
+              <div class="name">${escapeHtml(name)}</div>
+              <div class="meta">${escapeHtml(meta)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateSelectedResult() {
+      // Remove previous highlight
+      const cards = resultsEl.querySelectorAll(".result");
+      cards.forEach((el, i) => {
+        if (i === selectedResultIndex) {
+          el.classList.add("selected");
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } else {
+          el.classList.remove("selected");
+        }
+      });
+    }
+
+    // --- End Search Page Module Implementation ---
 
 
     function disciplineColour(name) {
