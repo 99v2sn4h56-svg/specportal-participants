@@ -965,15 +965,48 @@ let portalReady = false;
       // Basic search: match query against name, school, item, discipline, teacher, emails, etc.
       const q = query.toLowerCase();
       const schoolResults = allSchools
-        .filter(school => String(getSchoolName(school) || "").toLowerCase().includes(q))
-        .slice(0, 8)
-        .map(school => ({
-          resultType: "school",
-          schoolName: getSchoolName(school),
-          participantCount: (participantsBySchool.get(String(getSchoolName(school) || "").toLowerCase()) || []).length
-        }));
+        .map(school => {
+          const schoolName = getSchoolName(school);
+          const schoolKey = String(schoolName || "").toLowerCase();
 
-      const results = [];
+          return {
+            resultType: "school",
+            schoolName,
+            participantCount: (participantsBySchool.get(schoolKey) || []).length,
+            searchScore: getTextSearchScore(schoolKey, q)
+          };
+        })
+        .filter(school => school.schoolName && school.searchScore > 0)
+        .sort((a, b) => b.searchScore - a.searchScore || a.schoolName.localeCompare(b.schoolName))
+        .slice(0, 8);
+
+      const groupResults = allGroups
+        .map(group => {
+          const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
+          const searchText = [
+            group.item,
+            group.groupName,
+            group.category,
+            group.school,
+            group.teacherName,
+            group.teacherEmail
+          ].filter(Boolean).join(" ").toLowerCase();
+
+          return {
+            resultType: "group",
+            title,
+            school: group.school || "",
+            teacherName: group.teacherName || "",
+            count: group.count || "",
+            group,
+            searchScore: getTextSearchScore(searchText, q)
+          };
+        })
+        .filter(group => group.searchScore > 0)
+        .sort((a, b) => b.searchScore - a.searchScore || a.title.localeCompare(b.title))
+        .slice(0, 8);
+
+      const participantResults = [];
       for (const entry of searchIndex) {
         // Match against relevant fields
         if (
@@ -992,19 +1025,55 @@ let portalReady = false;
           entry.additionalParentName.includes(q) ||
           entry.additionalParentEmail.includes(q)
         ) {
-          results.push(entry.participant);
+          participantResults.push({
+            ...entry.participant,
+            resultType: "participant",
+            searchScore: Math.max(
+              getTextSearchScore(entry.fullName, q) * 8,
+              getTextSearchScore(entry.lastName, q) * 6,
+              getTextSearchScore(entry.firstName, q) * 6,
+              getTextSearchScore(entry.school, q) * 5,
+              getTextSearchScore(entry.item, q) * 4,
+              getTextSearchScore(entry.discipline, q) * 3,
+              getTextSearchScore(entry.subDiscipline, q) * 3,
+              getTextSearchScore(entry.teacherName, q) * 2,
+              getTextSearchScore(entry.teacherEmail, q) * 2,
+              getTextSearchScore(entry.studentEmail, q),
+              getTextSearchScore(entry.parentName, q),
+              getTextSearchScore(entry.parentEmail, q),
+              getTextSearchScore(entry.additionalParentName, q),
+              getTextSearchScore(entry.additionalParentEmail, q)
+            )
+          });
         }
       }
 
       // Limit to first 50 results for performance
-      latestResults = [...schoolResults, ...results].slice(0, 50);
+      latestResults = [
+        ...schoolResults,
+        ...groupResults,
+        ...participantResults
+          .filter(p => fullName(p))
+          .sort((a, b) => b.searchScore - a.searchScore || fullName(a).localeCompare(fullName(b)))
+      ].slice(0, 50);
       selectedResultIndex = -1;
       renderSearchResults();
       if (latestResults.length === 0) {
-        statusEl.textContent = `No participants found for "${escapeHtml(query)}"`;
+        resultsEl.innerHTML = `<div class="empty">No matches found.</div>`;
+        statusEl.textContent = "No matches found.";
       } else {
-        statusEl.textContent = `${latestResults.length} participant${latestResults.length === 1 ? "" : "s"} found`;
+        statusEl.textContent = `${latestResults.length} result${latestResults.length === 1 ? "" : "s"}`;
       }
+    }
+
+    function getTextSearchScore(value, q) {
+      const text = String(value || "").toLowerCase().trim();
+      if (!text || !q) return 0;
+      if (text === q) return 100;
+      if (text.startsWith(q)) return 75;
+      if (text.split(/\s+/).some(part => part.startsWith(q))) return 55;
+      if (text.includes(q)) return 30;
+      return 0;
     }
 
     function renderSearchResults() {
@@ -1025,12 +1094,29 @@ let portalReady = false;
         return `
           <div class="result${selectedResultIndex === idx ? " selected" : ""}" tabindex="-1" onclick="openProfile(${idx})" data-result-index="${idx}">
             <div class="resultTop">
-              <div class="avatar">SC</div>
+              <div class="avatar">🏫</div>
               <div>
                 <div class="name">${escapeHtml(schoolName)}</div>
                 <div class="meta">${escapeHtml(count)} participant${Number(count) === 1 ? "" : "s"}</div>
               </div>
             </div>
+            <div class="pillRow"><span class="pill">School</span></div>
+          </div>
+        `;
+      }
+
+      if (p.resultType === "group") {
+        const meta = [p.school, p.teacherName, p.count ? p.count + " student" + (Number(p.count) === 1 ? "" : "s") : ""].filter(Boolean).join(" · ");
+        return `
+          <div class="result${selectedResultIndex === idx ? " selected" : ""}" tabindex="-1" onclick="openProfile(${idx})" data-result-index="${idx}">
+            <div class="resultTop">
+              <div class="avatar">🎭</div>
+              <div>
+                <div class="name">${escapeHtml(p.title || "Unnamed group")}</div>
+                <div class="meta">${escapeHtml(meta)}</div>
+              </div>
+            </div>
+            <div class="pillRow"><span class="pill">Group</span></div>
           </div>
         `;
       }
@@ -1086,6 +1172,11 @@ let portalReady = false;
 
       if (p.resultType === "school") {
         openSchoolProfile(getSchoolName(p));
+        return;
+      }
+
+      if (p.resultType === "group") {
+        openGroupProfile(index);
         return;
       }
 
