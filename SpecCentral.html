@@ -1,0 +1,2060 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --blue: #2d67b2;
+      --yellow: #fbcc39;
+      --red: #ef4343;
+      --purple: #bb529e;
+      --sky: #44c2f0;
+      --orange: #f79420;
+      --magenta: #ef509c;
+      --mint: #9dd085;
+      --navy: #061d3d;
+      --bg: #f5f8fd;
+      --card: #ffffff;
+      --text: #172033;
+      --muted: #667085;
+      --border: #e4eaf3;
+      --shadow: 0 16px 42px rgba(6, 29, 61, .10);
+      --softShadow: 0 8px 24px rgba(6, 29, 61, .07);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Poppins, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(239,80,156,.14), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(68,194,240,.18), transparent 40%),
+        var(--bg);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .suiteHeader {
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      color: #fff;
+      padding: 16px 22px;
+      box-shadow: 0 10px 28px rgba(45, 103, 178, .22);
+    }
+
+    .suiteHeaderInner {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .suiteLogo {
+      width: 62px;
+      height: 62px;
+      flex: 0 0 62px;
+      object-fit: contain;
+      border-radius: 18px;
+      background: rgba(255,255,255,.15);
+      padding: 6px;
+    }
+
+    .kicker {
+      color: var(--yellow);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .suiteBrand h1 {
+      margin: 1px 0 0;
+      font-size: 25px;
+      line-height: 1;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: rgba(255,255,255,.9);
+      font-size: 13px;
+    }
+
+    .appShell {
+      min-height: calc(100vh - 94px);
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+    }
+
+    .appSidebar {
+      position: sticky;
+      top: 0;
+      height: calc(100vh - 94px);
+      padding: 18px;
+      background: linear-gradient(180deg, var(--navy), #163f75);
+      color: #fff;
+      overflow-y: auto;
+    }
+
+    .sidebarSection {
+      margin-bottom: 18px;
+    }
+
+    .navItem {
+      position: relative;
+      width: 100%;
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 13px;
+      margin-bottom: 8px;
+      text-align: left;
+      color: rgba(255,255,255,.86);
+      background: transparent;
+      font-weight: 700;
+    }
+
+    .navItem.active,
+    .navItem:hover {
+      color: #fff;
+      background: rgba(255,255,255,.17);
+      box-shadow: inset 4px 0 0 var(--yellow);
+    }
+
+    .navItem[hidden] {
+      display: none;
+    }
+
+    .staffCard {
+      padding: 13px;
+      border-radius: 16px;
+      background: rgba(255,255,255,.10);
+      color: rgba(255,255,255,.88);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .appMain {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .topBar {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 24px;
+      background: rgba(245, 248, 253, .88);
+      border-bottom: 1px solid rgba(228, 234, 243, .9);
+      backdrop-filter: blur(12px);
+    }
+
+    .pageTitle {
+      margin: 0;
+      color: var(--navy);
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: -.03em;
+    }
+
+    .pageDescription {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .globalSearch {
+      width: min(420px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 12px 16px;
+      background: #fff;
+      outline: none;
+      box-shadow: var(--softShadow);
+    }
+
+    .globalSearch:focus {
+      border-color: var(--sky);
+      box-shadow: 0 0 0 4px rgba(68,194,240,.18);
+    }
+
+    .notifications {
+      margin: 18px 24px 0;
+      display: none;
+      border: 1px solid #f8dfbd;
+      border-radius: 16px;
+      padding: 12px 14px;
+      color: #6d3b00;
+      background: #fff7e8;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .notifications.show {
+      display: block;
+    }
+
+    .statusRibbon {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px 24px 0;
+    }
+
+    .statusPill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+      padding: 9px 11px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255,255,255,.86);
+      box-shadow: var(--softShadow);
+      font-size: 12px;
+    }
+
+    .statusPill strong {
+      color: var(--navy);
+    }
+
+    .statusPill span {
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pageOutlet {
+      min-width: 0;
+      padding: 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel,
+    .moduleCard,
+    .resultCard,
+    .profilePanel {
+      background: rgba(255,255,255,.94);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--softShadow);
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .span4 { grid-column: span 4; }
+    .span5 { grid-column: span 5; }
+    .span6 { grid-column: span 6; }
+    .span7 { grid-column: span 7; }
+    .span8 { grid-column: span 8; }
+    .span12 { grid-column: 1 / -1; }
+
+    .sectionTitle {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: .09em;
+      font-weight: 900;
+    }
+
+    .heroPanel {
+      padding: 18px;
+      border-radius: 18px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--blue), var(--purple), var(--magenta));
+    }
+
+    .heroPanel h2 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      line-height: 1.1;
+    }
+
+    .dashboardHeroGrid {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .heroMeta {
+      color: rgba(255,255,255,.9);
+      font-weight: 700;
+    }
+
+    .operationalHeroGrid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .heroMetricGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .heroMetric {
+      border: 1px solid rgba(255,255,255,.24);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255,255,255,.13);
+    }
+
+    .heroMetric strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .heroMetric span {
+      display: block;
+      margin-top: 6px;
+      color: rgba(255,255,255,.86);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .staffSummary {
+      min-width: 220px;
+      border: 1px solid rgba(255,255,255,.24);
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(255,255,255,.14);
+      overflow-wrap: anywhere;
+    }
+
+    .staffSummary strong,
+    .staffSummary span {
+      display: block;
+    }
+
+    .announcementGrid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .announcementCard {
+      padding: 13px;
+      border-radius: 16px;
+      background: #f7faff;
+      border-left: 5px solid var(--blue);
+    }
+
+    .announcementCard.yellow { border-left-color: var(--yellow); background: #fff9df; }
+    .announcementCard.mint { border-left-color: var(--mint); background: #f0faee; }
+
+    .announcementCard strong {
+      display: block;
+      color: var(--navy);
+      margin-bottom: 4px;
+    }
+
+    .dateList,
+    .activityList,
+    .quickLinks {
+      display: grid;
+      gap: 10px;
+    }
+
+    .dateItem,
+    .activityItem,
+    .quickLink {
+      padding: 11px;
+      border-radius: 14px;
+      background: #f7faff;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .dateItem {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      border: 1px solid transparent;
+    }
+
+    .dateItem:hover {
+      border-color: var(--blue);
+    }
+
+    .dateBadge {
+      min-width: 50px;
+      border-radius: 12px;
+      padding: 7px 8px;
+      text-align: center;
+      color: var(--navy);
+      background: var(--yellow);
+      font-weight: 900;
+      font-size: 12px;
+    }
+
+    .moduleGrid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .filterRow,
+    .calendarToolbar,
+    .toolbarActions,
+    .viewTabs {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .calendarToolbar {
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .quickLink.compact {
+      border: 0;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .filterSelect {
+      min-height: 46px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .calendarHeading {
+      margin: 16px 0 12px;
+      color: var(--navy);
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    .calendarMonth {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .calendarDay {
+      min-height: 118px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 10px;
+      background: rgba(255,255,255,.9);
+      overflow: hidden;
+    }
+
+    .calendarDay.muted {
+      opacity: .5;
+    }
+
+    .calendarDayNumber {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      margin-bottom: 7px;
+    }
+
+    .calendarEvent {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 6px 7px;
+      margin-top: 5px;
+      text-align: left;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.25;
+      cursor: pointer;
+    }
+
+    .moduleWorkspace {
+      margin-top: 14px;
+      min-width: 0;
+      overflow-x: auto;
+    }
+
+    .boardGrid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(220px, 1fr));
+      gap: 12px;
+      min-width: 900px;
+    }
+
+    .boardColumn,
+    .timelineLane {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 12px;
+      background: #f7faff;
+    }
+
+    .taskCard {
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: var(--softShadow);
+    }
+
+    .dataTable {
+      width: 100%;
+      min-width: 920px;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .dataTable th,
+    .dataTable td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+      font-size: 12px;
+    }
+
+    .ganttGrid {
+      display: grid;
+      gap: 10px;
+      min-width: 860px;
+    }
+
+    .ganttRow {
+      display: grid;
+      grid-template-columns: 220px minmax(360px, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .ganttTrack {
+      min-height: 34px;
+      border-radius: 999px;
+      background: #eef4ff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ganttBar {
+      position: absolute;
+      top: 5px;
+      bottom: 5px;
+      left: 12%;
+      width: 45%;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+    }
+
+    .moduleCard {
+      min-height: 116px;
+      padding: 15px;
+      text-align: left;
+      transition: .16s ease;
+    }
+
+    .moduleCard:hover,
+    .resultCard:hover {
+      transform: translateY(-2px);
+      border-color: var(--blue);
+      box-shadow: var(--shadow);
+    }
+
+    .moduleIcon {
+      font-size: 24px;
+      margin-bottom: 12px;
+    }
+
+    .moduleTitle {
+      color: var(--navy);
+      font-weight: 900;
+    }
+
+    .moduleMeta {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .participantLayout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .participantSearch {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 13px 14px;
+      margin-bottom: 12px;
+      background: #fff;
+      outline: none;
+    }
+
+    .participantSearch:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 4px rgba(45,103,178,.13);
+    }
+
+    .status {
+      min-height: 20px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .results {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .resultCard {
+      padding: 13px;
+      text-align: left;
+      transition: .16s ease;
+    }
+
+    .resultTop {
+      display: flex;
+      gap: 11px;
+      align-items: center;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      color: #fff;
+      background: var(--blue);
+      font-weight: 900;
+    }
+
+    .avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .resultTitle {
+      color: var(--blue);
+      font-weight: 900;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .resultMeta {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .pillRow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: var(--blue);
+      background: #eef4ff;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .profilePanel {
+      min-height: 320px;
+      padding: 16px;
+      position: sticky;
+      top: 96px;
+    }
+
+    .profileTitle {
+      margin: 0;
+      color: var(--navy);
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .profileLine {
+      padding: 9px 0;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .profileLine:first-of-type {
+      border-top: 0;
+      margin-top: 14px;
+    }
+
+    .empty {
+      padding: 16px;
+      border: 1px dashed var(--border);
+      border-radius: 16px;
+      color: var(--muted);
+      background: #fff;
+      text-align: center;
+    }
+
+    @media (max-width: 1060px) {
+      .appShell {
+        grid-template-columns: 1fr;
+      }
+
+      .appSidebar {
+        position: static;
+        height: auto;
+      }
+
+      .sidebarNav {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 2px;
+      }
+
+      .navItem {
+        width: auto;
+        white-space: nowrap;
+      }
+
+      .topBar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .span4,
+      .span5,
+      .span6,
+      .span7,
+      .span8 {
+        grid-column: 1 / -1;
+      }
+
+      .moduleGrid,
+      .statusRibbon,
+      .results {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .operationalHeroGrid {
+        grid-template-columns: 1fr;
+      }
+
+      .dashboardHeroGrid {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .participantLayout {
+        grid-template-columns: 1fr;
+      }
+
+      .profilePanel {
+        position: static;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .suiteHeader {
+        padding: 14px;
+      }
+
+      .suiteLogo {
+        width: 54px;
+        height: 54px;
+        flex-basis: 54px;
+      }
+
+      .topBar,
+      .pageOutlet {
+        padding: 16px;
+      }
+
+      .moduleGrid,
+      .statusRibbon,
+      .calendarMonth,
+      .results {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Header').getContent(); ?>
+
+  <div class="appShell">
+    <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Sidebar').getContent(); ?>
+    <main class="appMain">
+      <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/TopBar').getContent(); ?>
+      <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/StatusRibbon').getContent(); ?>
+      <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Notifications').getContent(); ?>
+      <div id="appContent" class="pageOutlet"></div>
+    </main>
+  </div>
+
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Dashboard').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Participants').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Calendar').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Attendance').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Rehearsals').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/ProjectManagement').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/MediaTimeline').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Staff').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Settings').getContent(); ?>
+
+  <script>
+    window.App = {
+      state: {
+        currentPage: "dashboard",
+        participants: [],
+        groups: [],
+        schools: [],
+        photos: {},
+        staff: {},
+        staffTeam: [],
+        announcements: [],
+        notifications: [],
+        rehearsals: [],
+        todaysRehearsals: [],
+        calendarData: null,
+        calendarDate: new Date(),
+        calendarView: "month",
+        selectedCalendarEvent: null,
+        projectData: null,
+        projectView: "board",
+        mediaData: null,
+        mediaView: "gantt",
+        attendanceEvents: [],
+        attendanceUrl: "",
+        timelineStatus: "",
+        timelineLastRefreshed: "",
+        staffStatus: "",
+        latestResults: [],
+        participantSearchTimer: null,
+        ready: false
+      },
+
+      pages: {
+        dashboard: {
+          title: "Dashboard",
+          description: "Your Schools Spectacular operations hub.",
+          template: "page-dashboard"
+        },
+        participants: {
+          title: "Participants",
+          description: "Search participants, schools, items, groups and teachers.",
+          template: "page-participants"
+        },
+        calendar: {
+          title: "Calendar",
+          description: "Timeline events in month and agenda views.",
+          template: "page-calendar",
+          permission: "calendar.view"
+        },
+        attendance: {
+          title: "Attendance",
+          description: "Open attendance rolls and check-in workflows.",
+          template: "page-attendance"
+        },
+        rehearsals: {
+          title: "Rehearsals",
+          description: "Schedules, venues and upcoming rehearsal dates.",
+          template: "page-rehearsals"
+        },
+        staff: {
+          title: "Staff",
+          description: "Staff context, roles and future permission sync.",
+          template: "page-staff"
+        },
+        projectManagement: {
+          title: "Project Management",
+          description: "Production tasks, workstreams, milestones and at-risk actions.",
+          template: "page-project-management",
+          permission: "projectManagement.view"
+        },
+        mediaTimeline: {
+          title: "Media Timeline",
+          description: "Campaign planning, media milestones and publishing activity.",
+          template: "page-media-timeline",
+          permission: "mediaTimeline.view"
+        },
+        settings: {
+          title: "Settings",
+          description: "Staff permissions, app configuration and module setup.",
+          template: "page-settings"
+        }
+      },
+
+      init: function () {
+        App.bindGlobalSearch();
+        App.loadConfig();
+        App.loadPortalData();
+        App.navigate("dashboard");
+      },
+
+      navigate: function (page) {
+        var config = App.pages[page] || App.pages.dashboard;
+        var template = document.getElementById(config.template);
+        var outlet = document.getElementById("appContent");
+
+        if (config.permission && !App.hasPermission(config.permission)) {
+          App.notify("You do not have permission to open " + config.title + ".");
+          page = "dashboard";
+          config = App.pages.dashboard;
+          template = document.getElementById(config.template);
+        }
+
+        App.state.currentPage = page;
+        document.getElementById("topBarTitle").textContent = config.title;
+        document.getElementById("topBarDescription").textContent = config.description;
+
+        Array.prototype.forEach.call(document.querySelectorAll("[data-nav-page]"), function (button) {
+          button.classList.toggle("active", button.getAttribute("data-nav-page") === page);
+        });
+
+        outlet.innerHTML = template ? template.innerHTML : '<div class="empty">Page not found.</div>';
+
+        if (page === "dashboard") App.renderDashboardPage();
+        if (page === "participants") App.renderParticipantStatus();
+        if (page === "calendar") App.renderCalendarPage();
+        if (page === "attendance") App.renderAttendancePage();
+        if (page === "rehearsals") App.renderRehearsalsPage();
+        if (page === "projectManagement") App.renderProjectManagementPage();
+        if (page === "mediaTimeline") App.renderMediaTimelinePage();
+        if (page === "staff") App.renderStaffPage();
+      },
+
+      bindGlobalSearch: function () {
+        var search = document.getElementById("globalSearch");
+        if (!search) return;
+
+        search.addEventListener("input", function () {
+          App.navigate("participants");
+          var participantSearch = document.getElementById("participantSearch");
+          if (participantSearch) {
+            participantSearch.value = search.value;
+            App.queueParticipantSearch();
+          }
+        });
+      },
+
+      loadConfig: function () {
+        google.script.run
+          .withSuccessHandler(function (config) {
+            config = config || {};
+            App.state.staff = config.staff || {};
+            App.state.staffTeam = config.staffTeam || [];
+            App.state.attendanceUrl = config.attendanceUrl || "";
+            App.state.announcements = config.announcements || [];
+            App.state.notifications = config.notifications || [];
+            App.state.rehearsals = config.rehearsals || [];
+            App.state.todaysRehearsals = config.todaysRehearsals || [];
+            App.state.attendanceEvents = config.attendanceEvents || [];
+            App.state.currentDate = config.currentDate || "";
+            App.state.timelineStatus = config.timelineStatus || "";
+            App.state.timelineLastRefreshed = config.timelineLastRefreshed || "";
+            App.state.staffStatus = config.staffStatus || "";
+            App.renderNavigation();
+            App.renderStaffContext();
+            App.renderStatusRibbon();
+            App.renderNotifications();
+            if (App.state.currentPage === "attendance") App.renderAttendancePage();
+            if (App.state.currentPage === "dashboard") App.renderDashboardPage();
+            if (App.state.currentPage === "calendar") App.renderCalendarPage();
+            if (App.state.currentPage === "rehearsals") App.renderRehearsalsPage();
+            if (App.state.currentPage === "projectManagement") App.renderProjectManagementPage();
+            if (App.state.currentPage === "mediaTimeline") App.renderMediaTimelinePage();
+            if (App.state.currentPage === "staff") App.renderStaffPage();
+          })
+          .withFailureHandler(function (error) {
+            App.notify("Staff context could not be loaded: " + App.getErrorMessage(error));
+          })
+          .portalGetSpecCentralConfig();
+      },
+
+      loadPortalData: function () {
+        google.script.run
+          .withSuccessHandler(function (data) {
+            data = data || {};
+            App.state.participants = data.participants || [];
+            App.state.groups = data.groups || [];
+            App.state.schools = data.schools || [];
+            App.state.photos = data.photos || {};
+            App.state.ready = true;
+            App.renderStaffContext();
+            App.renderStatusRibbon();
+            App.renderDashboardPage();
+            App.renderParticipantStatus();
+          })
+          .withFailureHandler(function (error) {
+            App.state.ready = false;
+            App.notify("Portal data could not be loaded: " + App.getErrorMessage(error));
+            App.renderStatusRibbon();
+            App.renderParticipantStatus();
+          })
+          .portalGetPortalData();
+      },
+
+      renderStaffContext: function () {
+        var el = document.getElementById("staffEmail");
+        if (!el) return;
+        el.textContent = App.state.staff.email || "Unknown user";
+      },
+
+      hasPermission: function (permission) {
+        var permissions = App.state.staff.permissions || [];
+        return permissions.indexOf(permission) >= 0;
+      },
+
+      renderNavigation: function () {
+        Array.prototype.forEach.call(document.querySelectorAll("[data-permission]"), function (button) {
+          var permission = button.getAttribute("data-permission");
+          button.hidden = permission ? !App.hasPermission(permission) : false;
+        });
+      },
+
+      renderStatusRibbon: function () {
+        var participants = document.getElementById("statusParticipants");
+        var timeline = document.getElementById("statusTimeline");
+        var attendance = document.getElementById("statusAttendance");
+        var staff = document.getElementById("statusStaff");
+
+        if (participants) {
+          participants.textContent = App.state.ready
+            ? "Connected · " + App.state.participants.length + " loaded"
+            : "Loading";
+        }
+
+        if (timeline) {
+          timeline.textContent = (App.state.timelineStatus || "Waiting") +
+            (App.state.timelineLastRefreshed ? " · " + App.state.timelineLastRefreshed : "");
+        }
+
+        if (attendance) {
+          attendance.textContent = App.state.attendanceUrl ? "Ready" : "URL not configured";
+        }
+
+        if (staff) {
+          staff.textContent = App.state.staffStatus || App.state.staff.source || "Loading";
+        }
+      },
+
+      renderDashboardPage: function () {
+        var greeting = document.getElementById("dashboardGreeting");
+        var date = document.getElementById("dashboardDate");
+        var staffName = document.getElementById("dashboardStaffName");
+        var staffRole = document.getElementById("dashboardStaffRole");
+        var staffDepartment = document.getElementById("dashboardStaffDepartment");
+        var nextRehearsal = document.getElementById("dashboardNextRehearsal");
+        var todayRehearsals = document.getElementById("heroTodayRehearsals");
+        var upcomingRehearsals = document.getElementById("heroUpcomingRehearsals");
+        var outstandingActions = document.getElementById("heroOutstandingActions");
+        var attendanceAlerts = document.getElementById("heroAttendanceAlerts");
+
+        if (greeting) greeting.textContent = App.getGreeting() + ", " + (App.state.staff.displayName || App.state.staff.name || "Spec Central user");
+        if (date) date.textContent = App.state.currentDate || App.formatShortDate(new Date());
+        if (staffName) staffName.textContent = App.state.staff.displayName || App.state.staff.name || App.state.staff.email || "Spec Central user";
+        if (staffRole) staffRole.textContent = App.state.staff.role || "Staff";
+        if (staffDepartment) staffDepartment.textContent = App.state.staff.department || "Department not connected";
+        if (nextRehearsal) {
+          var next = (App.state.rehearsals || [])[0] || {};
+          nextRehearsal.textContent = next.event || next.title || "No upcoming rehearsal loaded";
+        }
+        if (todayRehearsals) todayRehearsals.textContent = (App.state.todaysRehearsals || []).length;
+        if (upcomingRehearsals) upcomingRehearsals.textContent = (App.state.rehearsals || []).length;
+        if (outstandingActions) outstandingActions.textContent = App.getOutstandingActionCount();
+        if (attendanceAlerts) attendanceAlerts.textContent = App.state.attendanceEvents.length || 0;
+
+        var stats = document.getElementById("dashboardStatsFull");
+        if (stats) {
+          var teachers = {};
+          var items = {};
+
+          App.state.participants.forEach(function (participant) {
+            var teacher = String(participant.teacherEmail || participant.teacherName || "").trim().toLowerCase();
+            var item = String(participant.item || "").trim().toLowerCase();
+            if (teacher) teachers[teacher] = true;
+            if (item) items[item] = true;
+          });
+
+          stats.innerHTML = [
+            ["Participants", App.state.participants.length],
+            ["Schools", App.state.schools.length],
+            ["Groups", App.state.groups.length],
+            ["Staff Production Team", App.state.staffTeam.length],
+            ["Upcoming Rehearsals", App.state.rehearsals.length],
+            ["Today's Rehearsals", App.state.todaysRehearsals.length],
+            ["Attendance Events", App.state.attendanceEvents.length || (App.state.attendanceUrl ? 1 : 0)]
+          ].map(function (stat) {
+            return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat[1]) + '</div><div class="moduleMeta">' + App.escapeHtml(stat[0]) + '</div></div>';
+          }).join("");
+        }
+
+        App.renderAnnouncements();
+        App.renderUpcomingRehearsals();
+        App.renderRecentActivity();
+        App.renderAttendanceActionSummary();
+      },
+
+      renderAnnouncements: function () {
+        var el = document.getElementById("announcementCards");
+        if (!el) return;
+
+        var announcements = App.state.announcements || [];
+        el.innerHTML = announcements.length
+          ? announcements.map(function (item) {
+              return '<div class="announcementCard ' + App.escapeHtml(item.tone || "") + '">' +
+                '<strong>' + App.escapeHtml(item.title) + '</strong>' +
+                '<div class="moduleMeta">' + App.escapeHtml(item.body) + '</div>' +
+              '</div>';
+            }).join("")
+          : '<div class="empty">No announcements yet.</div>';
+      },
+
+      renderUpcomingRehearsals: function () {
+        var el = document.getElementById("upcomingRehearsals");
+        if (!el) return;
+
+        var rehearsals = (App.state.rehearsals || []).slice(0, 5);
+        el.innerHTML = rehearsals.length
+          ? rehearsals.map(App.renderRehearsalItem).join("")
+          : '<div class="empty">No upcoming rehearsals loaded yet.</div>';
+      },
+
+      renderRecentActivity: function () {
+        var el = document.getElementById("recentActivityFull");
+        if (!el) return;
+
+        var searches = App.safeLoadJson("specPortalRecentSearches", []).slice(0, 4);
+        var viewed = App.safeLoadJson("specPortalRecentlyViewed", []).slice(0, 4);
+        var activity = [];
+
+        searches.forEach(function (term) {
+          activity.push("Recent search: " + term);
+        });
+
+        viewed.forEach(function (item) {
+          activity.push("Recently viewed: " + (item.label || item.type));
+        });
+
+        el.innerHTML = activity.length
+          ? activity.map(function (line) { return '<div class="activityItem">' + App.escapeHtml(line) + '</div>'; }).join("")
+          : '<div class="empty">Recent searches and opened profiles will appear here.</div>';
+      },
+
+      renderAttendanceActionSummary: function () {
+        var el = document.getElementById("attendanceActionSummary");
+        if (!el) return;
+
+        el.innerHTML = App.state.attendanceUrl
+          ? 'Attendance app connected. Live action summaries will appear here next.'
+          : 'Configure the Attendance web app URL to show attendance actions here.';
+      },
+
+      getOutstandingActionCount: function () {
+        var count = 0;
+        if (!App.state.attendanceUrl) count++;
+        if (!(App.state.staffTeam || []).length) count++;
+        if (!(App.state.rehearsals || []).length) count++;
+        return count;
+      },
+
+      renderParticipantStatus: function () {
+        var status = document.getElementById("participantStatus");
+        if (!status) return;
+
+        if (!App.state.ready) {
+          status.textContent = "Loading participant data...";
+          return;
+        }
+
+        status.textContent = "Ready - " + App.state.participants.length + " participants, " +
+          App.state.groups.length + " groups and " + App.state.schools.length + " schools loaded";
+      },
+
+      runParticipantSearch: function () {
+        if (App.state.participantSearchTimer) {
+          clearTimeout(App.state.participantSearchTimer);
+          App.state.participantSearchTimer = null;
+        }
+        var search = document.getElementById("participantSearch");
+        var resultsEl = document.getElementById("participantResults");
+        var statusEl = document.getElementById("participantStatus");
+        var query = String((search && search.value) || "").trim().toLowerCase();
+
+        if (!resultsEl || !statusEl) return;
+
+        if (!App.state.ready) {
+          statusEl.textContent = "Loading participant data...";
+          resultsEl.innerHTML = "";
+          return;
+        }
+
+        if (!query) {
+          App.state.latestResults = [];
+          resultsEl.innerHTML = "";
+          App.renderParticipantStatus();
+          return;
+        }
+
+        App.state.latestResults = App.getParticipantResults(query);
+        statusEl.textContent = App.state.latestResults.length ? App.state.latestResults.length + " results" : "No matches found";
+        resultsEl.innerHTML = App.state.latestResults.length
+          ? App.state.latestResults.map(App.renderResultCard).join("")
+          : '<div class="empty">No matches found.</div>';
+      },
+
+      queueParticipantSearch: function () {
+        if (App.state.participantSearchTimer) clearTimeout(App.state.participantSearchTimer);
+        App.state.participantSearchTimer = setTimeout(App.runParticipantSearch, 160);
+      },
+
+      getParticipantResults: function (query) {
+        var schoolResults = App.state.schools.map(function (school) {
+          var name = App.getSchoolName(school);
+          return {
+            resultType: "school",
+            title: name,
+            meta: "School",
+            score: App.getSearchScore(name, query)
+          };
+        }).filter(function (result) {
+          return result.title && result.score > 0;
+        }).slice(0, 8);
+
+        var groupResults = App.state.groups.map(function (group) {
+          var title = [group.item, group.groupName].filter(Boolean).join(" - ") || group.category || "Unnamed group";
+          var text = [group.item, group.groupName, group.category, group.school, group.teacherName, group.teacherEmail].filter(Boolean).join(" ");
+          return {
+            resultType: "group",
+            title: title,
+            meta: [group.school, group.teacherName, group.count ? group.count + " students" : ""].filter(Boolean).join(" - "),
+            group: group,
+            score: App.getSearchScore(text, query)
+          };
+        }).filter(function (result) {
+          return result.score > 0;
+        }).slice(0, 8);
+
+        var participantResults = App.state.participants.map(function (participant) {
+          var text = [
+            App.getParticipantName(participant),
+            App.getParticipantSchool(participant),
+            participant.item,
+            participant.discipline,
+            participant.subDiscipline,
+            participant.teacherName,
+            participant.teacherEmail
+          ].filter(Boolean).join(" ");
+
+          return {
+            resultType: "participant",
+            title: App.getParticipantName(participant),
+            meta: [App.getParticipantSchool(participant), participant.year ? "Year " + participant.year : "", participant.item || participant.discipline].filter(Boolean).join(" - "),
+            participant: participant,
+            score: App.getSearchScore(text, query)
+          };
+        }).filter(function (result) {
+          return result.title && result.score > 0;
+        }).sort(function (a, b) {
+          return b.score - a.score || a.title.localeCompare(b.title);
+        }).slice(0, 40);
+
+        return schoolResults.concat(groupResults, participantResults).slice(0, 50);
+      },
+
+      renderResultCard: function (result, index) {
+        var icon = result.resultType === "school"
+          ? "🏫"
+          : result.resultType === "group" || result.resultType === "item"
+          ? "🎭"
+          : App.getInitials(result.title);
+        var avatar = '<div class="avatar">' + App.escapeHtml(icon) + '</div>';
+
+        if (result.resultType === "participant") {
+          var photo = App.getParticipantPhotoUrl(result.participant);
+          avatar = '<div class="avatar">' + (photo ? '<img src="' + App.escapeHtml(photo) + '" alt="">' : App.escapeHtml(icon)) + '</div>';
+        }
+
+        return '<button class="resultCard" type="button" onclick="App.openResult(' + index + ')">' +
+          '<div class="resultTop">' +
+            avatar +
+            '<div>' +
+              '<div class="resultTitle">' + App.escapeHtml(result.title || "Untitled") + '</div>' +
+              '<div class="resultMeta">' + App.escapeHtml(result.meta || result.resultType) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="pillRow"><span class="pill">' + App.escapeHtml(result.resultType) + '</span></div>' +
+        '</button>';
+      },
+
+      openResult: function (index) {
+        var result = App.state.latestResults[index];
+        if (!result) return;
+
+        if (result.resultType === "participant") {
+          App.renderParticipantProfile(result.participant);
+          return;
+        }
+
+        if (result.resultType === "school") {
+          App.renderGenericProfile(result.title, ["School", result.meta]);
+          return;
+        }
+
+        if (result.resultType === "item") {
+          App.renderGenericProfile(result.title, ["Item", result.meta]);
+          return;
+        }
+
+        if (result.resultType === "group") {
+          var group = result.group || {};
+          App.renderGenericProfile(result.title, [
+            group.school,
+            group.teacherName,
+            group.teacherEmail,
+            group.category,
+            group.count ? group.count + " students" : ""
+          ]);
+        }
+      },
+
+      renderParticipantProfile: function (participant) {
+        var panel = document.getElementById("participantProfilePanel");
+        if (!panel) return;
+
+        var photo = App.getParticipantPhotoUrl(participant);
+        var avatar = photo
+          ? '<div class="avatar" style="width:72px;height:72px;"><img src="' + App.escapeHtml(photo) + '" alt=""></div>'
+          : '<div class="avatar" style="width:72px;height:72px;">' + App.escapeHtml(App.getInitials(App.getParticipantName(participant))) + '</div>';
+
+        panel.innerHTML =
+          avatar +
+          '<h2 class="profileTitle" style="margin-top:14px;">' + App.escapeHtml(App.getParticipantName(participant)) + '</h2>' +
+          App.profileLine("School", App.getParticipantSchool(participant)) +
+          App.profileLine("Year", participant.year ? "Year " + participant.year : "") +
+          App.profileLine("Item", participant.item) +
+          App.profileLine("Discipline", [participant.discipline, participant.subDiscipline].filter(Boolean).join(" - ")) +
+          App.profileLine("Teacher", [participant.teacherName, participant.teacherEmail].filter(Boolean).join(" - "));
+      },
+
+      renderGenericProfile: function (title, lines) {
+        var panel = document.getElementById("participantProfilePanel");
+        if (!panel) return;
+
+        panel.innerHTML =
+          '<h2 class="profileTitle">' + App.escapeHtml(title || "Preview") + '</h2>' +
+          (lines || []).filter(Boolean).map(function (line) {
+            return '<div class="profileLine">' + App.escapeHtml(line) + '</div>';
+          }).join("");
+      },
+
+      loadCalendarData: function () {
+        if (App.state.calendarData) return;
+
+        var source = document.getElementById("calendarSource");
+        if (source) source.textContent = "Loading Timeline events...";
+
+        google.script.run
+          .withSuccessHandler(function (data) {
+            App.state.calendarData = data || { events: [] };
+            App.state.rehearsals = App.state.calendarData.events || App.state.rehearsals || [];
+            App.renderStatusRibbon();
+            if (App.state.currentPage === "calendar") App.renderCalendarPage();
+            if (App.state.currentPage === "rehearsals") App.renderRehearsalsPage();
+          })
+          .withFailureHandler(function (error) {
+            App.state.calendarData = { events: [], source: "Timeline unavailable", error: App.getErrorMessage(error) };
+            App.notify("Calendar data could not be loaded: " + App.getErrorMessage(error));
+            if (App.state.currentPage === "calendar") App.renderCalendarPage();
+          })
+          .portalGetCalendarData();
+      },
+
+      renderCalendarPage: function () {
+        if (!App.state.calendarData) {
+          App.loadCalendarData();
+          App.renderCalendarLoading();
+          return;
+        }
+
+        var source = document.getElementById("calendarSource");
+        if (source) {
+          source.textContent = (App.state.calendarData.source || "Timeline data") +
+            (App.state.calendarData.generatedAt ? " · " + App.state.calendarData.generatedAt : "");
+        }
+
+        App.populateEventFilters("calendarTypeFilter", "type", App.getCalendarEvents());
+        App.populateEventFilters("calendarVenueFilter", "venue", App.getCalendarEvents());
+
+        var heading = document.getElementById("calendarHeading");
+        if (heading) {
+          heading.textContent = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric" }).format(App.state.calendarDate);
+        }
+
+        var month = document.getElementById("calendarMonth");
+        var agenda = document.getElementById("calendarAgenda");
+        if (!month || !agenda) return;
+
+        if (App.state.calendarView === "agenda") {
+          month.style.display = "none";
+          agenda.style.display = "grid";
+          App.renderCalendarAgenda(agenda);
+          return;
+        }
+
+        month.style.display = "grid";
+        agenda.style.display = "none";
+        App.renderCalendarMonth(month);
+      },
+
+      renderCalendarLoading: function () {
+        var month = document.getElementById("calendarMonth");
+        if (month) month.innerHTML = '<div class="empty" style="grid-column:1/-1;">Loading calendar events...</div>';
+      },
+
+      getCalendarEvents: function () {
+        var events = (App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || [];
+        var search = String((document.getElementById("calendarSearch") || {}).value || "").toLowerCase();
+        var type = String((document.getElementById("calendarTypeFilter") || {}).value || "");
+        var venue = String((document.getElementById("calendarVenueFilter") || {}).value || "");
+
+        return events.filter(function (event) {
+          var text = [event.title, event.event, event.venue, event.type, event.rehearsalType, (event.items || []).join(" ")].join(" ").toLowerCase();
+          if (search && text.indexOf(search) < 0) return false;
+          if (type && String(event.type || event.rehearsalType || "") !== type) return false;
+          if (venue && String(event.venue || "") !== venue) return false;
+          return true;
+        });
+      },
+
+      renderCalendarMonth: function (el) {
+        var date = App.state.calendarDate;
+        var first = new Date(date.getFullYear(), date.getMonth(), 1);
+        var start = new Date(first);
+        start.setDate(first.getDate() - first.getDay());
+        var events = App.getCalendarEvents();
+        var byDate = App.groupEventsByDate(events);
+        var html = "";
+
+        for (var i = 0; i < 42; i++) {
+          var day = new Date(start);
+          day.setDate(start.getDate() + i);
+          var key = App.toDateKey(day);
+          var dayEvents = byDate[key] || [];
+          html += '<div class="calendarDay' + (day.getMonth() === date.getMonth() ? "" : " muted") + '">' +
+            '<div class="calendarDayNumber">' + App.escapeHtml(App.formatShortDate(day)) + '</div>' +
+            dayEvents.slice(0, 3).map(function (event) {
+              return '<button class="calendarEvent" type="button" style="background:' + App.escapeHtml(event.colour || "#2d67b2") + '" onclick="App.showCalendarEventDetail(\'' + App.escapeJs(event.id) + '\')">' +
+                App.escapeHtml(event.title || event.event || "Event") +
+              '</button>';
+            }).join("") +
+            (dayEvents.length > 3 ? '<div class="moduleMeta">+' + (dayEvents.length - 3) + ' more</div>' : "") +
+          '</div>';
+        }
+
+        el.innerHTML = html;
+      },
+
+      renderCalendarAgenda: function (el) {
+        var events = App.getCalendarEvents().sort(App.sortEvents);
+        el.innerHTML = events.length
+          ? events.map(App.renderTimelineEventCard).join("")
+          : '<div class="empty">No events match the current filters.</div>';
+      },
+
+      showCalendarEventDetail: function (id) {
+        var events = ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []);
+        var event = events.find(function (item) { return String(item.id) === String(id); });
+        var el = document.getElementById("calendarEventDetail");
+        if (!event || !el) return;
+
+        App.state.selectedCalendarEvent = event;
+        el.className = "profilePanel";
+        el.innerHTML =
+          '<h2 class="profileTitle">' + App.escapeHtml(event.title || event.event || "Event") + '</h2>' +
+          App.profileLine("Date / time", [event.date, [event.start, event.finish].filter(Boolean).join(" - ")].filter(Boolean).join(" · ")) +
+          App.profileLine("Venue", event.venue) +
+          App.profileLine("Type", event.type || event.rehearsalType) +
+          App.profileLine("Groups / items", (event.items || event.groups || []).join(", ")) +
+          App.profileLine("Allocated staff", event.allocatedStaffCount ? event.allocatedStaffCount + " staff" : "Not connected") +
+          App.profileLine("Attendance", event.attendanceStatus || "Not connected") +
+          App.profileLine("Source", event.sourceRow ? "Timeline row " + event.sourceRow : event.source || "Placeholder");
+      },
+
+      goCalendarToday: function () {
+        App.state.calendarDate = new Date();
+        App.renderCalendarPage();
+      },
+
+      moveCalendar: function (months) {
+        var current = App.state.calendarDate;
+        App.state.calendarDate = new Date(current.getFullYear(), current.getMonth() + months, 1);
+        App.renderCalendarPage();
+      },
+
+      toggleCalendarView: function () {
+        App.state.calendarView = App.state.calendarView === "month" ? "agenda" : "month";
+        App.renderCalendarPage();
+      },
+
+      groupEventsByDate: function (events) {
+        return (events || []).reduce(function (map, event) {
+          var key = event.dateKey || App.toDateKey(event.date);
+          if (!key) return map;
+          map[key] = map[key] || [];
+          map[key].push(event);
+          return map;
+        }, {});
+      },
+
+      renderAttendancePage: function () {
+        var launch = document.getElementById("attendanceLaunch");
+        var frame = document.getElementById("attendanceFrame");
+        var placeholder = document.getElementById("attendancePlaceholder");
+        if (!launch || !frame || !placeholder) return;
+
+        if (App.state.attendanceUrl) {
+          launch.disabled = false;
+          launch.textContent = "Open Attendance";
+          frame.src = App.state.attendanceUrl;
+          frame.style.display = "block";
+          placeholder.style.display = "none";
+          return;
+        }
+
+        launch.disabled = true;
+        launch.textContent = "Attendance Coming Soon";
+        frame.style.display = "none";
+        placeholder.style.display = "block";
+      },
+
+      renderRehearsalsPage: function () {
+        var el = document.getElementById("rehearsalListFull");
+        if (!el) return;
+
+        if (!App.state.calendarData) {
+          App.loadCalendarData();
+        }
+
+        App.populateEventFilters("rehearsalVenueFilter", "venue", App.state.rehearsals || []);
+        App.populateEventFilters("rehearsalTypeFilter", "type", App.state.rehearsals || []);
+
+        var rehearsals = App.getFilteredRehearsals();
+        el.innerHTML = rehearsals.length
+          ? rehearsals.map(App.renderTimelineEventCard).join("")
+          : '<div class="empty">No rehearsals match the current filters.</div>';
+      },
+
+      renderRehearsalItem: function (rehearsal) {
+        return App.renderTimelineEventCard(rehearsal);
+      },
+
+      renderTimelineEventCard: function (event) {
+        var date = event.date || event.dateDisplay || "TBC";
+        var time = [event.start, event.finish].filter(Boolean).join(" - ");
+        var title = event.event || event.title || "Rehearsal";
+        var meta = [
+          time,
+          event.venue,
+          event.type || event.rehearsalType,
+          (event.items || []).length ? (event.items || []).join(", ") : "",
+          event.allocatedStaffCount ? event.allocatedStaffCount + " staff" : "",
+          event.attendanceStatus || ""
+        ].filter(Boolean).join(" · ");
+
+        return '<button class="dateItem" type="button" onclick="App.showCalendarEventDetail(\'' + App.escapeJs(event.id || title) + '\')">' +
+          '<div class="dateBadge" style="background:' + App.escapeHtml(event.colour || "#fbcc39") + '">' + App.escapeHtml(date) + '</div>' +
+          '<div><strong>' + App.escapeHtml(title) + '</strong><br>' +
+          '<span class="moduleMeta">' + App.escapeHtml(meta || "Timeline event") + '</span></div>' +
+        '</button>';
+      },
+
+      setRehearsalMode: function (mode) {
+        App.state.rehearsalMode = mode;
+        App.renderRehearsalsPage();
+      },
+
+      getFilteredRehearsals: function () {
+        var events = (App.state.rehearsals || []).slice();
+        var search = String((document.getElementById("rehearsalSearch") || {}).value || "").toLowerCase();
+        var venue = String((document.getElementById("rehearsalVenueFilter") || {}).value || "");
+        var type = String((document.getElementById("rehearsalTypeFilter") || {}).value || "");
+        var today = App.toDateKey(new Date());
+        var mode = App.state.rehearsalMode || "upcoming";
+
+        return events.filter(function (event) {
+          var dateKey = event.dateKey || App.toDateKey(event.date);
+          var text = [event.title, event.event, event.venue, event.type, (event.items || []).join(" ")].join(" ").toLowerCase();
+          if (search && text.indexOf(search) < 0) return false;
+          if (venue && String(event.venue || "") !== venue) return false;
+          if (type && String(event.type || event.rehearsalType || "") !== type) return false;
+          if (mode === "today") return dateKey === today;
+          if (mode === "past") return dateKey && dateKey < today;
+          return !dateKey || dateKey >= today;
+        }).sort(App.sortEvents);
+      },
+
+      renderProjectManagementPage: function () {
+        var el = document.getElementById("projectManagementContent");
+        var source = document.getElementById("projectSource");
+        if (!el) return;
+
+        if (!App.state.projectData) {
+          el.innerHTML = '<div class="empty">Loading project management data...</div>';
+          App.loadProjectManagementData();
+          return;
+        }
+
+        if (source) source.textContent = (App.state.projectData.source || "Project Management") +
+          (App.state.projectData.generatedAt ? " · " + App.state.projectData.generatedAt : "");
+
+        var tasks = App.state.projectData.tasks || [];
+        var view = App.state.projectView || "board";
+
+        if (view === "table") {
+          el.innerHTML = App.renderProjectTable(tasks);
+        } else if (view === "milestones") {
+          el.innerHTML = App.renderGroupedCards(tasks, "workstream");
+        } else if (view === "mine") {
+          el.innerHTML = App.renderProjectTable(App.filterMine(tasks, "owner"));
+        } else if (view === "risk") {
+          el.innerHTML = App.renderProjectTable(tasks.filter(function (task) {
+            return /blocked|waiting|overdue|risk/i.test([task.status, task.priority, task.notes].join(" "));
+          }));
+        } else {
+          el.innerHTML = App.renderTaskBoard(tasks, App.state.projectData.statuses || []);
+        }
+      },
+
+      loadProjectManagementData: function () {
+        google.script.run
+          .withSuccessHandler(function (data) {
+            App.state.projectData = data || { tasks: [] };
+            if (App.state.currentPage === "projectManagement") App.renderProjectManagementPage();
+          })
+          .withFailureHandler(function (error) {
+            App.state.projectData = { tasks: [], source: "Unavailable: " + App.getErrorMessage(error) };
+            if (App.state.currentPage === "projectManagement") App.renderProjectManagementPage();
+          })
+          .portalGetProjectManagementData();
+      },
+
+      setProjectView: function (view) {
+        App.state.projectView = view;
+        App.renderProjectManagementPage();
+      },
+
+      renderTaskBoard: function (tasks, statuses) {
+        statuses = statuses.length ? statuses : ["Not started", "In progress", "Waiting", "Ready for review", "Complete"];
+        return '<div class="boardGrid">' + statuses.map(function (status) {
+          var columnTasks = tasks.filter(function (task) { return String(task.status || "") === status; });
+          return '<div class="boardColumn"><strong>' + App.escapeHtml(status) + '</strong>' +
+            (columnTasks.length ? columnTasks.map(App.renderTaskCard).join("") : '<div class="moduleMeta">No tasks</div>') +
+          '</div>';
+        }).join("") + '</div>';
+      },
+
+      renderTaskCard: function (task) {
+        return '<div class="taskCard">' +
+          '<strong>' + App.escapeHtml(task.task || task.activity || "Untitled") + '</strong>' +
+          '<div class="moduleMeta">' + App.escapeHtml([task.workstream || task.campaign, task.owner, task.department].filter(Boolean).join(" · ")) + '</div>' +
+          '<div class="pillRow"><span class="pill">' + App.escapeHtml(task.status || "No status") + '</span><span class="pill">' + App.escapeHtml(task.priority || "Priority pending") + '</span></div>' +
+        '</div>';
+      },
+
+      renderProjectTable: function (tasks) {
+        var columns = ["task", "workstream", "owner", "department", "status", "priority", "startDate", "dueDate", "relatedEvent", "dependencies", "notes", "lastUpdated"];
+        return App.renderDataTable(tasks, columns);
+      },
+
+      renderMediaTimelinePage: function () {
+        var el = document.getElementById("mediaTimelineContent");
+        var source = document.getElementById("mediaSource");
+        if (!el) return;
+
+        if (!App.state.mediaData) {
+          el.innerHTML = '<div class="empty">Loading media timeline data...</div>';
+          App.loadMediaTimelineData();
+          return;
+        }
+
+        if (source) source.textContent = (App.state.mediaData.source || "Media Timeline") +
+          (App.state.mediaData.generatedAt ? " · " + App.state.mediaData.generatedAt : "");
+
+        var activities = App.state.mediaData.activities || [];
+        var view = App.state.mediaView || "gantt";
+
+        if (view === "calendar") {
+          el.innerHTML = App.renderGroupedCards(activities, "publishDate");
+        } else if (view === "campaigns") {
+          el.innerHTML = App.renderGroupedCards(activities, "campaign");
+        } else if (view === "mine") {
+          el.innerHTML = App.renderDataTable(App.filterMine(activities, "owner"), ["campaign", "activity", "channel", "owner", "status", "priority", "publishDate", "approvalStatus", "notes"]);
+        } else {
+          el.innerHTML = App.renderMediaGantt(activities);
+        }
+      },
+
+      loadMediaTimelineData: function () {
+        google.script.run
+          .withSuccessHandler(function (data) {
+            App.state.mediaData = data || { activities: [] };
+            if (App.state.currentPage === "mediaTimeline") App.renderMediaTimelinePage();
+          })
+          .withFailureHandler(function (error) {
+            App.state.mediaData = { activities: [], source: "Unavailable: " + App.getErrorMessage(error) };
+            if (App.state.currentPage === "mediaTimeline") App.renderMediaTimelinePage();
+          })
+          .portalGetMediaTimelineData();
+      },
+
+      setMediaView: function (view) {
+        App.state.mediaView = view;
+        App.renderMediaTimelinePage();
+      },
+
+      renderMediaGantt: function (activities) {
+        return '<div class="ganttGrid">' + (activities.length ? activities.map(function (activity) {
+          return '<div class="ganttRow">' +
+            '<div><strong>' + App.escapeHtml(activity.campaign || "Campaign") + '</strong><div class="moduleMeta">' + App.escapeHtml(activity.activity || "") + '</div></div>' +
+            '<div class="ganttTrack"><div class="ganttBar" title="' + App.escapeHtml(activity.status || "") + '"></div></div>' +
+          '</div>';
+        }).join("") : '<div class="empty">No media activities found.</div>') + '</div>';
+      },
+
+      renderGroupedCards: function (items, field) {
+        var groups = {};
+        (items || []).forEach(function (item) {
+          var key = item[field] || "Unspecified";
+          groups[key] = groups[key] || [];
+          groups[key].push(item);
+        });
+
+        var keys = Object.keys(groups).sort();
+        return keys.length ? keys.map(function (key) {
+          return '<div class="boardColumn" style="margin-bottom:12px;"><strong>' + App.escapeHtml(key) + '</strong>' +
+            groups[key].map(App.renderTaskCard).join("") +
+          '</div>';
+        }).join("") : '<div class="empty">No records found.</div>';
+      },
+
+      renderDataTable: function (rows, columns) {
+        if (!rows.length) return '<div class="empty">No records found.</div>';
+        return '<table class="dataTable"><thead><tr>' +
+          columns.map(function (column) { return '<th>' + App.escapeHtml(App.toTitle(column)) + '</th>'; }).join("") +
+          '</tr></thead><tbody>' +
+          rows.map(function (row) {
+            return '<tr>' + columns.map(function (column) {
+              return '<td>' + App.escapeHtml(row[column] || "") + '</td>';
+            }).join("") + '</tr>';
+          }).join("") +
+          '</tbody></table>';
+      },
+
+      filterMine: function (items, ownerField) {
+        var email = String(App.state.staff.email || "").toLowerCase();
+        var name = String(App.state.staff.name || App.state.staff.displayName || "").toLowerCase();
+        return (items || []).filter(function (item) {
+          var owner = String(item[ownerField] || "").toLowerCase();
+          return owner && (owner.indexOf(email) >= 0 || owner.indexOf(name) >= 0);
+        });
+      },
+
+      toTitle: function (value) {
+        return String(value || "")
+          .replace(/([A-Z])/g, " $1")
+          .replace(/^./, function (char) { return char.toUpperCase(); });
+      },
+
+      renderStaffPage: function () {
+        var el = document.getElementById("staffProfileSummary");
+        if (!el) return;
+
+        var staff = App.state.staff || {};
+        el.innerHTML =
+          '<div class="profileLine"><strong>Email</strong><br>' + App.escapeHtml(staff.email || "Unknown user") + '</div>' +
+          '<div class="profileLine"><strong>Display name</strong><br>' + App.escapeHtml(staff.displayName || "Spec Central user") + '</div>' +
+          '<div class="profileLine"><strong>Role</strong><br>' + App.escapeHtml(staff.role || "Staff") + '</div>' +
+          '<div class="profileLine"><strong>Staff team records</strong><br>' + App.escapeHtml((App.state.staffTeam || []).length) + '</div>' +
+          '<div class="profileLine"><strong>Source</strong><br>' + App.escapeHtml(staff.source || "Placeholder") + '</div>';
+      },
+
+      openAttendance: function () {
+        if (App.state.attendanceUrl) {
+          window.open(App.state.attendanceUrl, "_blank");
+          return;
+        }
+        App.navigate("attendance");
+        App.notify("Attendance URL is not configured yet.");
+      },
+
+      focusParticipantsSearch: function () {
+        App.navigate("participants");
+        setTimeout(function () {
+          var search = document.getElementById("participantSearch");
+          if (search) search.focus();
+        }, 0);
+      },
+
+      browseGlobal: function (type) {
+        App.navigate("participants");
+        setTimeout(function () {
+          var search = document.getElementById("participantSearch");
+          var resultsEl = document.getElementById("participantResults");
+          var statusEl = document.getElementById("participantStatus");
+          if (!search || !resultsEl || !statusEl) return;
+
+          search.value = "";
+
+          if (type === "schools") {
+            App.state.latestResults = App.state.schools
+              .map(function (school) {
+                var title = App.getSchoolName(school);
+                return { resultType: "school", title: title, meta: "School", score: 100 };
+              })
+              .filter(function (result) { return result.title; })
+              .sort(function (a, b) { return a.title.localeCompare(b.title); })
+              .slice(0, 50);
+          } else {
+            var itemMap = {};
+            App.state.participants.forEach(function (participant) {
+              var item = participant.item || participant.Item || "";
+              if (!item) return;
+              itemMap[item] = (itemMap[item] || 0) + 1;
+            });
+            App.state.groups.forEach(function (group) {
+              var item = group.item || group.groupName || "";
+              if (!item) return;
+              itemMap[item] = itemMap[item] || 0;
+            });
+            App.state.latestResults = Object.keys(itemMap)
+              .sort()
+              .slice(0, 50)
+              .map(function (item) {
+                return { resultType: "item", title: item, meta: itemMap[item] + " participant" + (itemMap[item] === 1 ? "" : "s"), score: 100 };
+              });
+          }
+
+          statusEl.textContent = App.state.latestResults.length + " " + (type === "schools" ? "schools" : "items");
+          resultsEl.innerHTML = App.state.latestResults.map(App.renderResultCard).join("");
+          search.focus();
+        }, 0);
+      },
+
+      openImportCentre: function () {
+        App.notify("Open the spreadsheet menu: Spec Tools > Upload Acceptances/New Participant.");
+      },
+
+      notify: function (message) {
+        var el = document.getElementById("notifications");
+        if (!el) return;
+        el.textContent = message;
+        el.classList.add("show");
+      },
+
+      renderNotifications: function () {
+        var notifications = App.state.notifications || [];
+        if (notifications.length) {
+          App.notify(notifications[0].title + ": " + notifications[0].body);
+        }
+      },
+
+      clearNotification: function () {
+        var el = document.getElementById("notifications");
+        if (!el) return;
+        el.textContent = "";
+        el.classList.remove("show");
+      },
+
+      profileLine: function (label, value) {
+        if (!value) return "";
+        return '<div class="profileLine"><strong>' + App.escapeHtml(label) + '</strong><br>' + App.escapeHtml(value) + '</div>';
+      },
+
+      getGreeting: function () {
+        var hour = new Date().getHours();
+        if (hour < 12) return "Good morning";
+        if (hour < 18) return "Good afternoon";
+        return "Good evening";
+      },
+
+      formatShortDate: function (value) {
+        try {
+          return new Intl.DateTimeFormat("en-AU", {
+            weekday: "short",
+            day: "numeric",
+            month: "short"
+          }).format(value instanceof Date ? value : new Date(value));
+        } catch (err) {
+          return String(value || "");
+        }
+      },
+
+      toDateKey: function (value) {
+        if (!value) return "";
+        var date = value instanceof Date ? value : new Date(value);
+        if (isNaN(date.getTime())) return "";
+        var year = date.getFullYear();
+        var month = String(date.getMonth() + 1).padStart(2, "0");
+        var day = String(date.getDate()).padStart(2, "0");
+        return year + "-" + month + "-" + day;
+      },
+
+      sortEvents: function (a, b) {
+        return String(a.dateKey || "").localeCompare(String(b.dateKey || "")) ||
+          String(a.start || "").localeCompare(String(b.start || "")) ||
+          String(a.title || a.event || "").localeCompare(String(b.title || b.event || ""));
+      },
+
+      populateEventFilters: function (elementId, field, events) {
+        var select = document.getElementById(elementId);
+        if (!select || select.dataset.ready === "true") return;
+
+        var values = Array.from(new Set((events || [])
+          .map(function (event) { return String(event[field] || (field === "type" ? event.rehearsalType : "") || "").trim(); })
+          .filter(Boolean)))
+          .sort();
+
+        select.innerHTML = '<option value="">All ' + App.escapeHtml(field === "venue" ? "venues" : "types") + '</option>' +
+          values.map(function (value) {
+            return '<option value="' + App.escapeHtml(value) + '">' + App.escapeHtml(value) + '</option>';
+          }).join("");
+        select.dataset.ready = "true";
+      },
+
+      safeLoadJson: function (key, fallback) {
+        try {
+          var raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (err) {
+          return fallback;
+        }
+      },
+
+      getSearchScore: function (text, query) {
+        text = String(text || "").toLowerCase();
+        if (!text || !query) return 0;
+        if (text === query) return 100;
+        if (text.indexOf(query) === 0) return 75;
+        if (text.indexOf(query) >= 0) return 30;
+        return 0;
+      },
+
+      getField: function (source, names) {
+        if (!source) return "";
+        for (var i = 0; i < names.length; i++) {
+          var value = source[names[i]];
+          if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+        }
+        return "";
+      },
+
+      getParticipantName: function (participant) {
+        return App.getField(participant, ["name", "fullName", "studentName", "Student Name"]) ||
+          [App.getField(participant, ["firstName", "studentFirstName", "Student First Name"]), App.getField(participant, ["lastName", "studentLastName", "Student Last Name"])].filter(Boolean).join(" ");
+      },
+
+      getParticipantSchool: function (participant) {
+        return App.getField(participant, ["school", "currentSchool", "schoolName", "Current School"]);
+      },
+
+      getSchoolName: function (school) {
+        return App.getField(school, ["schoolName", "school", "currentSchool", "School Name", "Current School"]);
+      },
+
+      getPhotoKey: function (participant) {
+        return App.getParticipantName(participant)
+          .replace(/\.[^.]+$/, "")
+          .replace(/\s*-\s*Headshot$/i, "")
+          .replace(/[\-_]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+      },
+
+      getParticipantPhotoUrl: function (participant) {
+        if (!participant) return "";
+        if (participant.photoUrl) return participant.photoUrl;
+        var photo = App.state.photos[App.getPhotoKey(participant)] || {};
+        if (typeof photo === "string") return photo;
+        return photo.url || photo.thumbnailUrl || "";
+      },
+
+      getInitials: function (name) {
+        var parts = String(name || "").split(/\s+/).filter(Boolean);
+        var first = parts[0] ? parts[0].charAt(0) : "?";
+        var second = parts[1] ? parts[1].charAt(0) : "";
+        return first + second;
+      },
+
+      escapeHtml: function (value) {
+        return String(value === undefined || value === null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      },
+
+      escapeJs: function (value) {
+        return String(value === undefined || value === null ? "" : value)
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'")
+          .replace(/"/g, "&quot;")
+          .replace(/\n/g, " ")
+          .replace(/\r/g, " ");
+      },
+
+      getErrorMessage: function (error) {
+        return error && error.message ? error.message : String(error || "Unknown error");
+      }
+    };
+
+    App.init();
+  </script>
+</body>
+</html>

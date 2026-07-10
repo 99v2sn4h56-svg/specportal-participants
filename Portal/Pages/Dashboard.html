@@ -271,13 +271,25 @@
           teacherMap.get(key).count++;
         });
         allGroups.forEach(g => {
-          const key = g.teacherEmail || g.teacherName;
-          if (!key || teacherMap.has(key)) return;
-          teacherMap.set(key, {
-            resultType: "teacher",
-            teacherName: g.teacherName || key,
-            teacherEmail: g.teacherEmail || "",
-            count: 0
+          [
+            {
+              key: g.teacherEmail || g.teacherName,
+              name: g.teacherName,
+              email: g.teacherEmail
+            },
+            {
+              key: g.secondTeacherEmail || g.secondTeacherName,
+              name: g.secondTeacherName,
+              email: g.secondTeacherEmail
+            }
+          ].forEach(teacher => {
+            if (!teacher.key || teacherMap.has(teacher.key)) return;
+            teacherMap.set(teacher.key, {
+              resultType: "teacher",
+              teacherName: teacher.name || teacher.key,
+              teacherEmail: teacher.email || "",
+              count: 0
+            });
           });
         });
 
@@ -294,3 +306,91 @@
       statusEl.textContent = "Rehearsals";
     }
 </script>
+
+<template id="page-dashboard">
+  <div class="grid">
+    <section class="heroPanel span12">
+      <div class="operationalHeroGrid">
+        <div>
+          <div class="kicker">Schools Spectacular 2026</div>
+          <h2>What needs attention now?</h2>
+          <div id="dashboardGreeting" class="heroMeta">Good morning</div>
+          <div id="dashboardDate" class="heroMeta">Today</div>
+          <div class="heroMetricGrid">
+            <div class="heroMetric">
+              <strong id="heroTodayRehearsals">0</strong>
+              <span>Today’s rehearsals</span>
+            </div>
+            <div class="heroMetric">
+              <strong id="heroUpcomingRehearsals">0</strong>
+              <span>Upcoming rehearsals</span>
+            </div>
+            <div class="heroMetric">
+              <strong id="heroOutstandingActions">0</strong>
+              <span>Outstanding actions</span>
+            </div>
+            <div class="heroMetric">
+              <strong id="heroAttendanceAlerts">0</strong>
+              <span>Attendance alerts</span>
+            </div>
+          </div>
+        </div>
+        <div class="staffSummary">
+          <div class="moduleMeta">Current user</div>
+          <strong id="dashboardStaffName">Spec Central user</strong>
+          <span id="dashboardStaffRole">Staff</span>
+          <span id="dashboardStaffDepartment">Department pending</span>
+          <div class="moduleMeta" style="margin-top:12px;">Next rehearsal</div>
+          <strong id="dashboardNextRehearsal">Loading...</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel span12">
+      <h3 class="sectionTitle">Live Overview</h3>
+      <div id="dashboardStatsFull" class="moduleGrid"></div>
+    </section>
+
+    <section class="panel span7">
+      <h3 class="sectionTitle">Announcements</h3>
+      <div id="announcementCards" class="announcementGrid"></div>
+    </section>
+
+    <section class="panel span5">
+      <h3 class="sectionTitle">Upcoming Rehearsals</h3>
+      <div id="upcomingRehearsals" class="dateList"></div>
+    </section>
+
+    <section class="panel span5">
+      <h3 class="sectionTitle">Quick Actions</h3>
+      <div class="quickLinks">
+        <button class="quickLink" type="button" onclick="App.focusParticipantsSearch()">Search Participants</button>
+        <button class="quickLink" type="button" onclick="App.openAttendance()">Open Attendance</button>
+        <button class="quickLink" type="button" onclick="App.browseGlobal('schools')">Browse Schools</button>
+        <button class="quickLink" type="button" onclick="App.browseGlobal('items')">Browse Items</button>
+        <button class="quickLink" type="button" onclick="App.navigate('rehearsals')">Today's Rehearsals</button>
+        <button class="quickLink" type="button" onclick="App.openImportCentre()">Upload Acceptance Data</button>
+      </div>
+    </section>
+
+    <section class="panel span7">
+      <h3 class="sectionTitle">Recent Activity</h3>
+      <div id="recentActivityFull" class="activityList"></div>
+    </section>
+
+    <section class="panel span4">
+      <h3 class="sectionTitle">My Schools</h3>
+      <div class="empty">Personalised schools will appear after Production Team permissions are connected.</div>
+    </section>
+
+    <section class="panel span4">
+      <h3 class="sectionTitle">My Items</h3>
+      <div class="empty">Personalised items will appear after Production Team sync.</div>
+    </section>
+
+    <section class="panel span4">
+      <h3 class="sectionTitle">Attendance Requiring Action</h3>
+      <div id="attendanceActionSummary" class="empty">No attendance actions yet.</div>
+    </section>
+  </div>
+</template>

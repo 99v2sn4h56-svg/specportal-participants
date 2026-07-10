@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --blue:#2D67B2;
+      --yellow:#FBCC39;
+      --red:#EF4343;
+      --purple:#BB529E;
+      --sky:#44C2F0;
+      --orange:#F79420;
+      --magenta:#EF509C;
+      --mint:#9DD085;
+      --navy:#061d3d;
+      --bg:#f5f8fd;
+      --card:#ffffff;
+      --muted:#65748b;
+      --line:#dbe6f5;
+      --shadow:0 14px 34px rgba(6,29,61,.12);
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0;
+      font-family:Poppins, Arial, sans-serif;
+      color:var(--navy);
+      background:
+        radial-gradient(circle at top right, rgba(239,80,156,.13), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(68,194,240,.20), transparent 40%),
+        var(--bg);
+    }
+    .appHeader {
+      padding:22px 18px;
+      background:linear-gradient(135deg,var(--blue),var(--purple));
+      color:white;
+      border-bottom:5px solid var(--yellow);
+    }
+    .kicker { color:var(--yellow); text-transform:uppercase; letter-spacing:.12em; font-size:11px; font-weight:900; }
+    h1 { margin:4px 0 5px; font-size:25px; line-height:1; }
+    .sub { color:rgba(255,255,255,.9); font-size:12px; }
+    main {
+      padding:14px;
+      display:grid;
+      gap:12px;
+      max-width:980px;
+      margin:0 auto;
+      grid-template-columns:minmax(240px, 300px) minmax(0, 1fr);
+      align-items:start;
+    }
+    .card {
+      background:rgba(255,255,255,.95);
+      border:1px solid var(--line);
+      border-radius:18px;
+      padding:14px;
+      box-shadow:var(--shadow);
+    }
+    .card.wide { grid-column:1 / -1; }
+    .sectionTitle { margin:0 0 10px; font-size:15px; font-weight:900; }
+    .steps { display:grid; gap:8px; }
+    .step {
+      display:flex;
+      gap:9px;
+      align-items:center;
+      color:var(--muted);
+      font-size:12px;
+      font-weight:700;
+    }
+    .dot {
+      width:22px;
+      height:22px;
+      border-radius:999px;
+      display:grid;
+      place-items:center;
+      background:#edf3ff;
+      color:var(--blue);
+      font-size:11px;
+      font-weight:900;
+    }
+    .step.done .dot { background:var(--mint); color:var(--navy); }
+    .step.active { color:var(--navy); }
+    .step.active .dot { background:var(--yellow); }
+    .typeGrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+    button, select, input { font:inherit; }
+    button {
+      border:0;
+      border-radius:14px;
+      padding:11px 12px;
+      color:var(--navy);
+      background:#eaf1ff;
+      font-weight:900;
+      cursor:pointer;
+    }
+    button.primary { background:linear-gradient(135deg,var(--blue),var(--purple)); color:white; }
+    button.warn { background:#fff4cf; }
+    button.danger { background:#ffe6e6; color:#7a1111; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .typeButton.active { background:var(--yellow); }
+    .dropZone {
+      border:2px dashed #bad2f0;
+      background:#f8fbff;
+      border-radius:18px;
+      padding:22px;
+      text-align:center;
+      color:var(--muted);
+    }
+    .dropZone.drag { border-color:var(--sky); background:#eaf8ff; }
+    .fileName { margin-top:8px; color:var(--navy); font-size:12px; font-weight:800; overflow-wrap:anywhere; }
+    .status { font-size:12px; color:var(--muted); line-height:1.45; }
+    .summaryGrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .stat { border-radius:14px; padding:10px; background:#f3f7ff; }
+    .stat strong { display:block; font-size:22px; line-height:1; }
+    .stat span { color:var(--muted); font-size:11px; font-weight:800; }
+    .pillList { display:flex; flex-wrap:wrap; gap:6px; }
+    .pill { border-radius:999px; padding:6px 9px; background:#edf3ff; color:var(--navy); font-size:11px; font-weight:800; }
+    .pill.warn { background:#fff4cf; }
+    .pill.bad { background:#ffe6e6; }
+    .incomingSummary { min-width:190px; }
+    .incomingSummary div { margin-bottom:2px; }
+    .suggestionList { display:grid; gap:6px; margin-top:8px; min-width:220px; }
+    .suggestionButton {
+      width:100%;
+      padding:8px 9px;
+      border:1px solid var(--line);
+      border-radius:11px;
+      background:#f8fbff;
+      text-align:left;
+      box-shadow:none;
+      font-size:11px;
+    }
+    .suggestionButton strong { display:block; color:var(--blue); }
+    .tableWrap { overflow:auto; max-height:360px; border:1px solid var(--line); border-radius:14px; }
+    table { width:100%; border-collapse:collapse; font-size:11px; background:white; }
+    th, td { padding:8px; border-bottom:1px solid #edf2fa; text-align:left; vertical-align:top; }
+    th { position:sticky; top:0; background:#f4f8ff; color:var(--blue); font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+    .conflict { border-radius:14px; padding:10px; background:#fff8e5; border:1px solid #f7d770; margin-bottom:8px; font-size:11px; }
+    .conflict strong { display:block; font-size:12px; }
+    .conflict select { width:100%; margin-top:8px; border:1px solid var(--line); border-radius:10px; padding:7px; background:white; }
+    .conflictExamples { margin-top:10px; display:grid; gap:6px; }
+    .conflictExample { border-radius:10px; background:rgba(255,255,255,.7); border:1px solid rgba(247,215,112,.7); padding:8px; }
+    .columnResolver { display:grid; gap:8px; }
+    .columnChoice {
+      display:grid;
+      gap:8px;
+      grid-template-columns:minmax(180px, 1fr) 160px minmax(180px, 1fr);
+      align-items:center;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px;
+      background:#fffdf4;
+    }
+    .columnChoice strong { font-size:12px; overflow-wrap:anywhere; }
+    .columnChoice select, .columnChoice input {
+      width:100%;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:8px;
+      background:white;
+    }
+    .actions { display:grid; gap:8px; }
+    .error { color:#8a1212; background:#ffe6e6; border-radius:12px; padding:10px; font-size:12px; font-weight:700; }
+    .success { color:#164c2c; background:#e8f7e9; border-radius:12px; padding:10px; font-size:12px; font-weight:700; }
+    @media (max-width: 720px) {
+      main { grid-template-columns:1fr; }
+      .columnChoice { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header class="appHeader">
+    <div class="kicker">Schools Spectacular</div>
+    <h1>Import Centre</h1>
+    <div class="sub">Guided acceptance imports for Spec Central.</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="steps" id="steps"></div>
+    </section>
+
+    <section class="card">
+      <h2 class="sectionTitle">1. Import Type</h2>
+      <div class="typeGrid">
+        <button class="typeButton" id="type-auto" onclick="setType('auto')">Auto Detect</button>
+        <button class="typeButton" id="type-individual" onclick="setType('individual')">Individual Acceptances</button>
+        <button class="typeButton" id="type-group" onclick="setType('group')">Group Acceptances</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="sectionTitle">2. Upload File</h2>
+      <div class="dropZone" id="dropZone">
+        <strong>Drop CSV or XLSX here</strong><br>
+        <span>or browse for a file</span><br><br>
+        <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" onchange="handleFile(this.files[0])">
+        <div class="fileName" id="fileName"></div>
+      </div>
+      <p class="status">Files are parsed in this floating import window and analysed in memory. No temporary IMPORT sheet is created.</p>
+    </section>
+
+    <section class="card wide">
+      <h2 class="sectionTitle">3. Analyse And Preview</h2>
+      <div class="actions">
+        <button class="primary" id="analyseButton" onclick="analyseUpload()" disabled>Analyse Headers & Records</button>
+      </div>
+      <div id="analysisOutput" style="margin-top:12px;"></div>
+    </section>
+
+    <section class="card wide">
+      <h2 class="sectionTitle">4. Conflict Review</h2>
+      <div id="conflictOutput" class="status">Conflicts will appear after analysis.</div>
+    </section>
+
+    <section class="card wide">
+      <h2 class="sectionTitle">5. Confirm Import</h2>
+      <div class="actions">
+        <button class="primary" id="commitButton" onclick="commitImport()" disabled>Confirm Import</button>
+        <button class="warn" onclick="resetImport()">Start Again</button>
+      </div>
+      <div id="commitOutput" style="margin-top:12px;"></div>
+    </section>
+  </main>
+
+  <script>
+    const INITIAL_TYPE = "<?= initialImportType ?>";
+    const STORAGE_KEYS = {
+      importType: "specCentralImportType",
+      fieldDecisions: "specCentralImportFieldDecisions"
+    };
+
+    function getInitialImportType() {
+      if (INITIAL_TYPE === "group" || INITIAL_TYPE === "individual") return INITIAL_TYPE;
+      return localStorage.getItem(STORAGE_KEYS.importType) || "auto";
+    }
+
+    const state = {
+      importType: getInitialImportType(),
+      fileName: "",
+      rows: [],
+      analysis: null,
+      decisions: {
+        conflicts: {},
+        fields: {},
+        columns: {},
+        records: {}
+      },
+      step: 1
+    };
+
+    const stepLabels = [
+      "Select import type",
+      "Upload file",
+      "Analyse headers",
+      "Match records",
+      "Review columns",
+      "Preview changes",
+      "Confirm import",
+      "Summary"
+    ];
+
+    function init() {
+      setType(state.importType);
+      renderSteps();
+      bindDropZone();
+    }
+
+    function setType(type) {
+      state.importType = type === "group" || type === "individual" ? type : "auto";
+      localStorage.setItem(STORAGE_KEYS.importType, state.importType);
+      document.getElementById("type-auto").classList.toggle("active", state.importType === "auto");
+      document.getElementById("type-individual").classList.toggle("active", state.importType === "individual");
+      document.getElementById("type-group").classList.toggle("active", state.importType === "group");
+      state.step = Math.max(state.step, 1);
+      renderSteps();
+    }
+
+    function bindDropZone() {
+      const zone = document.getElementById("dropZone");
+      ["dragenter", "dragover"].forEach(name => zone.addEventListener(name, event => {
+        event.preventDefault();
+        zone.classList.add("drag");
+      }));
+      ["dragleave", "drop"].forEach(name => zone.addEventListener(name, event => {
+        event.preventDefault();
+        zone.classList.remove("drag");
+      }));
+      zone.addEventListener("drop", event => handleFile(event.dataTransfer.files[0]));
+    }
+
+    function renderSteps() {
+      document.getElementById("steps").innerHTML = stepLabels.map((label, index) => {
+        const number = index + 1;
+        const cls = number < state.step ? "step done" : number === state.step ? "step active" : "step";
+        return `<div class="${cls}"><div class="dot">${number < state.step ? "✓" : number}</div><div>${escapeHtml(label)}</div></div>`;
+      }).join("");
+    }
+
+    function handleFile(file) {
+      if (!file) return;
+      state.fileName = file.name;
+      document.getElementById("fileName").textContent = file.name;
+      document.getElementById("analysisOutput").innerHTML = `<div class="status">Reading ${escapeHtml(file.name)}...</div>`;
+
+      const extension = file.name.split(".").pop().toLowerCase();
+      const reader = new FileReader();
+
+      reader.onload = event => {
+        try {
+          if (extension === "csv") {
+            state.rows = parseCsv(String(event.target.result || ""));
+          } else {
+            if (!window.XLSX) throw new Error("XLSX parser did not load. Try CSV or reload the import window.");
+            const workbook = XLSX.read(new Uint8Array(event.target.result), { type: "array" });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            state.rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+          }
+
+          state.step = 3;
+          renderSteps();
+          document.getElementById("analyseButton").disabled = state.rows.length < 2;
+          document.getElementById("analysisOutput").innerHTML = `<div class="success">${escapeHtml(file.name)} loaded. ${state.rows.length - 1} data rows detected.</div>`;
+        } catch (err) {
+          showError("analysisOutput", err);
+        }
+      };
+
+      if (extension === "csv") reader.readAsText(file);
+      else reader.readAsArrayBuffer(file);
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let quoted = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const next = text[i + 1];
+
+        if (char === '"' && quoted && next === '"') {
+          cell += '"';
+          i++;
+        } else if (char === '"') {
+          quoted = !quoted;
+        } else if (char === "," && !quoted) {
+          row.push(cell);
+          cell = "";
+        } else if ((char === "\n" || char === "\r") && !quoted) {
+          if (char === "\r" && next === "\n") i++;
+          row.push(cell);
+          rows.push(row);
+          row = [];
+          cell = "";
+        } else {
+          cell += char;
+        }
+      }
+
+      row.push(cell);
+      rows.push(row);
+      return rows.filter(r => r.some(c => String(c || "").trim() !== ""));
+    }
+
+    function analyseUpload() {
+      state.step = 3;
+      renderSteps();
+      document.getElementById("analysisOutput").innerHTML = `<div class="status">Analysing upload...</div>`;
+      document.getElementById("commitButton").disabled = true;
+
+      google.script.run
+        .withSuccessHandler(result => {
+          state.analysis = result;
+          state.step = result.summary.recordsRequiringReview ? 5 : 6;
+          state.decisions = {
+            conflicts: {},
+            fields: loadRememberedFieldDecisions(result.detectedImportType || result.importType),
+            columns: getSuggestedColumnDecisions(result),
+            records: {}
+          };
+          renderSteps();
+          renderAnalysis(result);
+          renderConflicts(result);
+          document.getElementById("commitButton").disabled = false;
+        })
+        .withFailureHandler(error => showError("analysisOutput", error))
+        .importCentreAnalyseUpload({
+          importType: state.importType,
+          fileName: state.fileName,
+          rows: state.rows
+        });
+    }
+
+    function renderAnalysis(result) {
+      const s = result.summary;
+      const output = `
+        <div class="summaryGrid">
+          ${stat(s.recordsProcessed, "Processed")}
+          ${stat(s.recordsMatched, "Matched")}
+          ${stat(s.recordsToCreate, "To create")}
+          ${stat(s.recordsRequiringReview, "Review fields")}
+          ${stat(s.mappedColumns, "Mapped columns")}
+          ${stat(s.unresolvedColumns, "Unresolved columns")}
+          ${stat(s.skippedSourceRows || 0, "Ignored rows")}
+        </div>
+        <p class="status" style="margin:12px 0 0;">
+          Import type: ${escapeHtml(formatImportType(result.detectedImportType || result.importType))}
+          ${result.typeDetection && result.typeDetection.autoDetected ? ` · Auto-detected (${Math.round((result.typeDetection.confidence || 0) * 100)}% confidence)` : ""}
+          · Detected header row: ${escapeHtml(result.detectedHeaderRow || 1)}
+        </p>
+        <h3 class="sectionTitle" style="margin-top:14px;">Mapped Columns</h3>
+        <div class="pillList">${result.mapping.mapped.map(m => `<span class="pill">${escapeHtml(m.incomingHeader)} → ${escapeHtml(m.destinationHeader)}</span>`).join("") || `<span class="pill bad">No mapped columns</span>`}</div>
+        <h3 class="sectionTitle" style="margin-top:14px;">Unresolved Columns</h3>
+        ${renderColumnResolver(result)}
+        <h3 class="sectionTitle" style="margin-top:14px;">Preview</h3>
+        <div class="tableWrap">${renderPreviewTable(result.records.filter(record => record.match.action !== "create").slice(0, 50))}</div>
+        ${renderUnmatchedRecords(result)}
+      `;
+      document.getElementById("analysisOutput").innerHTML = output;
+    }
+
+    function renderUnmatchedRecords(result) {
+      const unmatched = result.records.filter(record => record.match.action === "create");
+      if (!unmatched.length) return "";
+
+      return `
+        <h3 class="sectionTitle" style="margin-top:14px;">Unmatched / New Records</h3>
+        <p class="status">These will be skipped on Confirm Import unless you explicitly create them or manually match them to an existing row.</p>
+        <div class="tableWrap">${renderPreviewTable(unmatched.slice(0, 80))}</div>
+      `;
+    }
+
+    function renderColumnResolver(result) {
+      const unresolved = (result.mapping.unresolved || []).filter(item => item.incomingHeader);
+      if (!unresolved.length) return `<div class="pillList"><span class="pill">None</span></div>`;
+
+      return `
+        <p class="status">Resolve any useful unmatched columns before confirming. Leave as ignored for columns you do not want to import.</p>
+        <div class="columnResolver">
+          ${unresolved.map(item => renderColumnChoice(item, result.destinationHeaders || [])).join("")}
+        </div>
+      `;
+    }
+
+    function renderColumnChoice(item, destinationHeaders) {
+      const key = String(item.incomingIndex);
+      const defaultName = item.incomingHeader || "New column";
+      const decision = state.decisions.columns[key] || {};
+      const selectedAction = decision.action || "ignore";
+      const destinationOptions = destinationHeaders.map(header =>
+        `<option value="${escapeAttr(header)}"${decision.destinationHeader === header ? " selected" : ""}>${escapeHtml(header)}</option>`
+      ).join("");
+
+      return `
+        <div class="columnChoice">
+          <strong>${escapeHtml(item.incomingHeader)}</strong>
+          <select onchange="setColumnResolution('${escapeAttr(key)}', this.value)">
+            <option value="ignore"${selectedAction === "ignore" ? " selected" : ""}>Do not import</option>
+            <option value="map"${selectedAction === "map" ? " selected" : ""}>Match to existing column</option>
+            <option value="add"${selectedAction === "add" ? " selected" : ""}>Add new column</option>
+          </select>
+          <div>
+            <select id="column-target-${escapeAttr(key)}" style="${selectedAction === "map" ? "" : "display:none;"}" onchange="setColumnTarget('${escapeAttr(key)}', this.value)">
+              <option value="">Choose destination column...</option>
+              ${destinationOptions}
+            </select>
+            <input id="column-new-${escapeAttr(key)}" style="${selectedAction === "add" ? "" : "display:none;"}" value="${escapeAttr(decision.newHeader || defaultName)}" oninput="setColumnNewHeader('${escapeAttr(key)}', this.value)">
+          </div>
+        </div>
+      `;
+    }
+
+    function getSuggestedColumnDecisions(result) {
+      const decisions = {};
+      ((result && result.mapping && result.mapping.unresolved) || []).forEach(item => {
+        if (item.suggestedDestinationHeader) {
+          decisions[String(item.incomingIndex)] = {
+            action: "map",
+            destinationHeader: item.suggestedDestinationHeader,
+            newHeader: item.incomingHeader || ""
+          };
+        }
+      });
+      return decisions;
+    }
+
+    function renderConflicts(result) {
+      const conflictsByField = {};
+      result.records.forEach(record => {
+        record.conflicts.forEach(conflict => {
+          const key = conflict.destinationHeader || conflict.canonicalField || conflict.canonicalLabel;
+          if (!conflictsByField[key]) {
+            conflictsByField[key] = {
+              field: key,
+              label: conflict.canonicalLabel,
+              destinationHeader: conflict.destinationHeader,
+              count: 0,
+              examples: []
+            };
+          }
+
+          conflictsByField[key].count++;
+          if (conflictsByField[key].examples.length < 5) {
+            conflictsByField[key].examples.push({ record, conflict });
+          }
+        });
+      });
+
+      const groups = Object.values(conflictsByField);
+      if (!groups.length) {
+        document.getElementById("conflictOutput").innerHTML = `<div class="success">No conflicting values detected. Blank destination fields may be safely filled on confirm.</div>`;
+        return;
+      }
+
+      document.getElementById("conflictOutput").innerHTML = `
+        <p class="status">Review by column. Pick how each field should behave across the whole upload; examples below show the kind of differences found.</p>
+        ${groups.map((group, index) => `
+        <div class="conflict">
+          <strong>${escapeHtml(group.label || group.destinationHeader)} · ${group.count} difference${group.count === 1 ? "" : "s"}</strong>
+          <select id="field-${index}" onchange="setFieldDecision('${escapeAttr(group.destinationHeader)}', this.value)">
+            ${fieldDecisionOptions(state.decisions.fields[group.destinationHeader] || "keep")}
+          </select>
+          <div class="conflictExamples">
+            ${group.examples.map(({ record, conflict }) => `
+              <div class="conflictExample">
+                <strong>Example row ${record.sourceRowNumber}</strong>
+                <div>Existing: ${escapeHtml(conflict.existingValue)}</div>
+                <div>Incoming: ${escapeHtml(conflict.incomingValue)}</div>
+                <div>Confidence: ${escapeHtml(conflict.confidence)}</div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `).join("")}
+      `;
+    }
+
+    function renderPreviewTable(records) {
+      if (!records.length) return `<div class="status" style="padding:12px;">No records found.</div>`;
+      return `
+        <table>
+          <thead><tr><th>Row</th><th>Incoming</th><th>Action</th><th>Confidence</th><th>Reason</th><th>Conflicts</th><th>Decision</th></tr></thead>
+          <tbody>
+            ${records.map(record => `
+              <tr>
+                <td>${record.sourceRowNumber}</td>
+                <td>${renderIncomingSummary(record)}</td>
+                <td>${escapeHtml(record.match.action || "create")}</td>
+                <td>${escapeHtml(record.match.confidence || "")}</td>
+                <td>${escapeHtml(record.match.reason || "")}</td>
+                <td>${record.conflicts.length}</td>
+                <td>${renderRecordDecision(record)}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderIncomingSummary(record) {
+      const incoming = record.incoming || {};
+      const lines = [
+        ["School", incoming.school || incoming.schoolCode],
+        ["Item", incoming.item],
+        ["Category", incoming.category || incoming.discipline],
+        ["Group", incoming.groupName]
+      ].filter(([, value]) => value);
+
+      if (!lines.length) {
+        return `<span class="status">No mapped incoming fields.</span>`;
+      }
+
+      return `
+        <div class="status incomingSummary">
+          ${lines.map(([label, value]) => `
+            <div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>
+          `).join("")}
+        </div>
+      `;
+    }
+
+    function renderRecordDecision(record) {
+      if (record.match.action === "update" && !record.requiresReview) {
+        return `<span class="pill">Use matched row ${record.match.rowNumber}</span>`;
+      }
+
+      const options = [];
+      if (record.match.action === "review") {
+        options.push(`<option value="">Choose action...</option>`);
+        if (record.match.rowNumber) options.push(`<option value="row:${record.match.rowNumber}">Use possible row ${record.match.rowNumber}</option>`);
+      } else if (record.match.rowNumber) {
+        options.push(`<option value="">Use proposed row ${record.match.rowNumber}</option>`);
+      }
+      if (record.match.action === "create") {
+        options.push(`<option value="">Skip for now</option>`);
+        options.push(`<option value="create">Create new record</option>`);
+      } else {
+        options.push(`<option value="create">Create new instead</option>`);
+      }
+      options.push(`<option value="skip">Skip record</option>`);
+      options.push(`<option value="manual">Manual row...</option>`);
+
+      const suggestions = (record.suggestions || []).slice(0, 3);
+      const suggestionHtml = suggestions.length ? `
+        <div class="status suggestionList">
+          <strong>Possible same-school matches:</strong>
+          ${suggestions.map(suggestion => `
+            <button
+              type="button"
+              class="suggestionButton"
+              onclick="chooseSuggestedRow('${escapeAttr(record.recordId)}', ${Number(suggestion.rowNumber)})"
+            >
+              <strong>Use row ${escapeHtml(suggestion.rowNumber)} · ${Math.round((Number(suggestion.score) || 0) * 100)}%</strong>
+              ${escapeHtml([
+                suggestion.school,
+                suggestion.item || suggestion.category,
+                suggestion.groupName,
+                suggestion.count ? suggestion.count + " students" : ""
+              ].filter(Boolean).join(" · "))}
+            </button>
+          `).join("")}
+        </div>
+      ` : "";
+
+      return `
+        <select id="record-decision-${escapeAttr(record.recordId)}" onchange="setRecordDecision('${escapeAttr(record.recordId)}', this.value)">
+          ${options.join("")}
+        </select>
+        <input
+          id="manual-${escapeAttr(record.recordId)}"
+          type="number"
+          min="2"
+          placeholder="Existing row #"
+          style="display:none;width:100%;margin-top:6px;border:1px solid var(--line);border-radius:10px;padding:7px;"
+          onchange="setManualRowDecision('${escapeAttr(record.recordId)}', this.value)"
+        >
+        ${suggestionHtml}
+      `;
+    }
+
+    function setFieldDecision(field, value) {
+      state.decisions.fields[field] = value || "keep";
+      rememberFieldDecisions(state.analysis && (state.analysis.detectedImportType || state.analysis.importType), state.decisions.fields);
+    }
+
+    function setColumnResolution(index, action) {
+      const target = document.getElementById("column-target-" + index);
+      const input = document.getElementById("column-new-" + index);
+      if (target) target.style.display = action === "map" ? "block" : "none";
+      if (input) input.style.display = action === "add" ? "block" : "none";
+
+      if (action === "ignore") {
+        delete state.decisions.columns[index];
+        return;
+      }
+
+      const existing = state.decisions.columns[index] || {};
+      const unresolved = state.analysis && state.analysis.mapping && state.analysis.mapping.unresolved
+        ? state.analysis.mapping.unresolved.find(item => String(item.incomingIndex) === String(index))
+        : null;
+
+      state.decisions.columns[index] = {
+        action,
+        destinationHeader: existing.destinationHeader || "",
+        newHeader: existing.newHeader || (unresolved && unresolved.incomingHeader) || ""
+      };
+    }
+
+    function setColumnTarget(index, destinationHeader) {
+      if (!destinationHeader) return;
+      const existing = state.decisions.columns[index] || { action: "map" };
+      state.decisions.columns[index] = Object.assign({}, existing, {
+        action: "map",
+        destinationHeader
+      });
+    }
+
+    function setColumnNewHeader(index, newHeader) {
+      const existing = state.decisions.columns[index] || { action: "add" };
+      state.decisions.columns[index] = Object.assign({}, existing, {
+        action: "add",
+        newHeader
+      });
+    }
+
+    function fieldDecisionOptions(selected) {
+      const options = [
+        ["keep", "Keep existing"],
+        ["incoming", "Use incoming"],
+        ["merge", "Merge values"]
+      ];
+
+      return options.map(([value, label]) =>
+        `<option value="${value}"${selected === value ? " selected" : ""}>${label}</option>`
+      ).join("");
+    }
+
+    function formatImportType(type) {
+      return type === "group" ? "Group acceptances" : "Individual acceptances";
+    }
+
+    function loadRememberedFieldDecisions(type) {
+      if (!type) return {};
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.fieldDecisions) || "{}");
+        return saved[type] || {};
+      } catch (err) {
+        return {};
+      }
+    }
+
+    function rememberFieldDecisions(type, decisions) {
+      if (!type) return;
+      try {
+        const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.fieldDecisions) || "{}");
+        saved[type] = decisions || {};
+        localStorage.setItem(STORAGE_KEYS.fieldDecisions, JSON.stringify(saved));
+      } catch (err) {}
+    }
+
+    function setRecordDecision(recordId, value) {
+      const input = document.getElementById("manual-" + recordId);
+      if (input) input.style.display = value === "manual" ? "block" : "none";
+
+      if (!value || value === "manual") {
+        delete state.decisions.records[recordId];
+      } else {
+        state.decisions.records[recordId] = value;
+      }
+    }
+
+    function setManualRowDecision(recordId, value) {
+      const row = Number(value);
+      if (row >= 2) {
+        state.decisions.records[recordId] = "row:" + row;
+      }
+    }
+
+    function chooseSuggestedRow(recordId, rowNumber) {
+      const row = Number(rowNumber);
+      if (row < 2) return;
+
+      state.decisions.records[recordId] = "row:" + row;
+
+      const select = document.getElementById("record-decision-" + recordId);
+      if (select) select.value = "manual";
+
+      const input = document.getElementById("manual-" + recordId);
+      if (input) {
+        input.style.display = "block";
+        input.value = row;
+      }
+    }
+
+    function commitImport() {
+      if (!state.analysis) return;
+      document.getElementById("commitOutput").innerHTML = `<div class="status">Writing approved changes...</div>`;
+      document.getElementById("commitButton").disabled = true;
+
+      google.script.run
+        .withSuccessHandler(result => {
+          state.step = 8;
+          renderSteps();
+          document.getElementById("commitOutput").innerHTML = `
+            <div class="success">
+              Import complete.<br>
+              Processed: ${result.recordsProcessed}<br>
+              Updated: ${result.recordsUpdated}<br>
+              Created: ${result.recordsCreated}<br>
+              Columns added: ${result.columnsAdded || 0}<br>
+              Skipped: ${result.recordsSkipped}
+            </div>
+          `;
+        })
+        .withFailureHandler(error => {
+          document.getElementById("commitButton").disabled = false;
+          showError("commitOutput", error);
+        })
+        .importCentreCommitImport({
+          analysis: state.analysis,
+          decisions: state.decisions
+        });
+    }
+
+    function resetImport() {
+      state.fileName = "";
+      state.rows = [];
+      state.analysis = null;
+      state.decisions = { conflicts: {}, fields: {}, columns: {}, records: {} };
+      state.step = 1;
+      document.getElementById("fileInput").value = "";
+      document.getElementById("fileName").textContent = "";
+      document.getElementById("analysisOutput").innerHTML = "";
+      document.getElementById("conflictOutput").innerHTML = "Conflicts will appear after analysis.";
+      document.getElementById("commitOutput").innerHTML = "";
+      document.getElementById("analyseButton").disabled = true;
+      document.getElementById("commitButton").disabled = true;
+      renderSteps();
+    }
+
+    function stat(value, label) {
+      return `<div class="stat"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
+    }
+
+    function showError(id, error) {
+      const message = error && error.message ? error.message : String(error || "Unknown error");
+      document.getElementById(id).innerHTML = `<div class="error">${escapeHtml(message)}</div>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value === undefined || value === null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/'/g, "\\'");
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<template id="page-rehearsals">
+  <section class="panel">
+    <div class="calendarToolbar">
+      <div>
+        <h3 class="sectionTitle">Rehearsals</h3>
+        <div class="moduleMeta">Operational rehearsal view from Timeline data.</div>
+      </div>
+      <div class="toolbarActions">
+        <button class="quickLink compact" type="button" onclick="App.setRehearsalMode('upcoming')">Upcoming</button>
+        <button class="quickLink compact" type="button" onclick="App.setRehearsalMode('today')">Today</button>
+        <button class="quickLink compact" type="button" onclick="App.setRehearsalMode('past')">Passed</button>
+      </div>
+    </div>
+    <div class="filterRow">
+      <input id="rehearsalSearch" class="participantSearch" type="search" placeholder="Search rehearsal, venue, category or item..." oninput="App.renderRehearsalsPage()">
+      <select id="rehearsalVenueFilter" class="filterSelect" onchange="App.renderRehearsalsPage()"></select>
+      <select id="rehearsalTypeFilter" class="filterSelect" onchange="App.renderRehearsalsPage()"></select>
+    </div>
+    <div id="rehearsalListFull" class="dateList"></div>
+  </section>
+
+  <section class="panel">
+    <h3 class="sectionTitle">Rehearsal Detail</h3>
+    <div id="calendarEventDetail" class="empty">Select a rehearsal to see details.</div>
+  </section>
+</template>

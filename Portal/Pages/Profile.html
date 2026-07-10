@@ -1,0 +1,1220 @@
+<script>
+    function disciplineColour(name) {
+      const key = String(name || '').toLowerCase();
+      if (key.includes('dance')) return '#2d67b2';
+      if (key.includes('drama')) return '#bb529e';
+      if (key.includes('choir') || key.includes('vocal')) return '#9dd085';
+      if (key.includes('orchestra') || key.includes('band') || key.includes('instrument')) return '#f79420';
+      if (key.includes('circus')) return '#ef4343';
+      if (key.includes('aboriginal')) return '#7b5c2e';
+      return '#667085';
+    }
+
+    function openProfile(index) {
+      const p = latestResults[index];
+      if (!p) return;
+
+      if (p.resultType === "school") {
+        openSchoolProfile(getSchoolName(p));
+        return;
+      }
+
+      if (p.resultType === "group") {
+        openGroupProfile(index);
+        return;
+      }
+
+      if (p.resultType === "item") {
+        openItemProfile(p.itemName);
+        return;
+      }
+
+      if (p.resultType === "teacher") {
+        openTeacherProfile(p.teacherEmail || p.teacherName);
+        return;
+      }
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      const name = fullName(p) || "Unnamed participant";
+      const photoUrl = p.photoUrl || getParticipantPhotoUrl(p);
+      const year = getParticipantYear(p);
+      const discipline = getParticipantCategory(p);
+      const subDiscipline = getParticipantCategoryDetail(p);
+      const item = getParticipantItem(p);
+      const teacherName = getParticipantTeacherName(p);
+      const teacherEmail = getParticipantTeacherEmail(p);
+      const parentPhone = getParticipantParentPhone(p);
+      const yearLine = [getParticipantSchool(p), year ? "Year " + year : ""].filter(Boolean).join(" · ");
+      const disciplineLine = [discipline, subDiscipline].filter(Boolean).join(" · ");
+      const itemLine = [item, disciplineLine].filter(Boolean).join(" · ");
+      const familyEmails = [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].filter(Boolean).join(";");
+      const sharedStudentPhone = isSamePhone(getParticipantStudentMobile(p), parentPhone) || isSamePhone(getParticipantStudentMobile(p), getParticipantAdditionalParentPhone(p));
+
+      saveRecentlyViewed({
+        type: "participant",
+        key: `participant:${getParticipantRecentKey(p)}`,
+        participantKey: getParticipantRecentKey(p),
+        label: name,
+        meta: [getParticipantSchool(p), item].filter(Boolean).join(" · ")
+      });
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero profileHero--student">
+            <div style="display:flex;justify-content:center;margin-bottom:16px;">
+              ${photoUrl
+                ? `<img src="${escapeHtml(photoUrl)}" style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid rgba(255,255,255,.35);box-shadow:0 8px 24px rgba(0,0,0,.18);">`
+                : `<div class="avatar" style="width:110px;height:110px;font-size:34px;margin:0 auto;">${escapeHtml(getInitials(p))}</div>`}
+            </div>
+            <h2>${escapeHtml(name)}</h2>
+            <div>${escapeHtml(yearLine)}</div>
+            ${disciplineLine ? `<div class="disciplineBadge" style="background:${disciplineColour(discipline)}">${escapeHtml(disciplineLine)}</div>` : ""}
+          </div>
+
+          <div class="profileBody">
+            <div class="profileActions">
+              ${familyEmails ? `<button class="actionButton" onclick="copyText('${escapeJs(familyEmails)}')">Copy family emails</button>` : ""}
+              ${teacherEmail ? `<button class="actionButton" onclick="copyText('${escapeJs(teacherEmail)}')">Copy teacher email</button>` : ""}
+              ${teacherEmail ? `<button class="actionButton" onclick="openEmail('${escapeJs(teacherEmail)}')">Email teacher</button>` : ""}
+              ${parentPhone ? `<button class="actionButton" onclick="copyText('${escapeJs(parentPhone)}')">Copy parent phone</button>` : ""}
+            </div>
+
+            <div class="sectionTitle">Participation</div>
+            <div class="profileSection">
+              ${itemLinkLine(item)}
+              ${infoLine("", "Category", disciplineLine)}
+            </div>
+
+            <div class="sectionTitle">School & Teacher</div>
+            <div class="profileSection">
+              ${schoolLinkLine(getParticipantSchool(p))}
+              ${infoLine("", "Year", year ? "Year " + year : "")}
+              ${teacherLinkLine(teacherName, teacherEmail)}
+              ${infoLine("", "Teacher Email", teacherEmail)}
+            </div>
+
+            <div class="sectionTitle">Student Details</div>
+            <div class="profileSection">
+              ${infoLine("", "Student Email", getParticipantStudentEmail(p))}
+              ${infoLine("", "Student Mobile", getParticipantStudentMobile(p), sharedStudentPhone ? "Shared with parent/carer" : "")}
+              ${infoLine("", "Student ID", getParticipantStudentId(p))}
+              ${infoLine("", "SRN", getParticipantSrn(p))}
+            </div>
+
+            <div class="sectionTitle">Parents / Carers</div>
+            <div class="profileSection">
+              ${parentCard("Parent / Carer 1", getParticipantParentName(p), "", getParticipantParentEmail(p), parentPhone)}
+              ${parentCard("Parent / Carer 2", getParticipantAdditionalParentName(p), getParticipantAdditionalParentRelationship(p), getParticipantAdditionalParentEmail(p), getParticipantAdditionalParentPhone(p))}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function showSearch() {
+      profileView.style.display = "none";
+      searchView.style.display = "block";
+      profileSearchInput.value = "";
+      selectedResultIndex = -1;
+      setDashboardVisible(!String(searchInput.value || "").trim());
+      updateSelectedResult();
+      searchInput.focus();
+    }
+
+    function profileQuickSearch(value) {
+      const query = String(value || "").trim();
+      if (query.length < 2) return;
+
+      profileView.style.display = "none";
+      searchView.style.display = "block";
+      setDashboardVisible(false);
+      searchInput.value = query;
+      searchInput.focus();
+      runSearch();
+    }
+
+    function exportCurrentSchoolEmails() {
+      copyText(getEmailsForParticipants(window.currentSchoolParticipants || []).join(";"));
+    }
+
+    function exportCurrentItemEmails() {
+      copyText(getEmailsForParticipants(window.currentItemParticipants || []).join(";"));
+    }
+
+    function exportCurrentCategoryEmails(category, source) {
+      copyText(getEmailsForParticipants(getCurrentCategoryParticipants(category, source)).join(";"));
+    }
+
+    function exportCurrentSchoolContacts() {
+      exportParticipantContactsCsv(window.currentSchoolParticipants || [], "school-contacts");
+    }
+
+    function exportCurrentItemContacts() {
+      exportParticipantContactsCsv(window.currentItemParticipants || [], "item-contacts");
+    }
+
+    function exportCurrentCategoryContacts(category, source) {
+      exportParticipantContactsCsv(getCurrentCategoryParticipants(category, source), `${category || "category"}-contacts`);
+    }
+
+    function getCurrentCategoryParticipants(category, source) {
+      const target = String(category || "").trim().toLowerCase();
+      const participants = source === "item"
+        ? (window.currentItemParticipants || [])
+        : (window.currentSchoolParticipants || []);
+
+      return participants.filter(p => String(getParticipantCategory(p) || "Unspecified").trim().toLowerCase() === target);
+    }
+
+    function getEmailsForParticipants(participants) {
+      const emails = new Set();
+
+      (participants || []).forEach(p => {
+        [
+          getParticipantStudentEmail(p),
+          getParticipantParentEmail(p),
+          getParticipantAdditionalParentEmail(p),
+          getParticipantTeacherEmail(p)
+        ].forEach(email => {
+          const value = String(email || "").trim();
+          if (value) emails.add(value);
+        });
+      });
+
+      return Array.from(emails).sort();
+    }
+
+    function getEmailCountForParticipants(participants) {
+      return getEmailsForParticipants(participants).length;
+    }
+
+    function exportParticipantContactsCsv(participants, filenamePrefix) {
+      const rows = (participants || []).map(p => ({
+        "Participant Name": fullName(p),
+        "School": getParticipantSchool(p),
+        "Year": getParticipantYear(p),
+        "Item": getParticipantItem(p),
+        "Category": getParticipantCategory(p),
+        "Student Email": getParticipantStudentEmail(p),
+        "Student Mobile": getParticipantStudentMobile(p),
+        "Parent / Carer 1": getParticipantParentName(p),
+        "Parent Email 1": getParticipantParentEmail(p),
+        "Parent Phone 1": getParticipantParentPhone(p),
+        "Parent / Carer 2": getParticipantAdditionalParentName(p),
+        "Parent Email 2": getParticipantAdditionalParentEmail(p),
+        "Parent Phone 2": getParticipantAdditionalParentPhone(p),
+        "Teacher Name": getParticipantTeacherName(p),
+        "Teacher Email": getParticipantTeacherEmail(p)
+      }));
+
+      downloadCsv(rows, filenamePrefix);
+    }
+
+    function downloadCsv(rows, filenamePrefix) {
+      if (!rows.length) return;
+
+      const headers = Object.keys(rows[0]);
+      const csv = [
+        headers.map(escapeCsvCell).join(","),
+        ...rows.map(row => headers.map(header => escapeCsvCell(row[header])).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${slugifyFilename(filenamePrefix || "spec-central-contacts")}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeCsvCell(value) {
+      const text = String(value || "");
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function slugifyFilename(value) {
+      return String(value || "spec-central-export")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "spec-central-export";
+    }
+
+    function openSchoolProfile(schoolName) {
+      const target = String(schoolName || "").trim();
+      if (!target) return;
+
+      saveRecentlyViewed({
+        type: "school",
+        key: `school:${target.toLowerCase()}`,
+        schoolName: target,
+        label: target,
+        meta: "School"
+      });
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+      profileEl.innerHTML = `<div class="empty">Loading school profile...</div>`;
+
+      if (!portalReady) {
+        profileEl.innerHTML = `<div class="empty">Still loading participant data...</div>`;
+        return;
+      }
+
+      showSchoolProfile(buildSchoolProfileLocally(target));
+    }
+
+    function buildSchoolProfileLocally(schoolName) {
+      const target = String(schoolName || "").trim();
+      const targetLower = target.toLowerCase();
+      const participants = participantsBySchool.get(targetLower) || [];
+
+      const groups = groupsBySchool.get(targetLower) || [];
+
+      const master = allSchools.find(s =>
+        String(getSchoolName(s) || "").trim().toLowerCase() === target.toLowerCase()
+      ) || null;
+
+      const teacherMap = new Map();
+      const itemMap = new Map();
+      const disciplineMap = new Map();
+      const teacherEmails = new Set();
+      const familyEmails = new Set();
+
+      participants.forEach(p => {
+        const teacherKey = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
+
+        if (teacherKey && !teacherMap.has(teacherKey)) {
+          teacherMap.set(teacherKey, {
+            name: getParticipantTeacherName(p) || "",
+            email: getParticipantTeacherEmail(p) || ""
+          });
+        }
+
+        if (getParticipantTeacherEmail(p)) teacherEmails.add(getParticipantTeacherEmail(p));
+
+        [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].forEach(email => {
+          if (email) familyEmails.add(email);
+        });
+
+        const discipline = getParticipantCategory(p) || "Unspecified";
+        if (!disciplineMap.has(discipline)) {
+          disciplineMap.set(discipline, {
+            name: discipline,
+            count: 0,
+            items: new Set()
+          });
+        }
+
+        const disciplineRecord = disciplineMap.get(discipline);
+        disciplineRecord.count++;
+
+        const item = getParticipantItem(p);
+        if (item) {
+          disciplineRecord.items.add(item);
+
+          if (!itemMap.has(item)) {
+            itemMap.set(item, {
+              name: item,
+              discipline: getParticipantCategory(p) || "",
+              count: 0
+            });
+          }
+          itemMap.get(item).count++;
+        }
+      });
+
+      return {
+        schoolName: target,
+        master: master,
+        groups: groups,
+        groupCount: groups.length,
+        participantCount: participants.length,
+        teacherCount: teacherMap.size,
+        itemCount: itemMap.size,
+        teachers: Array.from(teacherMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        items: Array.from(itemMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        disciplines: Array.from(disciplineMap.values()).map(d => ({
+          name: d.name,
+          count: d.count,
+          items: Array.from(d.items).sort()
+        })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        participants: participants.sort((a, b) => String(fullName(a)).localeCompare(String(fullName(b)))),
+        teacherEmails: Array.from(teacherEmails).sort(),
+        familyEmails: Array.from(familyEmails).sort()
+      };
+    }
+
+    function buildItemProfileLocally(itemName) {
+      const target = String(itemName || "").trim();
+      const targetKey = getItemKey(target);
+      const participants = (allParticipants || []).filter(p => getItemKey(getParticipantItem(p)) === targetKey);
+      const groups = (allGroups || []).filter(g => getItemKey(g.item || g.groupName) === targetKey);
+
+      const schoolMap = new Map();
+      const teacherMap = new Map();
+      const disciplineMap = new Map();
+      const teacherEmails = new Set();
+      const familyEmails = new Set();
+
+      function addItemCategory(categoryName, schoolName, count) {
+        const category = String(categoryName || "Unspecified").trim() || "Unspecified";
+        if (!disciplineMap.has(category)) {
+          disciplineMap.set(category, {
+            name: category,
+            count: 0,
+            schools: new Set()
+          });
+        }
+
+        const record = disciplineMap.get(category);
+        record.count += Number(count) || 0;
+        if (schoolName) record.schools.add(schoolName);
+      }
+
+      groups.forEach(group => {
+        const schoolKey = String(group.school || "Unknown school").trim();
+        const count = Number(getGroupStudentCount(group)) || 0;
+        if (!schoolMap.has(schoolKey)) {
+          schoolMap.set(schoolKey, {
+            name: schoolKey,
+            count: 0,
+            acceptedCount: 0,
+            allocatedCount: 0,
+            notAcceptedYet: false
+          });
+        }
+
+        const record = schoolMap.get(schoolKey);
+        record.count += count;
+        if (group.acceptedCount) {
+          record.acceptedCount += Number(group.acceptedCount) || 0;
+        } else {
+          record.allocatedCount += Number(group.allocatedCount || group.count) || 0;
+          record.notAcceptedYet = true;
+        }
+
+        const teacherKey = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
+        if (teacherKey && !teacherMap.has(teacherKey)) {
+          teacherMap.set(teacherKey, {
+            name: group.teacherName || "",
+            email: group.teacherEmail || ""
+          });
+        }
+        if (group.teacherEmail) teacherEmails.add(group.teacherEmail);
+
+        addItemCategory(group.category || group.discipline, schoolKey, count);
+      });
+
+      participants.forEach(p => {
+        const schoolKey = String(getParticipantSchool(p) || "Unknown school").trim();
+        if (!schoolMap.has(schoolKey)) {
+          schoolMap.set(schoolKey, { name: schoolKey, count: 0, acceptedCount: 0, allocatedCount: 0, notAcceptedYet: false });
+        }
+        schoolMap.get(schoolKey).count++;
+
+        const teacherKey = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
+        if (teacherKey && !teacherMap.has(teacherKey)) {
+          teacherMap.set(teacherKey, {
+            name: getParticipantTeacherName(p) || "",
+            email: getParticipantTeacherEmail(p) || ""
+          });
+        }
+
+        if (getParticipantTeacherEmail(p)) teacherEmails.add(getParticipantTeacherEmail(p));
+
+        [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].forEach(email => {
+          if (email) familyEmails.add(email);
+        });
+
+        const discipline = getParticipantCategory(p) || "Unspecified";
+        addItemCategory(discipline, schoolKey, 1);
+      });
+
+      return {
+        itemName: target,
+        participantCount: groups.length ? Array.from(schoolMap.values()).reduce((total, school) => total + (Number(school.count) || 0), 0) : participants.length,
+        schoolCount: schoolMap.size,
+        teacherCount: teacherMap.size,
+        groups,
+        schools: Array.from(schoolMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        teachers: Array.from(teacherMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        disciplines: Array.from(disciplineMap.values()).map(d => ({
+          name: d.name,
+          count: d.count,
+          schoolCount: d.schools.size
+        })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        participants: participants.sort((a, b) => String(fullName(a)).localeCompare(String(fullName(b)))),
+        teacherEmails: Array.from(teacherEmails).sort(),
+        familyEmails: Array.from(familyEmails).sort()
+      };
+    }
+
+    function buildTeacherProfileLocally(teacherKey) {
+      const target = String(teacherKey || "").trim().toLowerCase();
+      const participants = participantsByTeacher.get(target) || [];
+
+      const groups = allGroups.filter(g => {
+        const email = String(g.teacherEmail || "").trim().toLowerCase();
+        const name = String(g.teacherName || "").trim().toLowerCase();
+        const secondEmail = String(g.secondTeacherEmail || "").trim().toLowerCase();
+        const secondName = String(g.secondTeacherName || "").trim().toLowerCase();
+        return target && (email === target || name === target || secondEmail === target || secondName === target);
+      });
+
+      const firstParticipant = participants[0] || {};
+      const firstGroup = groups[0] || {};
+      const contactRecords = groups.map(g => getTeacherContactForGroup(g, target)).filter(Boolean);
+      const firstContact = contactRecords[0] || {};
+      const teacherName = getParticipantTeacherName(firstParticipant) || firstContact.name || firstGroup.teacherName || teacherKey;
+      const teacherEmail = getParticipantTeacherEmail(firstParticipant) || firstContact.email || firstGroup.teacherEmail || "";
+      const teacherMobile = formatPhoneNumber(firstContact.mobile || "");
+      const teacherRole = firstContact.role || "";
+      const contactTypes = Array.from(new Set(contactRecords.map(c => c.contactType).filter(Boolean)));
+      const alumniRecords = contactRecords.filter(c => isAffirmative(c.isSpecAlumni) || c.specRoles);
+      const specRoles = Array.from(new Set(alumniRecords.map(c => c.specRoles).filter(Boolean)));
+      const isFirstTime = contactRecords.some(c => isAffirmative(c.firstTime));
+
+      const schoolMap = new Map();
+      const itemMap = new Map();
+      const familyEmails = new Set();
+
+      participants.forEach(p => {
+        const school = getParticipantSchool(p);
+        const item = getParticipantItem(p);
+        if (school) schoolMap.set(school, (schoolMap.get(school) || 0) + 1);
+        if (item) itemMap.set(item, (itemMap.get(item) || 0) + 1);
+        [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].forEach(email => {
+          if (email) familyEmails.add(email);
+        });
+      });
+
+      groups.forEach(g => {
+        if (g.school) schoolMap.set(g.school, (schoolMap.get(g.school) || 0) + 1);
+        if (g.item) itemMap.set(g.item, (itemMap.get(g.item) || 0) + 1);
+      });
+
+      return {
+        teacherName,
+        teacherEmail,
+        teacherMobile,
+        teacherRole,
+        contactTypes,
+        isSpecAlumni: alumniRecords.length > 0,
+        specRoles,
+        isFirstTime,
+        participants: participants.sort((a, b) => String(fullName(a)).localeCompare(String(fullName(b)))),
+        groups,
+        participantCount: participants.length,
+        groupCount: groups.length,
+        schoolCount: schoolMap.size,
+        itemCount: itemMap.size,
+        schools: Array.from(schoolMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        items: Array.from(itemMap.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+        familyEmails: Array.from(familyEmails).sort()
+      };
+    }
+
+    function getTeacherContactForGroup(group, target) {
+      const primaryEmail = String(group.teacherEmail || "").trim().toLowerCase();
+      const primaryName = String(group.teacherName || "").trim().toLowerCase();
+      const secondEmail = String(group.secondTeacherEmail || "").trim().toLowerCase();
+      const secondName = String(group.secondTeacherName || "").trim().toLowerCase();
+
+      if (target && (primaryEmail === target || primaryName === target)) {
+        return {
+          contactType: group.teacherContactType || "Primary contact",
+          name: group.teacherName || "",
+          email: group.teacherEmail || "",
+          mobile: formatPhoneNumber(group.teacherMobile || ""),
+          role: group.teacherRole || "",
+          isSpecAlumni: group.teacherIsSpecAlumni || "",
+          specRoles: group.teacherSpecRoles || "",
+          firstTime: group.teacherFirstTime || ""
+        };
+      }
+
+      if (target && (secondEmail === target || secondName === target)) {
+        return {
+          contactType: group.secondTeacherContactType || "Second contact",
+          name: group.secondTeacherName || "",
+          email: group.secondTeacherEmail || "",
+          mobile: formatPhoneNumber(group.secondTeacherMobile || ""),
+          role: group.secondTeacherRole || "",
+          isSpecAlumni: group.secondTeacherIsSpecAlumni || "",
+          specRoles: group.secondTeacherSpecRoles || "",
+          firstTime: ""
+        };
+      }
+
+      return null;
+    }
+
+    function isAffirmative(value) {
+      return /^(yes|y|true|1)$/i.test(String(value || "").trim());
+    }
+
+    function openTeacherProfile(teacherKey) {
+      const target = String(teacherKey || "").trim();
+      if (!target) return;
+
+      saveRecentlyViewed({
+        type: "teacher",
+        key: `teacher:${target.toLowerCase()}`,
+        teacherKey: target,
+        label: target,
+        meta: "Teacher"
+      });
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      if (!portalReady) {
+        profileEl.innerHTML = `<div class="empty">Still loading participant data...</div>`;
+        return;
+      }
+
+      const teacher = buildTeacherProfileLocally(target);
+      window.currentTeacherParticipants = teacher.participants || [];
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero profileHero--teacher">
+            <div class="kicker">Teacher Passport</div>
+            <h2>${escapeHtml(teacher.teacherName || "Teacher")}</h2>
+            ${teacher.teacherEmail ? `<div>${escapeHtml(teacher.teacherEmail)}</div>` : ""}
+            <div class="pillRow" style="justify-content:center;margin-top:12px;">
+              ${(teacher.contactTypes || []).map(type => `<span class="pill">${escapeHtml(type)}</span>`).join("")}
+              ${teacher.isSpecAlumni ? `<span class="pill">Spec Alumni</span>` : ""}
+              ${teacher.isFirstTime ? `<span class="pill">1st Time</span>` : ""}
+            </div>
+            <div class="schoolStats">
+              ${schoolStat(teacher.groupCount, "Groups", "teacher-groups")}
+              ${schoolStat(teacher.schoolCount, "Schools", "teacher-schools")}
+              ${schoolStat(teacher.itemCount, "Items", "teacher-items")}
+            </div>
+          </div>
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${teacher.teacherEmail ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(teacher.teacherEmail)}')">Copy teacher email<span class="schoolActionLabel">1 address</span></button>` : ""}
+              ${teacher.teacherMobile ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(teacher.teacherMobile)}')">Copy teacher mobile<span class="schoolActionLabel">${escapeHtml(teacher.teacherMobile)}</span></button>` : ""}
+              ${teacher.familyEmails && teacher.familyEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(teacher.familyEmails.join(';'))}')">Copy family emails<span class="schoolActionLabel">${teacher.familyEmails.length} address${teacher.familyEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+            </div>
+
+            <div class="sectionTitle">Contact Details</div>
+            <div class="profileSection">
+              ${infoLine("", "Email", teacher.teacherEmail)}
+              ${infoLine("", "Mobile", teacher.teacherMobile)}
+              ${infoLine("", "Role at school", teacher.teacherRole)}
+              ${infoLine("", "Contact type", (teacher.contactTypes || []).join(", "))}
+              ${teacher.isFirstTime ? infoLine("", "Spec experience", "1st Time") : ""}
+              ${teacher.isSpecAlumni ? infoLine("", "Spec Alumni", "Yes") : ""}
+              ${(teacher.specRoles || []).map(role => infoLine("", "Previous Spec role", role)).join("")}
+            </div>
+
+            <div class="sectionTitle">Schools</div>
+            <div id="teacher-schools" class="profileSection">
+              ${(teacher.schools || []).map(renderTeacherSchoolCard).join("") || `<div class="empty">No schools found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Items</div>
+            <div id="teacher-items" class="profileSection">
+              ${(teacher.items || []).map(renderTeacherItemCard).join("") || `<div class="empty">No items found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Groups</div>
+            <div id="teacher-groups" class="profileSection">
+              ${(teacher.groups || []).map(renderSchoolGroupCard).join("") || `<div class="empty">No group records found.</div>`}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function showSchoolProfile(school) {
+      if (!school) {
+        profileEl.innerHTML = `<div class="empty">School profile not found.</div>`;
+        return;
+      }
+
+      window.currentSchoolParticipants = school.participants || [];
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero profileHero--school">
+            <div class="kicker">School Passport</div>
+            <h2>${escapeHtml(getSchoolName(school))}</h2>
+            <div class="schoolStats">
+              ${schoolStat(school.participantCount, "Participants", "school-participants")}
+              ${schoolStat(school.teacherCount, "Teachers", "school-teachers")}
+              ${schoolStat(school.itemCount, "Items", "school-items")}
+              ${schoolStat(school.groupCount, "Groups", "school-groups")}
+              ${schoolStat((school.disciplines || []).length, "Categories", "school-categories")}
+            </div>
+            ${school.master ? `<div style="margin-top:14px;font-size:13px;line-height:1.5;opacity:.98;">
+              ${school.master.code ? `<div><strong>Code:</strong> ${escapeHtml(school.master.code)}</div>` : ""}
+              ${school.master.directorate ? `<div><strong>Directorate:</strong> ${escapeHtml(school.master.directorate)}</div>` : ""}
+              ${school.master.schoolEmail ? `<div><strong>Email:</strong> ${escapeHtml(school.master.schoolEmail)}</div>` : ""}
+            </div>` : ""}
+          </div>
+
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${school.participants && school.participants.length ? `<button class="schoolActionButton" onclick="exportCurrentSchoolEmails()">Export emails<span class="schoolActionLabel">${getEmailCountForParticipants(school.participants)} addresses</span></button>` : ""}
+              ${school.participants && school.participants.length ? `<button class="schoolActionButton" onclick="exportCurrentSchoolContacts()">Export spreadsheet of contacts<span class="schoolActionLabel">CSV download</span></button>` : ""}
+              ${school.teacherEmails && school.teacherEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(school.teacherEmails.join(';'))}')">Copy teacher emails<span class="schoolActionLabel">${school.teacherEmails.length} address${school.teacherEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+              ${school.familyEmails && school.familyEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(school.familyEmails.join(';'))}')">Copy family emails<span class="schoolActionLabel">${school.familyEmails.length} address${school.familyEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+            </div>
+            <div class="sectionTitle">Groups</div>
+            <div id="school-groups" class="profileSection">
+              ${(school.groups || []).map(renderSchoolGroupCard).join("") || `<div class="empty">No group records found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Teachers</div>
+            <div id="school-teachers" class="profileSection">
+              ${(school.teachers || []).map(renderSchoolTeacherCard).join("") || `<div class="empty">No teachers found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Categories</div>
+            <div id="school-categories" class="profileSection">
+              ${(school.disciplines || []).map(renderDisciplineTile).join("") || `<div class="empty">No categories found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Items</div>
+            <div id="school-items" class="profileSection">
+              ${(school.items || []).map(renderSchoolItemCard).join("") || `<div class="empty">No items found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Participants</div>
+            <div id="school-participants" class="profileSection">
+              ${(school.participants || []).map(renderSchoolParticipantCard).join("") || `<div class="empty">No participants found.</div>`}
+            </div>
+          </div>
+        </div>`;
+    }
+
+
+
+    function renderSchoolTeacherCard(teacher) {
+      const label = teacher.name || teacher.email || "Unnamed teacher";
+      return `
+        <div class="schoolItemCard schoolTeacherCard" onclick="openTeacherProfile('${escapeJs(teacher.email || teacher.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(label)}</div>
+          ${teacher.email ? `<div class="schoolItemMeta">${escapeHtml(teacher.email)}</div>` : ""}
+        </div>
+      `;
+    }
+
+    function renderSchoolMasterCard(master) {
+      if (!master) return "";
+      return `
+        <div class="sectionTitle">School Details</div>
+        <div class="profileSection">
+          <div class="sectionHeader">School Master Dataset</div>
+          ${infoLine("", "School Code", master.code)}
+          ${infoLine("", "School Email", master.schoolEmail)}
+          ${infoLine("", "Directorate", master.directorate)}
+        </div>
+      `;
+    }
+
+    function classroomBlock(classroom) {
+      if (!classroom) return "";
+      const value = String(classroom || "").trim();
+      const isLink = /^https?:\/\//i.test(value);
+
+      return `
+        <div style="margin-top:8px;padding:8px 10px;border-radius:12px;background:#eef4ff;color:var(--blue);font-size:12px;line-height:1.35;overflow-wrap:anywhere;">
+          <div style="font-weight:800;font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Google Classroom</div>
+          ${isLink
+            ? `<a class="linkValue" href="${escapeHtml(value)}" target="_blank">Open classroom link</a>`
+            : escapeHtml(value)}
+        </div>
+      `;
+    }
+
+
+    function renderSchoolGroupCard(group) {
+      const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
+      const meta = [group.category, group.count ? group.count + " students" : "", group.teacherName].filter(Boolean).join(" · ");
+      return `
+        <div class="schoolItemCard" ${group.item ? `onclick="openItemProfile('${escapeJs(group.item)}')"` : ""}>
+          <div class="schoolItemTitle">${escapeHtml(title)}</div>
+          <div class="schoolItemMeta">${escapeHtml(meta)}</div>
+          ${group.teacherEmail ? `<div class="schoolItemMeta">${escapeHtml(group.teacherEmail)}</div>` : ""}
+          ${classroomBlock(group.classroom)}
+        </div>
+      `;
+    }
+
+    function openGroupProfile(index) {
+      const result = latestResults[index];
+      if (!result || result.resultType !== "group") return;
+
+      const group = result.group || {};
+      const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
+      saveRecentlyViewed({
+        type: "group",
+        key: `group:${getGroupRecentKey(group)}`,
+        groupKey: getGroupRecentKey(group),
+        label: title,
+        meta: [group.school, group.teacherName].filter(Boolean).join(" · ") || "Group"
+      });
+
+      const students = group.item ? (participantsByItem.get(String(group.item || "").toLowerCase()) || []) : [];
+      const matchingStudents = students.filter(p => String(getParticipantSchool(p) || "").trim().toLowerCase() === String(group.school || "").trim().toLowerCase());
+      const teacherKey = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
+      const teacherStudents = teacherKey
+        ? matchingStudents.filter(p => {
+            const pTeacher = String(getParticipantTeacherEmail(p) || getParticipantTeacherName(p) || "").trim().toLowerCase();
+            return pTeacher === teacherKey;
+          })
+        : matchingStudents;
+
+      window.currentGroupParticipants = teacherStudents.length ? teacherStudents : matchingStudents;
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      const classroom = group.classroom || "";
+      const classroomButton = classroom
+        ? (/^https?:\/\//i.test(String(classroom))
+          ? `<button class="schoolActionButton" onclick="window.open('${escapeJs(classroom)}','_blank')">Open Google Classroom<span class="schoolActionLabel">Classroom link</span></button>`
+          : `<button class="schoolActionButton" onclick="copyText('${escapeJs(classroom)}')">Copy Google Classroom<span class="schoolActionLabel">Code / details</span></button>`)
+        : "";
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero profileHero--group">
+            <div class="kicker">Group Passport</div>
+            <h2>${escapeHtml(title)}</h2>
+            ${group.school ? `<div>${escapeHtml(group.school)}</div>` : ""}
+            <div class="schoolStats">
+              ${schoolStat(group.count || window.currentGroupParticipants.length, "Students", "group-students")}
+              ${schoolStat(group.category ? 1 : 0, "Category", "group-details")}
+              ${schoolStat(group.teacherName || group.teacherEmail ? 1 : 0, "Teacher", "group-teacher")}
+              ${schoolStat(classroom ? 1 : 0, "Classroom", "group-classroom")}
+            </div>
+          </div>
+
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${group.teacherEmail ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(group.teacherEmail)}')">Copy teacher email<span class="schoolActionLabel">${escapeHtml(group.teacherEmail)}</span></button>` : ""}
+              ${group.teacherEmail ? `<button class="schoolActionButton" onclick="openEmail('${escapeJs(group.teacherEmail)}')">Email teacher<span class="schoolActionLabel">Open email</span></button>` : ""}
+              ${classroomButton}
+            </div>
+
+            <div class="sectionTitle">Group Details</div>
+            <div id="group-details" class="profileSection">
+              ${infoLine("", "Item", group.item)}
+              ${infoLine("", "Category", group.category)}
+              ${infoLine("", "Group Name", group.groupName)}
+              ${schoolLinkLine(group.school)}
+            </div>
+
+            <div class="sectionTitle">Teacher</div>
+            <div id="group-teacher" class="profileSection">
+              ${teacherLinkLine(group.teacherName, group.teacherEmail)}
+              ${infoLine("", "Teacher Email", group.teacherEmail)}
+            </div>
+
+            <div class="sectionTitle">Google Classroom</div>
+            <div id="group-classroom" class="profileSection">
+              ${classroomBlock(classroom) || `<div class="empty">No Google Classroom details found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Students</div>
+            <div id="group-students" class="profileSection">
+              ${(window.currentGroupParticipants || []).map(renderGroupParticipantCard).join("") || `<div class="empty">No matching student records found for this group yet.</div>`}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+
+    function openItemProfile(itemName) {
+      const target = String(itemName || "").trim();
+      if (!target) return;
+
+      saveRecentlyViewed({
+        type: "item",
+        key: `item:${target.toLowerCase()}`,
+        itemName: target,
+        label: target,
+        meta: "Item"
+      });
+
+      searchView.style.display = "none";
+      profileView.style.display = "block";
+      profileSearchInput.value = "";
+
+      if (!portalReady) {
+        profileEl.innerHTML = `<div class="empty">Still loading participant data...</div>`;
+        return;
+      }
+
+      showItemProfile(buildItemProfileLocally(target));
+    }
+
+    function showItemProfile(item) {
+      if (!item) {
+        profileEl.innerHTML = `<div class="empty">Item profile not found.</div>`;
+        return;
+      }
+
+      window.currentItemParticipants = item.participants || [];
+
+      profileEl.innerHTML = `
+        <div class="profileCard">
+          <div class="profileHero profileHero--item">
+            <div class="kicker">Item Passport</div>
+            <h2>${escapeHtml(item.itemName)}</h2>
+            <div class="schoolStats">
+              ${schoolStat(item.participantCount, "Participants", "item-participants")}
+              ${schoolStat(item.schoolCount, "Schools", "item-schools")}
+              ${schoolStat(item.teacherCount, "Teachers", "item-teachers")}
+              ${schoolStat((item.disciplines || []).length, "Categories", "item-categories")}
+            </div>
+          </div>
+
+          <div class="profileBody">
+            <div class="schoolActions">
+              ${item.participants && item.participants.length ? `<button class="schoolActionButton" onclick="exportCurrentItemEmails()">Export emails<span class="schoolActionLabel">${getEmailCountForParticipants(item.participants)} addresses</span></button>` : ""}
+              ${item.participants && item.participants.length ? `<button class="schoolActionButton" onclick="exportCurrentItemContacts()">Export spreadsheet of contacts<span class="schoolActionLabel">CSV download</span></button>` : ""}
+              ${item.teacherEmails && item.teacherEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(item.teacherEmails.join(';'))}')">Copy teacher emails<span class="schoolActionLabel">${item.teacherEmails.length} address${item.teacherEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+              ${item.familyEmails && item.familyEmails.length ? `<button class="schoolActionButton" onclick="copyText('${escapeJs(item.familyEmails.join(';'))}')">Copy family emails<span class="schoolActionLabel">${item.familyEmails.length} address${item.familyEmails.length === 1 ? "" : "es"}</span></button>` : ""}
+            </div>
+
+            <div class="sectionTitle">Categories</div>
+            <div id="item-categories" class="profileSection">
+              ${(item.disciplines || []).map(d => `
+                <div class="disciplineTile">
+                  <div class="disciplineTitle">${escapeHtml(d.name || "Unspecified")}</div>
+                  <div class="disciplineMeta">${escapeHtml(d.schoolCount || 0)} school${Number(d.schoolCount) === 1 ? "" : "s"} · ${escapeHtml(d.count || 0)} student${Number(d.count) === 1 ? "" : "s"}</div>
+                  <div class="pillRow">
+                    <button class="miniActionButton" type="button" onclick="exportCurrentCategoryEmails('${escapeJs(d.name || "Unspecified")}', 'item')">Export emails</button>
+                    <button class="miniActionButton" type="button" onclick="exportCurrentCategoryContacts('${escapeJs(d.name || "Unspecified")}', 'item')">Export contacts</button>
+                  </div>
+                </div>
+              `).join("") || `<div class="empty">No categories found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Schools</div>
+            <div id="item-schools" class="profileSection">
+              ${(item.schools || []).map(renderItemSchoolCard).join("") || `<div class="empty">No schools found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Teachers</div>
+            <div id="item-teachers" class="profileSection">
+              ${(item.teachers || []).map(renderSchoolTeacherCard).join("") || `<div class="empty">No teachers found.</div>`}
+            </div>
+
+            <div class="sectionTitle">Participants</div>
+            <div id="item-participants" class="profileSection">
+              ${(item.participants || []).map(renderItemParticipantCard).join("") || `<div class="empty">No participants found.</div>`}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function renderTeacherSchoolCard(school) {
+      return `
+        <div class="itemSchoolCard" onclick="openSchoolProfile('${escapeJs(school.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(school.name || "Unknown school")}</div>
+          <div class="schoolItemMeta">${escapeHtml(school.count || 0)} participant${Number(school.count) === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }
+
+    function renderTeacherItemCard(item) {
+      return `
+        <div class="schoolItemCard" onclick="openItemProfile('${escapeJs(item.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(item.name || "Unnamed item")}</div>
+          <div class="schoolItemMeta">${escapeHtml(item.count || 0)} record${Number(item.count) === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }
+
+    function renderTeacherParticipantCard(p, index) {
+      const photoUrl = p.photoUrl || getParticipantPhotoUrl(p);
+      const year = getParticipantYear(p);
+      const line = [getParticipantSchool(p), year ? "Year " + year : "", getParticipantItem(p)].filter(Boolean).join(" · ");
+      return `
+        <div class="itemParticipantCard" onclick="openTeacherParticipant(${index})">
+          <div class="schoolParticipantTop">
+            <div class="avatar">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="schoolParticipantText">
+              <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openTeacherParticipant(index) {
+      const p = (window.currentTeacherParticipants || [])[index];
+      if (!p) return;
+
+      latestResults = [p];
+      openProfile(0);
+    }
+
+    function renderItemSchoolCard(school) {
+      const count = school.acceptedCount || school.count || 0;
+      const label = school.notAcceptedYet && !school.acceptedCount
+        ? `${school.allocatedCount || count || 0} student${Number(school.allocatedCount || count) === 1 ? "" : "s"} · Not accepted yet`
+        : `${count} student${Number(count) === 1 ? "" : "s"}`;
+      return `
+        <div class="itemSchoolCard" onclick="openSchoolProfile('${escapeJs(school.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(school.name || "Unknown school")}</div>
+          <div class="schoolItemMeta">${escapeHtml(label)}</div>
+        </div>
+      `;
+    }
+
+    function renderItemParticipantCard(p, index) {
+      const photoUrl = p.photoUrl || getParticipantPhotoUrl(p);
+      const year = getParticipantYear(p);
+      const line = [getParticipantSchool(p), year ? "Year " + year : "", getParticipantCategory(p)].filter(Boolean).join(" · ");
+      return `
+        <div class="itemParticipantCard" onclick="openItemParticipant(${index})">
+          <div class="schoolParticipantTop">
+            <div class="avatar">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="schoolParticipantText">
+              <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function openItemParticipant(index) {
+      const p = (window.currentItemParticipants || [])[index];
+      if (!p) return;
+
+      latestResults = [p];
+      openProfile(0);
+    }
+
+    function renderSchoolParticipantCard(p, index) {
+      const photoUrl = p.photoUrl || getParticipantPhotoUrl(p);
+      const year = getParticipantYear(p);
+      const line = [year ? "Year " + year : "", getParticipantCategory(p), getParticipantItem(p)].filter(Boolean).join(" · ");
+      return `
+        <div class="schoolParticipantCard schoolStudentCard" onclick="openSchoolParticipant(${index})">
+          <div class="schoolParticipantTop">
+            <div class="avatar">${photoUrl ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : escapeHtml(getInitials(p))}</div>
+            <div class="schoolParticipantText">
+              <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderGroupParticipantCard(p, index) {
+      const photoUrl = p.photoUrl || getParticipantPhotoUrl(p);
+      const year = getParticipantYear(p);
+      const line = [
+        year ? `Year ${year}` : "",
+        getParticipantCategory(p),
+        getParticipantItem(p)
+      ].filter(Boolean).join(" · ");
+
+      return `
+        <div class="schoolParticipantCard" onclick="openGroupParticipant(${index})">
+          <div class="schoolParticipantTop">
+            <div class="avatar">
+              ${photoUrl
+                ? `<img src="${escapeHtml(photoUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                : escapeHtml(getInitials(p))}
+            </div>
+            <div class="schoolParticipantText">
+              <div class="name">${escapeHtml(fullName(p) || "Unnamed participant")}</div>
+              <div class="meta">${escapeHtml(line)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDisciplineTile(discipline) {
+      return `
+        <div class="disciplineTile">
+          <div class="disciplineTitle">${escapeHtml(discipline.name || "Unspecified")}</div>
+          <div class="disciplineMeta">${escapeHtml(discipline.count || 0)} participant${Number(discipline.count) === 1 ? "" : "s"}</div>
+          <div class="pillRow">
+            ${(discipline.items || []).map(item => `<span class="pill">${escapeHtml(item)}</span>`).join("")}
+          </div>
+          <div class="pillRow">
+            <button class="miniActionButton" type="button" onclick="exportCurrentCategoryEmails('${escapeJs(discipline.name || "Unspecified")}', 'school')">Export emails</button>
+            <button class="miniActionButton" type="button" onclick="exportCurrentCategoryContacts('${escapeJs(discipline.name || "Unspecified")}', 'school')">Export contacts</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSchoolItemCard(item) {
+      return `
+        <div class="schoolItemCard" onclick="openItemProfile('${escapeJs(item.name || "")}')">
+          <div class="schoolItemTitle">${escapeHtml(item.name || "Unnamed item")}</div>
+          <div class="schoolItemMeta">${escapeHtml(item.discipline || "")} · ${escapeHtml(item.count || 0)} participant${Number(item.count) === 1 ? "" : "s"}</div>
+        </div>
+      `;
+    }
+
+    function schoolStat(number, label, targetId) {
+      const target = String(targetId || "").trim();
+      const actionAttrs = target
+        ? ` role="button" tabindex="0" onclick="scrollToProfileSection('${escapeJs(target)}')" onkeydown="handleStatKeydown(event, '${escapeJs(target)}')"`
+        : "";
+      return `
+        <div class="schoolStat${target ? " schoolStat--clickable" : ""}"${actionAttrs}>
+          <div class="schoolStatNumber">${escapeHtml(number || 0)}</div>
+          <div class="schoolStatLabel">${escapeHtml(label)}</div>
+        </div>
+      `;
+    }
+
+    function handleStatKeydown(event, targetId) {
+      if (!event || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      scrollToProfileSection(targetId);
+    }
+
+    function scrollToProfileSection(targetId) {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.classList.add("profileSection--focused");
+      setTimeout(() => target.classList.remove("profileSection--focused"), 900);
+    }
+
+    function openSchoolParticipant(index) {
+      const p = (window.currentSchoolParticipants || [])[index];
+      if (!p) return;
+
+      latestResults = [p];
+      openProfile(0);
+    }
+
+    function openGroupParticipant(index) {
+      const p = (window.currentGroupParticipants || [])[index];
+      if (!p) return;
+
+      latestResults = [p];
+      openProfile(0);
+    }
+
+    function field(label, value) {
+      return `
+        <div class="field">
+          <span class="label">${escapeHtml(label)}</span>
+          <div class="value">${escapeHtml(value || "—")}</div>
+        </div>
+      `;
+    }
+
+    function schoolLinkLine(schoolName) {
+      if (!schoolName) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoIcon"></div>
+          <div class="infoContent">
+            <div class="infoLabel">School</div>
+            <div class="infoValue">
+              <span class="linkValue" onclick="openSchoolProfile('${escapeJs(schoolName)}')">
+                ${escapeHtml(schoolName)} →
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function itemLinkLine(itemName) {
+      if (!itemName) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoIcon"></div>
+          <div class="infoContent">
+            <div class="infoLabel">Item</div>
+            <div class="infoValue">
+              <span class="linkValue" onclick="openItemProfile('${escapeJs(itemName)}')">
+                ${escapeHtml(itemName)} →
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function teacherLinkLine(teacherName, teacherEmail) {
+      const label = teacherName || teacherEmail;
+      if (!label) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoIcon"></div>
+          <div class="infoContent">
+            <div class="infoLabel">Teacher</div>
+            <div class="infoValue">
+              <span class="linkValue" onclick="openTeacherProfile('${escapeJs(teacherEmail || teacherName)}')">
+                ${escapeHtml(label)} →
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function infoLine(icon, label, value, note) {
+      if (!value) return "";
+      return `
+        <div class="infoLine">
+          <div class="infoContent">
+            <div class="infoLabel">${escapeHtml(label)}</div>
+            <div class="infoValue">${escapeHtml(value)}</div>
+            ${note ? `<div class="notePill">${escapeHtml(note)}</div>` : ""}
+          </div>
+        </div>`;
+    }
+
+    function parentCard(title, name, relationship, email, phone) {
+      if (!name && !relationship && !email && !phone) return "";
+      return `
+        <div class="parentCard">
+          <div class="sectionHeader">${escapeHtml(title)}</div>
+          ${infoLine("👤", "Name", name)}
+          ${infoLine("🔗", "Relationship", relationship)}
+          ${infoLine("✉️", "Email", email)}
+          ${infoLine("📱", "Phone", phone)}
+        </div>
+      `;
+    }
+
+    function normalisePhone(value) {
+      let phone = String(value || "").replace(/[^0-9]/g, "");
+      if (phone.startsWith("61") && phone.length === 11) phone = "0" + phone.slice(2);
+      if (phone.length === 9 && phone.startsWith("4")) phone = "0" + phone;
+      return phone;
+    }
+
+    function isSamePhone(a, b) {
+      const phoneA = normalisePhone(a);
+      const phoneB = normalisePhone(b);
+      return phoneA && phoneB && phoneA === phoneB;
+    }
+</script>

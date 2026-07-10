@@ -1,0 +1,29 @@
+<template id="page-calendar">
+  <section class="panel span12">
+    <div class="calendarToolbar">
+      <div>
+        <h3 class="sectionTitle">Calendar</h3>
+        <div id="calendarSource" class="moduleMeta">Timeline data is loading...</div>
+      </div>
+      <div class="toolbarActions">
+        <button class="quickLink compact" type="button" onclick="App.goCalendarToday()">Today</button>
+        <button class="quickLink compact" type="button" onclick="App.moveCalendar(-1)">Previous</button>
+        <button class="quickLink compact" type="button" onclick="App.moveCalendar(1)">Next</button>
+        <button class="quickLink compact" type="button" onclick="App.toggleCalendarView()">Month / Agenda</button>
+      </div>
+    </div>
+    <div class="filterRow">
+      <input id="calendarSearch" class="participantSearch" type="search" placeholder="Filter events, venues, groups or items..." oninput="App.renderCalendarPage()">
+      <select id="calendarTypeFilter" class="filterSelect" onchange="App.renderCalendarPage()"></select>
+      <select id="calendarVenueFilter" class="filterSelect" onchange="App.renderCalendarPage()"></select>
+    </div>
+    <div id="calendarHeading" class="calendarHeading">Calendar</div>
+    <div id="calendarMonth" class="calendarMonth"></div>
+    <div id="calendarAgenda" class="dateList" style="display:none;"></div>
+  </section>
+
+  <section class="panel span12">
+    <h3 class="sectionTitle">Event Detail</h3>
+    <div id="calendarEventDetail" class="empty">Select an event to see details.</div>
+  </section>
+</template>

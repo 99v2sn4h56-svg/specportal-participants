@@ -9,12 +9,10 @@ function onOpen() {
   // Participant Search Menu
  ui.createMenu("Participant Search 🔍")
   .addItem("Open Spec Portal", "openSpecPortalHome")
+  .addItem("Enable Auto-open Sidebar", "createSpecPortalOpenTrigger")
   .addToUi();
   // Spec Tools Menu
   ui.createMenu("Spec Tools")
-    .addItem("Mobile Search 📱", "showMobileSearch")
-    .addSeparator()
-
     .addItem("Refresh School Summary 🎓", "buildSchoolSummary")
     .addItem("Refresh Email Validation", "highlightNonDETEmailsOnGroups")
     .addItem("Generate School Map Export", "generateSchoolMapExport")
@@ -25,9 +23,7 @@ function onOpen() {
     .addItem("Sync Group Acceptance Forms", "ssSyncGroupAcceptances")
     .addSeparator()
 
-    .addItem("Create / Reset IMPORT Tab ↪️", "createImportSheets")
-    .addItem("Analyse Import ↪️", "analyseImport")
-    .addItem("Import Records ↪️", "importRecords")
+    .addItem("Upload Acceptances/New Participant", "openAcceptanceImportCentre")
     .addSeparator()
 
     .addItem("Create / Update Dance Workbooks", "createOrUpdateDanceWorkbooks")
@@ -36,6 +32,10 @@ function onOpen() {
     .addItem("Update Existing Costume Sheets", "updateExistingCostumeSheets")
     .addToUi();
 
-  // Auto-open Participant Search when spreadsheet opens
- openSpecPortalOnOpen_();
+  // Auto-open Spec Central sidebar when spreadsheet opens.
+  try {
+    openSpecPortalOnOpen_();
+  } catch (err) {
+    Logger.log(`Spec Central auto-open skipped: ${err}`);
+  }
 }

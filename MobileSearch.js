@@ -1,4 +1,4 @@
-function doGet() {
+function openMobileSearchWebApp() {
   return HtmlService
     .createHtmlOutputFromFile("Mobile Search")
     .setTitle("Spec Directory")

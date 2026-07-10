@@ -103,37 +103,63 @@ ParticipantService.getAll = function () {
   if (data.length < 2) return [];
 
   const headers = data.shift();
+  const getIndex = header => headers.indexOf(header);
+  const indexes = {
+    firstName: getIndex(this.FIELDS.FIRST_NAME),
+    lastName: getIndex(this.FIELDS.LAST_NAME),
+    school: getIndex(this.FIELDS.SCHOOL),
+    year: getIndex(this.FIELDS.YEAR),
+    discipline: getIndex(this.FIELDS.DISCIPLINE),
+    subDiscipline: getIndex(this.FIELDS.SUB_DISCIPLINE),
+    item: getIndex(this.FIELDS.ITEM),
+    studentEmail: getIndex(this.FIELDS.STUDENT_EMAIL),
+    studentMobile: getIndex(this.FIELDS.STUDENT_MOBILE),
+    parentName: getIndex(this.FIELDS.PARENT_NAME),
+    parentEmail: getIndex(this.FIELDS.PARENT_EMAIL),
+    parentPhone: getIndex(this.FIELDS.PARENT_PHONE),
+    additionalParentName: getIndex(this.FIELDS.ADDITIONAL_PARENT_NAME),
+    additionalParentEmail: getIndex(this.FIELDS.ADDITIONAL_PARENT_EMAIL),
+    additionalParentPhone: getIndex(this.FIELDS.ADDITIONAL_PARENT_PHONE),
+    additionalParentRelationship: getIndex(this.FIELDS.ADDITIONAL_PARENT_RELATIONSHIP),
+    teacherName: getIndex(this.FIELDS.TEACHER_NAME),
+    teacherEmail: getIndex(this.FIELDS.TEACHER_EMAIL),
+    studentId: getIndex(this.FIELDS.STUDENT_ID),
+    srn: getIndex(this.FIELDS.SRN)
+  };
+  const getCell = (row, index) => index >= 0 ? row[index] : "";
 
   return data.map(row => {
 
    const participant = {
 
-  firstName: row[headers.indexOf(this.FIELDS.FIRST_NAME)],
-  lastName: row[headers.indexOf(this.FIELDS.LAST_NAME)],
+  firstName: getCell(row, indexes.firstName),
+  lastName: getCell(row, indexes.lastName),
 
-  school: row[headers.indexOf(this.FIELDS.SCHOOL)],
-  year: row[headers.indexOf(this.FIELDS.YEAR)],
+  school: getCell(row, indexes.school),
+  year: getCell(row, indexes.year),
 
-  discipline: row[headers.indexOf(this.FIELDS.DISCIPLINE)],
-  subDiscipline: row[headers.indexOf(this.FIELDS.SUB_DISCIPLINE)],
-  item: row[headers.indexOf(this.FIELDS.ITEM)],
+  discipline: getCell(row, indexes.discipline),
+  subDiscipline: getCell(row, indexes.subDiscipline),
+  category: getCell(row, indexes.discipline),
+  categoryDetail: getCell(row, indexes.subDiscipline),
+  item: getCell(row, indexes.item),
 
-  studentEmail: row[headers.indexOf(this.FIELDS.STUDENT_EMAIL)],
-  studentMobile: row[headers.indexOf(this.FIELDS.STUDENT_MOBILE)],
+  studentEmail: getCell(row, indexes.studentEmail),
+  studentMobile: getCell(row, indexes.studentMobile),
 
-  parentName: row[headers.indexOf(this.FIELDS.PARENT_NAME)],
-  parentEmail: row[headers.indexOf(this.FIELDS.PARENT_EMAIL)],
-  parentPhone: row[headers.indexOf(this.FIELDS.PARENT_PHONE)],
-  additionalParentName: row[headers.indexOf(this.FIELDS.ADDITIONAL_PARENT_NAME)],
-  additionalParentEmail: row[headers.indexOf(this.FIELDS.ADDITIONAL_PARENT_EMAIL)],
-  additionalParentPhone: row[headers.indexOf(this.FIELDS.ADDITIONAL_PARENT_PHONE)],
-  additionalParentRelationship: row[headers.indexOf(this.FIELDS.ADDITIONAL_PARENT_RELATIONSHIP)],
+  parentName: getCell(row, indexes.parentName),
+  parentEmail: getCell(row, indexes.parentEmail),
+  parentPhone: getCell(row, indexes.parentPhone),
+  additionalParentName: getCell(row, indexes.additionalParentName),
+  additionalParentEmail: getCell(row, indexes.additionalParentEmail),
+  additionalParentPhone: getCell(row, indexes.additionalParentPhone),
+  additionalParentRelationship: getCell(row, indexes.additionalParentRelationship),
 
-  teacherName: row[headers.indexOf(this.FIELDS.TEACHER_NAME)],
-  teacherEmail: row[headers.indexOf(this.FIELDS.TEACHER_EMAIL)],
+  teacherName: getCell(row, indexes.teacherName),
+  teacherEmail: getCell(row, indexes.teacherEmail),
 
-  studentId: row[headers.indexOf(this.FIELDS.STUDENT_ID)],
-  srn: row[headers.indexOf(this.FIELDS.SRN)]
+  studentId: getCell(row, indexes.studentId),
+  srn: getCell(row, indexes.srn)
 
 };
 
@@ -152,7 +178,7 @@ function testGetAllParticipants() {
 
 }
 /**
- * Searches participants by name, school, item, discipline or category.
+ * Searches participants by name, school, item or category.
  */
 ParticipantService.search = function (query) {
   const q = String(query || "").toLowerCase().trim();
@@ -197,18 +223,67 @@ ParticipantService.getGroups = function () {
 
   const values = sheet.getDataRange().getDisplayValues();
   if (values.length < 2) return [];
+  const headers = values[0].map(header => String(header || "").trim());
+  const getIndex = names => {
+    for (const name of names) {
+      const index = headers.findIndex(header => header.toLowerCase() === String(name).toLowerCase());
+      if (index >= 0) return index;
+    }
+    return -1;
+  };
+
+  const acceptedIndex = getIndex(["Accepted?", "Accepted"]);
+  const allocIndex = getIndex(["# Alloc", "Alloc", "Allocated", "Accepted? / # Alloc"]);
+  const schoolIndex = getIndex(["School name", "School", "Current School"]);
+  const segmentIndex = getIndex(["Segment"]);
+  const itemIndex = getIndex(["Item", "Item / Group", "Items / Groups"]);
+  const categoryIndex = getIndex(["Category", "Category selection"]);
+  const groupNameIndex = getIndex(["Dance group name (if group is made up of multiple schools)", "Group Name", "Dance group name"]);
+  const teacherEmailIndex = getIndex(["Teacher Email", "Contact teacher's email", "Teacher email (DoE)", "All Teacher Emails"]);
+  const classroomIndex = getIndex(["Google Classroom", "Classroom"]);
+  const teacherFirstIndex = getIndex(["Contact teacher's first name", "Teacher first name", "Teacher First Name"]);
+  const teacherLastIndex = getIndex(["Contact teacher's surname", "Teacher surname", "Teacher Last Name"]);
+  const teacherMobileIndex = getIndex(["Contact teacher's mobile number", "Teacher mobile", "Teacher Mobile", "Teacher phone"]);
+  const teacherRoleIndex = getIndex(["Contact teacher's role at the school", "Teacher role at school", "Teacher role", "Role at school"]);
+  const teacherAlumniIndex = getIndex(["Are you a Spec Alumni?", "Spec Alumni", "Alumni"]);
+  const teacherAlumniRoleIndex = getIndex(["If you selected \"yes\", can you please tell us when and what role? You can also share a memory if you like.", "Spec Alumni Role", "Spec Alumni Roles", "Alumni Role"]);
+  const teacherFirstTimeIndex = getIndex(["1st Time", "First Time", "First time"]);
+  const secondTeacherFirstIndex = getIndex(["2nd teacher first name", "2nd Teacher First Name", "Second teacher first name"]);
+  const secondTeacherLastIndex = getIndex(["2nd teachers surname", "2nd Teacher Surname", "Second teacher surname"]);
+  const secondTeacherEmailIndex = getIndex(["2nd teacher email", "2nd Teacher Email", "Second teacher email"]);
+  const secondTeacherMobileIndex = getIndex(["2nd teacher mobile", "2nd Teacher Mobile", "Second teacher mobile"]);
+  const secondTeacherRoleIndex = getIndex(["2nd teacher role at school", "2nd Teacher Role at School", "Second teacher role at school"]);
+  const secondTeacherAlumniIndex = getIndex(["Are you a Spec Alumni? 2", "2nd teacher Spec Alumni", "Second teacher Spec Alumni"]);
+  const secondTeacherAlumniRoleIndex = getIndex(["2nd teacher Spec Alumni Role", "Second teacher Spec Alumni Role", "2nd teacher alumni role"]);
 
   return values.slice(1)
     .filter(row => row.some(cell => cell !== "" && cell !== null))
     .map(row => ({
-      school: row[7] || "",
-      category: row[14] || "",
-      item: row[15] || "",
-      groupName: row[16] || "",
-      teacherEmail: row[17] || "",
-      classroom: row[18] || "",
-      count: row[6] || "",
-      teacherName: [row[34], row[35]].filter(Boolean).join(" ")
+      school: row[schoolIndex >= 0 ? schoolIndex : 7] || "",
+      segment: row[segmentIndex >= 0 ? segmentIndex : 13] || "",
+      item: row[itemIndex >= 0 ? itemIndex : 14] || "",
+      category: row[categoryIndex >= 0 ? categoryIndex : 15] || "",
+      groupName: row[groupNameIndex >= 0 ? groupNameIndex : 16] || "",
+      teacherEmail: row[teacherEmailIndex >= 0 ? teacherEmailIndex : 17] || "",
+      classroom: row[classroomIndex >= 0 ? classroomIndex : 18] || "",
+      acceptedCount: row[acceptedIndex >= 0 ? acceptedIndex : 0] || "",
+      allocatedCount: row[allocIndex >= 0 ? allocIndex : 6] || "",
+      count: row[acceptedIndex >= 0 ? acceptedIndex : 0] || row[allocIndex >= 0 ? allocIndex : 6] || "",
+      acceptanceStatus: row[acceptedIndex >= 0 ? acceptedIndex : 0] ? "Accepted" : "Not accepted yet",
+      teacherName: [row[teacherFirstIndex >= 0 ? teacherFirstIndex : 34], row[teacherLastIndex >= 0 ? teacherLastIndex : 35]].filter(Boolean).join(" "),
+      teacherMobile: row[teacherMobileIndex] || "",
+      teacherRole: row[teacherRoleIndex] || "",
+      teacherContactType: "Primary contact",
+      teacherIsSpecAlumni: row[teacherAlumniIndex] || "",
+      teacherSpecRoles: row[teacherAlumniRoleIndex] || "",
+      teacherFirstTime: row[teacherFirstTimeIndex] || "",
+      secondTeacherName: [row[secondTeacherFirstIndex], row[secondTeacherLastIndex]].filter(Boolean).join(" "),
+      secondTeacherEmail: row[secondTeacherEmailIndex] || "",
+      secondTeacherMobile: row[secondTeacherMobileIndex] || "",
+      secondTeacherRole: row[secondTeacherRoleIndex] || "",
+      secondTeacherContactType: "Second contact",
+      secondTeacherIsSpecAlumni: row[secondTeacherAlumniIndex] || "",
+      secondTeacherSpecRoles: row[secondTeacherAlumniRoleIndex] || ""
     }));
 };
 
@@ -327,8 +402,8 @@ ParticipantService.getPortalData = function () {
   let photos = {};
 
   try {
-    if (typeof ProfilePhotoService !== "undefined" && ProfilePhotoService.getStudentPhotos) {
-      photos = ProfilePhotoService.getStudentPhotos() || {};
+    if (typeof ProfilePhotoService !== "undefined" && ProfilePhotoService.getCachedStudentPhotos) {
+      photos = ProfilePhotoService.getCachedStudentPhotos() || {};
     }
   } catch (err) {
     photos = {};

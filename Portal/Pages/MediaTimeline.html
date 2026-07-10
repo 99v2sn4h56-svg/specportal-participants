@@ -1,0 +1,13 @@
+<template id="page-media-timeline">
+  <section class="panel span12">
+    <h3 class="sectionTitle">Media Timeline</h3>
+    <div id="mediaSource" class="moduleMeta">Protected module. Loading permitted data...</div>
+    <div class="viewTabs">
+      <button class="quickLink compact" type="button" onclick="App.setMediaView('gantt')">Gantt</button>
+      <button class="quickLink compact" type="button" onclick="App.setMediaView('calendar')">Calendar</button>
+      <button class="quickLink compact" type="button" onclick="App.setMediaView('campaigns')">Campaigns</button>
+      <button class="quickLink compact" type="button" onclick="App.setMediaView('mine')">My Media Tasks</button>
+    </div>
+    <div id="mediaTimelineContent" class="moduleWorkspace"></div>
+  </section>
+</template>

@@ -332,6 +332,17 @@ UI rule: components should be visual and interaction shells only. They should no
 
 ### Lead Engineer Recommendations
 
+Current full-page app direction:
+
+- Keep Spec Central as the staff landing app.
+- Keep the spreadsheet sidebar as a fast in-sheet participant workflow.
+- Calendar is owned by Timeline data through `TimelineService`.
+- Rehearsals are a filtered operational view of the same Timeline event contract.
+- Project Management is currently a protected placeholder contract through `ProjectManagementService`.
+- Media Timeline is currently a protected placeholder contract through `MediaTimelineService`.
+- Staff Production Team is the future source of truth for permissions.
+- Client-side hiding is useful UX, but server-side services must enforce permission checks.
+
 1. Treat data ownership as non-negotiable. If two modules can edit the same source record, the platform will become fragile.
 2. Keep Spec Central as the shell and coordinator, not the database.
 3. Put every cross-module operation behind a service function before building more UI.

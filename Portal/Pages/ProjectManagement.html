@@ -1,0 +1,14 @@
+<template id="page-project-management">
+  <section class="panel span12">
+    <h3 class="sectionTitle">Project Management</h3>
+    <div id="projectSource" class="moduleMeta">Protected module. Loading permitted data...</div>
+    <div class="viewTabs">
+      <button class="quickLink compact" type="button" onclick="App.setProjectView('board')">Board</button>
+      <button class="quickLink compact" type="button" onclick="App.setProjectView('table')">Table</button>
+      <button class="quickLink compact" type="button" onclick="App.setProjectView('milestones')">Milestones</button>
+      <button class="quickLink compact" type="button" onclick="App.setProjectView('mine')">My Tasks</button>
+      <button class="quickLink compact" type="button" onclick="App.setProjectView('risk')">Overdue / At Risk</button>
+    </div>
+    <div id="projectManagementContent" class="moduleWorkspace"></div>
+  </section>
+</template>

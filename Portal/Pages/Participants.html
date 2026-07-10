@@ -1,0 +1,21 @@
+<template id="page-participants">
+  <div class="participantLayout">
+    <section class="panel">
+      <h3 class="sectionTitle">Participant Search</h3>
+      <input
+        id="participantSearch"
+        class="participantSearch"
+        type="search"
+        placeholder="Search people, schools, items, groups or teachers..."
+        autocomplete="off"
+        oninput="App.queueParticipantSearch()"
+      >
+      <div id="participantStatus" class="status">Loading participant data...</div>
+      <div id="participantResults" class="results"></div>
+    </section>
+
+    <aside id="participantProfilePanel" class="profilePanel">
+      <div class="empty">Select a result to preview details.</div>
+    </aside>
+  </div>
+</template>
