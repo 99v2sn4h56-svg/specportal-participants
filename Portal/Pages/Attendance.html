@@ -34,12 +34,13 @@
       </section>
     </div>
 
-    <div class="attendanceFramePanel">
+    <div id="attendanceFramePanel" class="attendanceFramePanel">
       <div id="attendancePlaceholder" class="empty">Configure the Attendance URL to open the standalone app.</div>
       <iframe
         id="attendanceFrame"
         title="Spec Central Attendance"
         referrerpolicy="no-referrer-when-downgrade"
+        onload="App.handleAttendanceFrameLoaded()"
         allowfullscreen
       ></iframe>
     </div>

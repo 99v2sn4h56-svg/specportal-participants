@@ -460,6 +460,32 @@
       align-items: flex-start;
     }
 
+    .attendanceEventMain {
+      flex: 1;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .attendanceEventMain:focus-visible {
+      outline: 3px solid rgba(18,86,207,.28);
+      outline-offset: 4px;
+      border-radius: 8px;
+    }
+
+    .attendanceEventActions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .attendanceEventMeta,
     .attendanceEventCounts {
       margin-top: 4px;

@@ -24,6 +24,8 @@
         attendanceSummary: null,
         attendanceError: "",
         attendanceLoaded: false,
+        selectedAttendanceSessionId: "",
+        selectedAttendanceEventName: "",
         attendanceUrl: "",
         timelineStatus: "",
         timelineLastRefreshed: "",
@@ -1018,9 +1020,13 @@
             launch.disabled = false;
             launch.textContent = "Open Attendance";
           }
-          if (frame.src !== App.state.attendanceUrl) frame.src = App.state.attendanceUrl;
-          frame.style.display = "block";
-          placeholder.style.display = "none";
+          var attendanceTarget = App.buildAttendanceDeepLinkUrl(App.state.selectedAttendanceSessionId);
+          if (frame.dataset.attendanceTarget !== attendanceTarget) {
+            App.loadAttendanceFrameTarget(attendanceTarget, App.state.selectedAttendanceEventName);
+          } else if (!frame.dataset.attendanceLoading) {
+            frame.style.display = "block";
+            placeholder.style.display = "none";
+          }
         } else {
           if (launch) {
             launch.disabled = true;
@@ -1150,12 +1156,92 @@
           .map(function (status) { return status + " " + attendanceCounts[status]; })
           .join(" · ");
 
-        return '<article class="attendanceEventCard"><div><strong>' + App.escapeHtml(event.eventName || "Attendance event") +
+        var sessionId = String(event.sessionId || "");
+        var eventName = String(event.eventName || "Attendance event");
+        var accessibleName = "Open Attendance roll for " + eventName;
+        var encodedSessionId = App.encodeAttendanceInlineValue(sessionId);
+        var encodedEventName = App.encodeAttendanceInlineValue(eventName);
+
+        return '<article class="attendanceEventCard"><button class="attendanceEventMain" type="button" aria-label="' +
+          App.escapeHtml(accessibleName) + '" onclick="App.openAttendanceEvent(decodeURIComponent(\'' + encodedSessionId +
+          '\'),decodeURIComponent(\'' + encodedEventName + '\'),false)"><strong>' + App.escapeHtml(eventName) +
           '</strong><div class="attendanceEventMeta">' +
           App.escapeHtml([event.date, event.time, event.location].filter(Boolean).join(" · ")) +
           '</div><div class="attendanceEventCounts">' + App.escapeHtml(countText || "No attendance marks yet") +
-          '</div></div><strong>' + App.escapeHtml(event.studentCount || (event.attendanceCounts || {}).total || 0) +
-          '</strong></article>';
+          '</div></button><div class="attendanceEventActions"><strong>' +
+          App.escapeHtml(event.studentCount || (event.attendanceCounts || {}).total || 0) +
+          '</strong><button class="quickLink compact" type="button" onclick="App.openAttendanceEvent(decodeURIComponent(\'' +
+          encodedSessionId + '\'),decodeURIComponent(\'' + encodedEventName + '\'),false)">Open roll →</button>' +
+          '<button class="quickLink compact" type="button" aria-label="' + App.escapeHtml(accessibleName + " in a new tab") +
+          '" onclick="App.openAttendanceEvent(decodeURIComponent(\'' + encodedSessionId + '\'),decodeURIComponent(\'' +
+          encodedEventName + '\'),true)">New tab ↗</button></div></article>';
+      },
+
+      encodeAttendanceInlineValue: function (value) {
+        return encodeURIComponent(String(value === undefined || value === null ? "" : value))
+          .replace(/'/g, "%27");
+      },
+
+      buildAttendanceDeepLinkUrl: function (sessionId) {
+        var baseUrl = String(App.state.attendanceUrl || "");
+        if (!baseUrl || !sessionId) return baseUrl;
+
+        try {
+          var url = new URL(baseUrl, window.location.href);
+          url.searchParams.set("sessionId", String(sessionId));
+          return url.toString();
+        } catch (error) {
+          return baseUrl + (baseUrl.indexOf("?") >= 0 ? "&" : "?") +
+            "sessionId=" + encodeURIComponent(String(sessionId));
+        }
+      },
+
+      openAttendanceEvent: function (sessionId, eventName, newTab) {
+        var safeSessionId = String(sessionId || "").trim();
+        if (!safeSessionId || !App.state.attendanceUrl) {
+          App.notify("This Attendance roll is not available.");
+          return;
+        }
+
+        App.state.selectedAttendanceSessionId = safeSessionId;
+        App.state.selectedAttendanceEventName = String(eventName || "Attendance event");
+        var target = App.buildAttendanceDeepLinkUrl(safeSessionId);
+
+        if (newTab) {
+          window.open(target, "_blank");
+          return;
+        }
+
+        if (App.state.currentPage !== "attendance") App.navigate("attendance");
+        App.loadAttendanceFrameTarget(target, App.state.selectedAttendanceEventName);
+
+        var panel = document.getElementById("attendanceFramePanel");
+        if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      },
+
+      loadAttendanceFrameTarget: function (target, eventName) {
+        var frame = document.getElementById("attendanceFrame");
+        var placeholder = document.getElementById("attendancePlaceholder");
+        if (!frame || !placeholder || !target) return;
+        if (frame.dataset.attendanceTarget === target) return;
+
+        frame.dataset.attendanceTarget = target;
+        frame.dataset.attendanceLoading = "1";
+        placeholder.textContent = eventName
+          ? "Loading Attendance roll for " + eventName + "..."
+          : "Loading the Attendance application...";
+        placeholder.style.display = "block";
+        frame.style.display = "none";
+        frame.src = target;
+      },
+
+      handleAttendanceFrameLoaded: function () {
+        var frame = document.getElementById("attendanceFrame");
+        var placeholder = document.getElementById("attendancePlaceholder");
+        if (!frame || !placeholder || !frame.dataset.attendanceTarget) return;
+        delete frame.dataset.attendanceLoading;
+        placeholder.style.display = "none";
+        frame.style.display = "block";
       },
 
       formatAttendanceApiTime: function (value) {
@@ -1170,7 +1256,9 @@
           App.notify("Attendance URL is not configured yet.");
           return;
         }
-        frame.src = App.state.attendanceUrl + (App.state.attendanceUrl.indexOf("?") >= 0 ? "&" : "?") + "refresh=" + Date.now();
+        var target = App.buildAttendanceDeepLinkUrl(App.state.selectedAttendanceSessionId);
+        frame.dataset.attendanceTarget = "";
+        App.loadAttendanceFrameTarget(target + (target.indexOf("?") >= 0 ? "&" : "?") + "refresh=" + Date.now(), App.state.selectedAttendanceEventName);
       },
 
       renderRehearsalsPage: function () {
