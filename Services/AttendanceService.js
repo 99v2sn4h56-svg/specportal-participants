@@ -4,6 +4,10 @@ const AttendanceService = (() => {
     "https://script.google.com/a/macros/education.nsw.gov.au/s/AKfycbz4lRBirmgoHtz3T7d_Pba-gEVkFHzj_TQVlqg4XKT8A-5WPhxC9lONV9j9N3i3DH7sdA/exec",
     "https://script.google.com/a/macros/education.nsw.gov.au/s/AKfycbzcPYzqJQrJ8qeaxCic3ZGZdQGDd-HvtAHgklkE15LiM01vsudPX-9ok3IolHzHukc_NQ/exec"
   ];
+  const SUMMARY_CACHE_SECONDS = 2 * 60;
+  const EVENTS_CACHE_SECONDS = 5 * 60;
+  const ERROR_CACHE_SECONDS = 30;
+  const CACHE_PREFIX = "SPEC_CENTRAL_ATTENDANCE_API_V1";
 
   function getWebAppUrl() {
     const properties = PropertiesService.getScriptProperties();
@@ -19,27 +23,246 @@ const AttendanceService = (() => {
 
   function getConfig() {
     const url = getWebAppUrl();
+    if (!url) return waitingResult_("config");
 
+    const health = getHealth();
     return {
       url,
-      status: url ? "Connected" : "Waiting",
+      status: health.status,
       mode: "linked-web-app",
-      source: url === DEFAULT_WEB_APP_URL ? "Default Attendance deployment" : "Script property"
+      source: url === DEFAULT_WEB_APP_URL ? "Default Attendance deployment" : "Script property",
+      error: health.error || "",
+      generatedAt: health.generatedAt
     };
   }
 
   function getSummary() {
+    return requestPublicApi_("summary", {}, SUMMARY_CACHE_SECONDS);
+  }
+
+  function getEvents() {
+    return requestPublicApi_("events", {}, EVENTS_CACHE_SECONDS);
+  }
+
+  function getEvent(sessionIdOrSheetName) {
+    const identifier = String(sessionIdOrSheetName || "").trim();
+    if (!identifier) return failureResult_("event", "Session ID or Sheet Name is required.");
+
+    return requestPublicApi_("event", {
+      sessionId: identifier,
+      sheetName: identifier
+    }, 0);
+  }
+
+  function getParticipantHistory(studentKey) {
     return {
-      status: getWebAppUrl() ? "Connected" : "Waiting",
-      events: [],
-      requiringAction: [],
-      source: "Attendance web app link"
+      ok: false,
+      action: "participant-history",
+      status: "Unavailable",
+      generatedAt: new Date().toISOString(),
+      error: "Secure cross-project participant history is not available yet."
     };
+  }
+
+  function getHealth() {
+    const url = getWebAppUrl();
+    if (!url) return waitingResult_("health");
+
+    const summary = getSummary();
+    return {
+      ok: summary.ok,
+      action: "health",
+      status: summary.ok ? "Connected" : "Degraded",
+      generatedAt: summary.generatedAt || new Date().toISOString(),
+      url,
+      error: summary.error || ""
+    };
+  }
+
+  function requestPublicApi_(action, parameters, successCacheSeconds) {
+    const url = getWebAppUrl();
+    if (!url) return waitingResult_(action);
+
+    const cache = CacheService.getScriptCache();
+    const cacheKey = buildCacheKey_(action, parameters);
+    const cached = cache.get(cacheKey);
+
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (err) {
+        cache.remove(cacheKey);
+      }
+    }
+
+    let result;
+    try {
+      const query = Object.assign({ api: "1", action }, parameters || {});
+      const response = UrlFetchApp.fetch(buildApiUrl_(url, query), {
+        method: "get",
+        followRedirects: true,
+        muteHttpExceptions: true
+      });
+      const statusCode = response.getResponseCode();
+      const responseText = response.getContentText();
+
+      if (statusCode < 200 || statusCode >= 300) {
+        result = failureResult_(action, `Attendance API returned HTTP ${statusCode}.`, statusCode);
+      } else {
+        result = parseApiResponse_(action, responseText);
+      }
+    } catch (err) {
+      result = failureResult_(
+        action,
+        `Attendance API request failed: ${err && err.message ? err.message : String(err)}`
+      );
+    }
+
+    const cacheSeconds = result.ok ? successCacheSeconds : ERROR_CACHE_SECONDS;
+    if (cacheSeconds > 0) {
+      try {
+        cache.put(cacheKey, JSON.stringify(result), cacheSeconds);
+      } catch (err) {
+        Logger.log("AttendanceService cache failed: " + (err && err.message ? err.message : err));
+      }
+    }
+
+    return result;
+  }
+
+  function parseApiResponse_(action, responseText) {
+    let parsed;
+    try {
+      parsed = JSON.parse(String(responseText || ""));
+    } catch (err) {
+      return failureResult_(action, "Attendance API returned invalid JSON.");
+    }
+
+    if (!parsed || typeof parsed !== "object" || typeof parsed.ok !== "boolean") {
+      return failureResult_(action, "Attendance API returned an invalid response shape.");
+    }
+
+    if (String(parsed.action || "") !== action) {
+      return failureResult_(action, "Attendance API returned an unexpected action.");
+    }
+
+    if (!parsed.ok) {
+      return failureResult_(action, parsed.error || "Attendance API reported a failure.");
+    }
+
+    if (!("data" in parsed)) {
+      return failureResult_(action, "Attendance API response did not include data.");
+    }
+
+    return {
+      ok: true,
+      action,
+      status: "Connected",
+      generatedAt: parsed.generatedAt || new Date().toISOString(),
+      data: sanitisePublicData_(action, parsed.data),
+      source: "Live Attendance API"
+    };
+  }
+
+  function sanitisePublicData_(action, data) {
+    if (action === "summary") {
+      const summary = data || {};
+      return {
+        totalEvents: Number(summary.totalEvents) || 0,
+        upcomingEvents: Number(summary.upcomingEvents) || 0,
+        pastEvents: Number(summary.pastEvents) || 0,
+        totalStudentEventRecords: Number(summary.totalStudentEventRecords) || 0,
+        countsByStatus: summary.countsByStatus && typeof summary.countsByStatus === "object"
+          ? summary.countsByStatus
+          : {},
+        lastUpdated: summary.lastUpdated || ""
+      };
+    }
+
+    if (action === "events") {
+      return Array.isArray(data) ? data.map(sanitiseEvent_) : [];
+    }
+
+    if (action === "event") {
+      const response = data || {};
+      return {
+        event: sanitiseEvent_(response.event || {}),
+        participantsIncluded: false
+      };
+    }
+
+    return null;
+  }
+
+  function sanitiseEvent_(event) {
+    const counts = event.attendanceCounts || {};
+    return {
+      sessionId: event.sessionId || "",
+      sheetName: event.sheetName || "",
+      date: event.date || "",
+      dateKey: event.dateKey || "",
+      time: event.time || "",
+      eventName: event.eventName || "",
+      location: event.location || "",
+      categories: event.categories || "",
+      studentGroups: event.studentGroups || "",
+      studentCount: event.studentCount || "",
+      staff: event.staff || "",
+      eventNotes: event.eventNotes || "",
+      attendanceCounts: {
+        total: Number(counts.total) || 0,
+        byStatus: counts.byStatus && typeof counts.byStatus === "object" ? counts.byStatus : {}
+      }
+    };
+  }
+
+  function buildApiUrl_(baseUrl, parameters) {
+    const query = Object.keys(parameters || {})
+      .filter(key => parameters[key] !== undefined && parameters[key] !== null && parameters[key] !== "")
+      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(parameters[key])}`)
+      .join("&");
+
+    return baseUrl + (baseUrl.indexOf("?") >= 0 ? "&" : "?") + query;
+  }
+
+  function buildCacheKey_(action, parameters) {
+    const suffix = Object.keys(parameters || {})
+      .sort()
+      .map(key => `${key}:${parameters[key]}`)
+      .join("|");
+    return `${CACHE_PREFIX}:${action}:${suffix}`;
+  }
+
+  function waitingResult_(action) {
+    return {
+      ok: false,
+      action,
+      status: "Waiting",
+      generatedAt: new Date().toISOString(),
+      error: "Attendance web app URL is not configured.",
+      url: ""
+    };
+  }
+
+  function failureResult_(action, error, httpStatus) {
+    const result = {
+      ok: false,
+      action,
+      status: getWebAppUrl() ? "Degraded" : "Waiting",
+      generatedAt: new Date().toISOString(),
+      error: String(error || "Attendance API request failed.")
+    };
+    if (httpStatus) result.httpStatus = httpStatus;
+    return result;
   }
 
   return {
     getWebAppUrl,
     getConfig,
-    getSummary
+    getSummary,
+    getEvents,
+    getEvent,
+    getParticipantHistory,
+    getHealth
   };
 })();

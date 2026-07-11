@@ -100,6 +100,22 @@ function portalGetAttendanceConfig() {
   return AttendanceService.getConfig();
 }
 
+function portalGetAttendanceSummary() {
+  return AttendanceService.getSummary();
+}
+
+function portalGetAttendanceEvents() {
+  return AttendanceService.getEvents();
+}
+
+function portalGetAttendanceEvent(identifier) {
+  return AttendanceService.getEvent(identifier);
+}
+
+function portalGetAttendanceHealth() {
+  return AttendanceService.getHealth();
+}
+
 function portalGetProjectManagementData() {
   return ProjectManagementService.getDashboardData();
 }

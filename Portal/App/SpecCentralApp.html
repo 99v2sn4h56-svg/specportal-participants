@@ -1,0 +1,1569 @@
+  <script>
+    window.App = {
+      state: {
+        currentPage: "dashboard",
+        participants: [],
+        groups: [],
+        schools: [],
+        photos: {},
+        staff: {},
+        staffTeam: [],
+        announcements: [],
+        notifications: [],
+        rehearsals: [],
+        todaysRehearsals: [],
+        calendarData: null,
+        calendarDate: new Date(),
+        calendarView: "month",
+        selectedCalendarEvent: null,
+        projectData: null,
+        projectView: "board",
+        mediaData: null,
+        mediaView: "gantt",
+        attendanceEvents: [],
+        attendanceSummary: null,
+        attendanceError: "",
+        attendanceLoaded: false,
+        attendanceUrl: "",
+        timelineStatus: "",
+        timelineLastRefreshed: "",
+        staffStatus: "",
+        latestResults: [],
+        participantSearchTimer: null,
+        searchProviders: [],
+        searchHistory: [],
+        recentlyViewed: [],
+        currentFilters: {},
+        currentModule: "dashboard",
+        currentUser: null,
+        permissions: [],
+        dashboardContext: null,
+        loadedServices: {},
+        cacheTimestamps: {},
+        serviceCache: {},
+        inFlightRequests: {},
+        serviceRegistry: {},
+        loading: {},
+        systemStatus: {},
+        dashboardStats: null,
+        dashboardRenderTimer: null,
+        dashboardProfile: "operations",
+        applicationVersion: "5",
+        selectedParticipant: null,
+        selectedSchool: null,
+        selectedGroup: null,
+        selectedItem: null,
+        selectedTeacher: null,
+        selectedEvent: null,
+        selectedStaff: null,
+        navigationHistory: [],
+        navigationIndex: -1,
+        ready: false
+      },
+
+      pages: {
+        dashboard: {
+          title: "Home",
+          description: "Your Schools Spectacular staff portal.",
+          template: "page-dashboard"
+        },
+        participants: {
+          title: "Participants",
+          description: "Search participants, schools, items, groups and teachers.",
+          template: "page-participants"
+        },
+        calendar: {
+          title: "Calendar",
+          description: "Timeline events in month and agenda views.",
+          template: "page-calendar",
+          permission: "calendar.view"
+        },
+        attendance: {
+          title: "Attendance",
+          description: "Open attendance rolls and check-in workflows.",
+          template: "page-attendance"
+        },
+        rehearsals: {
+          title: "Rehearsals",
+          description: "Schedules, venues and upcoming rehearsal dates.",
+          template: "page-rehearsals"
+        },
+        staff: {
+          title: "Staff",
+          description: "Staff context, roles and future permission sync.",
+          template: "page-staff"
+        },
+        operations: {
+          title: "Operations",
+          description: "Protected management area for Schools Spectacular operations.",
+          template: "page-operations",
+          permission: "operations.view"
+        },
+        projectManagement: {
+          title: "Operations",
+          description: "Compatibility route for the protected Operations module.",
+          template: "page-operations",
+          permission: "operations.view",
+          redirectTo: "operations"
+        },
+        mediaTimeline: {
+          title: "Media Timeline",
+          description: "Campaign planning, media milestones and publishing activity.",
+          template: "page-media-timeline",
+          permission: "mediaTimeline.view"
+        },
+        settings: {
+          title: "Settings",
+          description: "Staff permissions, app configuration and module setup.",
+          template: "page-settings"
+        }
+      },
+
+      init: function () {
+        App.bootstrapState();
+        App.restoreSidebarState();
+        App.bindGlobalSearch();
+        App.loadConfig();
+        App.navigate("dashboard");
+      },
+
+      bootstrapState: function () {
+        App.state.searchHistory = App.safeLoadJson("specCentralSearchHistory", []);
+        App.state.recentlyViewed = App.safeLoadJson("specCentralRecentlyViewed", []);
+        App.registerCoreServices();
+        App.bindApplicationEvents();
+        App.registerDefaultSearchProviders();
+      },
+
+      restoreSidebarState: function () {
+        var collapsed = App.safeLoadJson("specCentralSidebarCollapsed", false);
+        document.body.classList.toggle("sidebarCollapsed", !!collapsed);
+      },
+
+      toggleSidebar: function () {
+        var collapsed = !document.body.classList.contains("sidebarCollapsed");
+        document.body.classList.toggle("sidebarCollapsed", collapsed);
+        App.safeSaveJson("specCentralSidebarCollapsed", collapsed);
+      },
+
+      events: {
+        handlers: {},
+        on: function (name, handler) {
+          if (!name || typeof handler !== "function") return function () {};
+          App.events.handlers[name] = App.events.handlers[name] || [];
+          App.events.handlers[name].push(handler);
+          return function () {
+            App.events.handlers[name] = (App.events.handlers[name] || []).filter(function (item) {
+              return item !== handler;
+            });
+          };
+        },
+        emit: function (name, payload) {
+          (App.events.handlers[name] || []).slice().forEach(function (handler) {
+            try {
+              handler(payload);
+            } catch (err) {
+              console.error("Spec Central event handler failed", name, err);
+            }
+          });
+        }
+      },
+
+      services: {
+        request: function (key, serverFunction, options) {
+          options = options || {};
+          var service = App.getService(key) || {};
+          serverFunction = serverFunction || service.serverFunction;
+          var args = options.args || [];
+          var cacheMs = options.cacheMs || 0;
+          var timeoutMs = options.timeoutMs || 25000;
+          var forceRefresh = !!options.forceRefresh;
+          var cached = App.state.serviceCache[key];
+          var cachedAt = App.state.cacheTimestamps[key] || 0;
+
+          if (!forceRefresh && cacheMs && cached && Date.now() - cachedAt < cacheMs) {
+            return Promise.resolve(cached);
+          }
+
+          if (!forceRefresh && App.state.inFlightRequests[key]) {
+            return App.state.inFlightRequests[key];
+          }
+
+          App.state.loading[key] = true;
+          App.setServiceStatus(key, "Loading");
+          App.events.emit("service:loading", { key: key, serverFunction: serverFunction });
+
+          App.state.inFlightRequests[key] = new Promise(function (resolve, reject) {
+            var settled = false;
+            var timer = setTimeout(function () {
+              if (settled) return;
+              settled = true;
+              App.state.loading[key] = false;
+              delete App.state.inFlightRequests[key];
+              App.setServiceStatus(key, "Offline", App.formatTime(new Date()));
+              var error = new Error(serverFunction + " timed out after " + Math.round(timeoutMs / 1000) + " seconds");
+              App.events.emit("service:error", { key: key, serverFunction: serverFunction, error: error });
+              reject(error);
+            }, timeoutMs);
+
+            function finish(success, value) {
+              if (settled) return;
+              settled = true;
+              clearTimeout(timer);
+              App.state.loading[key] = false;
+              delete App.state.inFlightRequests[key];
+
+              if (success) {
+                App.state.loadedServices[key] = true;
+                App.state.serviceCache[key] = value;
+                App.state.cacheTimestamps[key] = Date.now();
+                App.setServiceStatus(key, "Connected", App.formatTime(new Date()));
+                App.events.emit("service:loaded", { key: key, serverFunction: serverFunction, data: value });
+                resolve(value);
+                return;
+              }
+
+              App.events.emit("service:error", { key: key, serverFunction: serverFunction, error: value });
+              App.setServiceStatus(key, "Offline", App.formatTime(new Date()));
+              reject(value);
+            }
+
+            try {
+              var runner = google.script.run
+                .withSuccessHandler(function (data) { finish(true, data); })
+                .withFailureHandler(function (error) { finish(false, error); });
+
+              if (!runner || typeof runner[serverFunction] !== "function") {
+                finish(false, new Error("Missing server function: " + serverFunction));
+                return;
+              }
+
+              runner[serverFunction].apply(runner, args);
+            } catch (err) {
+              finish(false, err);
+            }
+          });
+
+          return App.state.inFlightRequests[key];
+        }
+      },
+
+      SearchRegistry: {
+        register: function (provider) {
+          App.registerSearchProvider(provider);
+        },
+        search: function (query, limit) {
+          return App.runUniversalSearch(query, limit);
+        },
+        list: function () {
+          return (App.state.searchProviders || []).slice();
+        }
+      },
+
+      registerService: function (id, config) {
+        if (!id) return;
+        App.state.serviceRegistry[id] = Object.assign({ id: id, status: "Waiting" }, config || {});
+        App.state.systemStatus[id] = App.state.systemStatus[id] || {
+          label: App.state.serviceRegistry[id].label || id,
+          status: "Waiting",
+          lastRefresh: ""
+        };
+      },
+
+      getService: function (id) {
+        return App.state.serviceRegistry[id] || null;
+      },
+
+      registerCoreServices: function () {
+        [
+          ["config", "Dashboard", "portalGetSpecCentralConfig"],
+          ["portalData", "Participants", "portalGetPortalData"],
+          ["calendar", "Timeline", "portalGetCalendarData"],
+          ["attendance", "Attendance", "portalGetAttendanceSummary"],
+          ["staff", "Staff", "portalGetStaffProductionTeam"],
+          ["announcements", "Announcements", ""],
+          ["operations", "Operations", "portalGetOperationsData"],
+          ["mediaTimeline", "Media", "portalGetMediaTimelineData"],
+          ["photos", "Profile Photos", "portalGetStudentPhotos"]
+        ].forEach(function (service) {
+          App.registerService(service[0], {
+            label: service[1],
+            serverFunction: service[2],
+            owner: service[0]
+          });
+        });
+      },
+
+      setServiceStatus: function (id, status, lastRefresh) {
+        var service = App.getService(id) || { label: id };
+        App.state.systemStatus[id] = {
+          label: service.label || id,
+          status: status || "Waiting",
+          lastRefresh: lastRefresh || (App.state.systemStatus[id] || {}).lastRefresh || ""
+        };
+        App.renderStatusRibbon();
+      },
+
+      bindApplicationEvents: function () {
+        App.events.on("service:loaded", function () {
+          if (App.state.currentPage === "dashboard") App.scheduleDashboardRender();
+        });
+        App.events.on("service:error", function () {
+          App.renderStatusRibbon();
+        });
+        App.events.on("dashboard:refresh", function () {
+          App.state.dashboardStats = App.buildDashboardStats();
+          App.scheduleDashboardRender();
+        });
+      },
+
+      scheduleDashboardRender: function () {
+        if (App.state.dashboardRenderTimer) clearTimeout(App.state.dashboardRenderTimer);
+        App.state.dashboardRenderTimer = setTimeout(function () {
+          App.state.dashboardRenderTimer = null;
+          if (App.state.currentPage === "dashboard") App.renderDashboardPage();
+        }, 50);
+      },
+
+      navigate: function (page, options) {
+        options = options || {};
+        if (page === "projectManagement") page = "operations";
+        var config = App.pages[page] || App.pages.dashboard;
+        var template = document.getElementById(config.template);
+        var outlet = document.getElementById("appContent");
+
+        if (config.permission && !App.hasPermission(config.permission)) {
+          App.notify("You do not have permission to open " + config.title + ".");
+          page = "dashboard";
+          config = App.pages.dashboard;
+          template = document.getElementById(config.template);
+        }
+
+        App.state.currentPage = page;
+        App.state.currentModule = page;
+        document.body.classList.toggle("attendanceFocus", page === "attendance");
+        if (!options.fromHistory) {
+          App.pushNavigation(page, options);
+        }
+        document.getElementById("topBarTitle").textContent = config.title;
+        document.getElementById("topBarDescription").textContent = config.description;
+
+        Array.prototype.forEach.call(document.querySelectorAll("[data-nav-page]"), function (button) {
+          button.classList.toggle("active", button.getAttribute("data-nav-page") === page);
+        });
+
+        App.renderStatusRibbon();
+        outlet.innerHTML = template ? template.innerHTML : '<div class="empty">Page not found.</div>';
+        App.renderNavigation();
+
+        if (page === "dashboard") App.renderDashboardPage();
+        if (page === "participants") {
+          App.renderParticipantStatus();
+          App.ensurePortalDataLoaded();
+        }
+        if (page === "calendar") App.renderCalendarPage();
+        if (page === "attendance") App.renderAttendancePage();
+        if (page === "rehearsals") App.renderRehearsalsPage();
+        if (page === "operations") App.renderOperationsPage();
+        if (page === "mediaTimeline") App.renderMediaTimelinePage();
+        if (page === "staff") App.renderStaffPage();
+      },
+
+      pushNavigation: function (page, options) {
+        var history = App.state.navigationHistory;
+        var entry = { page: page, at: Date.now(), context: (options && options.context) || null };
+
+        if (options && options.replace && history.length) {
+          history[App.state.navigationIndex] = entry;
+          return;
+        }
+
+        if (App.state.navigationIndex < history.length - 1) {
+          history.splice(App.state.navigationIndex + 1);
+        }
+
+        history.push(entry);
+        if (history.length > 30) history.shift();
+        App.state.navigationIndex = history.length - 1;
+      },
+
+      goBack: function () {
+        if (App.state.navigationIndex <= 0) return;
+        App.state.navigationIndex--;
+        App.navigate(App.state.navigationHistory[App.state.navigationIndex].page, { fromHistory: true });
+      },
+
+      goForward: function () {
+        if (App.state.navigationIndex >= App.state.navigationHistory.length - 1) return;
+        App.state.navigationIndex++;
+        App.navigate(App.state.navigationHistory[App.state.navigationIndex].page, { fromHistory: true });
+      },
+
+      bindGlobalSearch: function () {
+        var search = document.getElementById("globalSearch");
+        if (!search) return;
+
+        search.addEventListener("input", function () {
+          App.navigate("participants");
+          var participantSearch = document.getElementById("participantSearch");
+          if (participantSearch) {
+            participantSearch.value = search.value;
+            App.ensurePortalDataLoaded()
+              .then(function () {
+                App.queueParticipantSearch();
+              })
+              .catch(function (error) {
+                App.notify("Participant search could not load: " + App.getErrorMessage(error));
+              });
+          }
+        });
+      },
+
+      loadConfig: function () {
+        App.services.request("config", "portalGetSpecCentralConfig", { timeoutMs: 30000 })
+          .then(function (config) {
+            config = config || {};
+            App.state.dashboardContext = config;
+            App.state.dashboardProfile = config.dashboardProfile || "operations";
+            App.state.staff = config.staff || {};
+            App.state.currentUser = App.state.staff;
+            App.state.permissions = App.state.staff.permissions || [];
+            App.state.staffTeam = config.staffTeam || [];
+            App.state.attendanceUrl = config.attendanceUrl || "";
+            App.state.attendanceStatus = config.attendanceStatus || "";
+            App.state.attendanceSource = config.attendanceSource || "";
+            App.state.announcements = config.announcements || [];
+            App.state.notifications = config.notifications || [];
+            App.state.rehearsals = config.rehearsals || [];
+            App.state.todaysRehearsals = config.todaysRehearsals || [];
+            App.state.attendanceEvents = config.attendanceEvents || [];
+            App.state.currentDate = config.currentDate || "";
+            App.state.timelineStatus = config.timelineStatus || "";
+            App.state.timelineLastRefreshed = config.timelineLastRefreshed || "";
+            App.state.staffStatus = config.staffStatus || "";
+            App.applyServerServiceStatuses(config.services || {});
+            App.state.dashboardStats = App.buildDashboardStats();
+            App.renderNavigation();
+            App.renderStaffContext();
+            App.renderStatusRibbon();
+            App.renderNotifications();
+            if (App.state.currentPage === "attendance") App.renderAttendancePage();
+            if (App.state.currentPage === "dashboard") App.renderDashboardPage();
+            if (App.state.currentPage === "calendar") App.renderCalendarPage();
+            if (App.state.currentPage === "rehearsals") App.renderRehearsalsPage();
+            if (App.state.currentPage === "operations") App.renderOperationsPage();
+            if (App.state.currentPage === "mediaTimeline") App.renderMediaTimelinePage();
+            if (App.state.currentPage === "staff") App.renderStaffPage();
+          })
+          .catch(function (error) {
+            App.notify("Staff context could not be loaded: " + App.getErrorMessage(error));
+          });
+      },
+
+      loadPortalData: function () {
+        return App.services.request("portalData", "portalGetPortalData", { timeoutMs: 45000 })
+          .then(function (data) {
+            data = data || {};
+            App.state.participants = data.participants || [];
+            App.state.groups = data.groups || [];
+            App.state.schools = data.schools || [];
+            App.state.photos = data.photos || {};
+            App.state.ready = true;
+            App.rebuildSearchProviders();
+            App.state.dashboardStats = App.buildDashboardStats();
+            App.events.emit("dashboard:refresh");
+            App.renderStaffContext();
+            App.renderStatusRibbon();
+            App.renderDashboardPage();
+            App.renderParticipantStatus();
+            if (Object.keys(App.state.photos || {}).length) {
+              App.state.participants.forEach(function (participant) {
+                var photoUrl = App.getParticipantPhotoUrl(participant, true);
+                if (photoUrl) participant.photoUrl = photoUrl;
+              });
+              App.refreshParticipantViews();
+            } else {
+              App.loadPhotoData();
+            }
+          })
+          .catch(function (error) {
+            App.state.ready = false;
+            App.notify("Portal data could not be loaded: " + App.getErrorMessage(error));
+            App.renderStatusRibbon();
+            App.renderParticipantStatus();
+          });
+      },
+
+      ensurePortalDataLoaded: function () {
+        if (App.state.ready) return Promise.resolve({
+          participants: App.state.participants,
+          groups: App.state.groups,
+          schools: App.state.schools,
+          photos: App.state.photos
+        });
+
+        return App.loadPortalData();
+      },
+
+      loadPhotoData: function () {
+        App.services.request("photos", "portalGetStudentPhotos", { cacheMs: 120000, timeoutMs: 45000 })
+          .then(function (photos) {
+            App.state.photos = photos || {};
+            App.state.participants.forEach(function (participant) {
+              var photoUrl = App.getParticipantPhotoUrl(participant, true);
+              if (photoUrl) participant.photoUrl = photoUrl;
+            });
+            App.refreshParticipantViews();
+          })
+          .catch(function (error) {
+            console.warn("Spec Central photos could not be loaded", error);
+          });
+      },
+
+      refreshParticipantViews: function () {
+        var resultsEl = document.getElementById("participantResults");
+        if (resultsEl && App.state.latestResults && App.state.latestResults.length) {
+          resultsEl.innerHTML = App.state.latestResults.map(App.renderResultCard).join("");
+        }
+
+        if (App.state.currentPage !== "participants") return;
+        if (App.state.selectedParticipant) {
+          App.renderParticipantProfile(App.state.selectedParticipant);
+        } else if (App.state.selectedSchool) {
+          App.renderSchoolProfile(App.buildSchoolProfile(typeof App.state.selectedSchool === "string" ? App.state.selectedSchool : App.getSchoolName(App.state.selectedSchool)));
+        } else if (App.state.selectedItem) {
+          App.renderItemProfile(App.buildItemProfile(App.state.selectedItem));
+        } else if (App.state.selectedGroup) {
+          App.renderGroupProfile(App.state.selectedGroup);
+        } else if (App.state.selectedTeacher) {
+          App.renderTeacherProfile(App.buildTeacherProfile(App.state.selectedTeacher));
+        }
+      },
+
+      renderStaffContext: function () {
+        var el = document.getElementById("staffEmail");
+        if (!el) return;
+        el.textContent = App.state.staff.email || "Unknown user";
+      },
+
+      hasPermission: function (permission) {
+        var permissions = App.state.staff.permissions || [];
+        return permissions.indexOf(permission) >= 0;
+      },
+
+      renderNavigation: function () {
+        Array.prototype.forEach.call(document.querySelectorAll("[data-permission]"), function (button) {
+          var permission = button.getAttribute("data-permission");
+          button.hidden = permission ? !App.hasPermission(permission) : false;
+        });
+      },
+
+      renderStatusRibbon: function () {
+        var ribbon = document.getElementById("statusRibbon");
+        if (!ribbon) return;
+
+        if (App.state.currentPage !== "dashboard") {
+          ribbon.hidden = true;
+          ribbon.innerHTML = "";
+          return;
+        }
+
+        ribbon.hidden = false;
+        var statuses = App.getStatusItems();
+        ribbon.innerHTML = statuses.map(function (item) {
+          var theme = App.getStatusTheme(item.id);
+          var meta = [App.getStatusState(item.status), item.lastRefresh].filter(Boolean).join(" · ");
+          return '<div class="statusPill" style="--status-color:' + App.escapeHtml(theme.color) + ';--status-bg:' + App.escapeHtml(theme.bg) + ';">' +
+            '<div class="statusIcon">' + App.escapeHtml(theme.icon) + '</div>' +
+            '<div class="statusContent">' +
+              '<strong>' + App.escapeHtml(item.label) + '</strong>' +
+              '<span class="statusPurpose">' + App.escapeHtml(theme.purpose) + '</span>' +
+              '<span class="statusMeta">' + App.escapeHtml(meta || "Waiting") + '</span>' +
+            '</div>' +
+          '</div>';
+        }).join("");
+      },
+
+      getStatusTheme: function (id) {
+        var themes = {
+          portalData: { icon: "👤", color: "#44c2f0", bg: "rgba(68,194,240,.16)", purpose: "People + profiles" },
+          calendar: { icon: "📅", color: "#2d67b2", bg: "rgba(45,103,178,.14)", purpose: "Events + rehearsals" },
+          attendance: { icon: "✓", color: "#9dd085", bg: "rgba(157,208,133,.20)", purpose: "Rolls + check-in" },
+          staff: { icon: "🪪", color: "#fbcc39", bg: "rgba(251,204,57,.24)", purpose: "Roles + access" },
+          announcements: { icon: "!", color: "#ef509c", bg: "rgba(239,80,156,.16)", purpose: "Updates" },
+          operations: { icon: "◆", color: "#bb529e", bg: "rgba(187,82,158,.16)", purpose: "Management" },
+          mediaTimeline: { icon: "▶", color: "#f79420", bg: "rgba(247,148,32,.18)", purpose: "Campaigns" }
+        };
+        return themes[id] || { icon: "•", color: "#667085", bg: "rgba(102,112,133,.12)", purpose: "Service" };
+      },
+
+      getStatusState: function (status) {
+        var text = String(status || "Waiting");
+        if (/connected/i.test(text)) return text.replace(/\s+·\s+/g, " · ");
+        if (/loading/i.test(text)) return "Loading";
+        if (/offline|unavailable|error|failed/i.test(text)) return "Offline";
+        if (/ready/i.test(text)) return "Ready";
+        return text;
+      },
+
+      applyServerServiceStatuses: function (services) {
+        Object.keys(services || {}).forEach(function (id) {
+          App.setServiceStatus(id, services[id], App.state.currentDate || "");
+        });
+      },
+
+      getStatusItems: function () {
+        var items = [
+          {
+            id: "portalData",
+            label: "Participants",
+            status: App.state.ready ? "Connected · " + App.getTotalParticipantCount() + " loaded" : (App.state.loading.portalData ? "Loading" : "Waiting"),
+            lastRefresh: App.state.cacheTimestamps.portalData ? App.formatTime(App.state.cacheTimestamps.portalData) : ""
+          },
+          {
+            id: "calendar",
+            label: "Timeline",
+            status: App.state.loading.calendar ? "Loading" : (App.state.timelineStatus || (App.state.calendarData ? "Connected" : "Waiting")),
+            lastRefresh: App.state.timelineLastRefreshed || (App.state.cacheTimestamps.calendar ? App.formatTime(App.state.cacheTimestamps.calendar) : "")
+          },
+          {
+            id: "attendance",
+            label: "Attendance",
+            status: App.state.attendanceStatus || (App.state.attendanceUrl ? "Degraded" : "Waiting"),
+            lastRefresh: App.state.cacheTimestamps.attendanceSummary ? App.formatTime(App.state.cacheTimestamps.attendanceSummary) : ""
+          },
+          {
+            id: "staff",
+            label: "Staff",
+            status: App.state.staffStatus || App.state.staff.source || "Loading",
+            lastRefresh: App.state.cacheTimestamps.config ? App.formatTime(App.state.cacheTimestamps.config) : ""
+          },
+          {
+            id: "announcements",
+            label: "Announcements",
+            status: (App.state.announcements || []).length ? "Connected" : "Waiting",
+            lastRefresh: App.state.cacheTimestamps.config ? App.formatTime(App.state.cacheTimestamps.config) : ""
+          },
+          {
+            id: "operations",
+            label: "Operations",
+            status: App.state.projectData ? "Connected" : (App.state.loading.operations ? "Loading" : "Waiting"),
+            lastRefresh: App.state.cacheTimestamps.operations ? App.formatTime(App.state.cacheTimestamps.operations) : ""
+          },
+          {
+            id: "mediaTimeline",
+            label: "Media",
+            status: App.state.mediaData ? "Connected" : (App.state.loading.mediaTimeline ? "Loading" : "Waiting"),
+            lastRefresh: App.state.cacheTimestamps.mediaTimeline ? App.formatTime(App.state.cacheTimestamps.mediaTimeline) : ""
+          }
+        ];
+
+        return items.map(function (item) {
+          var system = App.state.systemStatus[item.id] || {};
+          return {
+            id: item.id,
+            label: item.label,
+            status: item.status || system.status || "Waiting",
+            lastRefresh: item.lastRefresh || system.lastRefresh || ""
+          };
+        });
+      },
+
+      renderDashboardPage: function () {
+        var greeting = document.getElementById("dashboardGreeting");
+        var date = document.getElementById("dashboardDate");
+        var staffName = document.getElementById("dashboardStaffName");
+        var staffRole = document.getElementById("dashboardStaffRole");
+        var staffDepartment = document.getElementById("dashboardStaffDepartment");
+        var nextRehearsal = document.getElementById("dashboardNextRehearsal");
+        var todayRehearsals = document.getElementById("heroTodayRehearsals");
+        var upcomingRehearsals = document.getElementById("heroUpcomingRehearsals");
+        var outstandingActions = document.getElementById("heroOutstandingActions");
+        var attendanceAlerts = document.getElementById("heroAttendanceAlerts");
+
+        if (greeting) greeting.textContent = App.getGreeting() + ", " + (App.state.staff.displayName || App.state.staff.name || "Spec Central user");
+        if (date) date.textContent = App.state.currentDate || App.formatShortDate(new Date());
+        if (staffName) staffName.textContent = App.state.staff.displayName || App.state.staff.name || App.state.staff.email || "Spec Central user";
+        if (staffRole) staffRole.textContent = App.state.staff.role || "Staff";
+        if (staffDepartment) staffDepartment.textContent = App.state.staff.department || "Department not connected";
+        if (nextRehearsal) {
+          var next = (App.state.rehearsals || [])[0] || {};
+          nextRehearsal.textContent = next.event || next.title || "No upcoming rehearsal loaded";
+        }
+        if (todayRehearsals) todayRehearsals.textContent = (App.state.todaysRehearsals || []).length;
+        if (upcomingRehearsals) upcomingRehearsals.textContent = (App.state.rehearsals || []).length;
+        if (outstandingActions) outstandingActions.textContent = App.getOutstandingActionCount();
+        if (attendanceAlerts) attendanceAlerts.textContent = App.state.attendanceEvents.length || 0;
+
+        var stats = document.getElementById("dashboardStatsFull");
+        if (stats) {
+          var dashboardStats = App.buildPersonalDashboardCards();
+          stats.innerHTML = dashboardStats.map(function (stat) {
+            return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div>' + (stat.note ? '<div class="moduleNote">' + App.escapeHtml(stat.note) + '</div>' : '') + '</div>';
+          }).join("");
+        }
+
+        App.renderAnnouncements();
+        App.renderUpcomingRehearsals();
+        App.renderRecentActivity();
+        App.renderAttendanceActionSummary();
+      },
+
+      renderAnnouncements: function () {
+        var el = document.getElementById("announcementCards");
+        if (!el) return;
+
+        var announcements = App.state.announcements || [];
+        el.innerHTML = announcements.length
+          ? announcements.map(function (item) {
+              return '<div class="announcementCard ' + App.escapeHtml(item.tone || "") + '">' +
+                '<strong>' + App.escapeHtml(item.title) + '</strong>' +
+                '<div class="moduleMeta">' + App.escapeHtml(item.body) + '</div>' +
+              '</div>';
+            }).join("")
+          : '<div class="empty">No announcements yet.</div>';
+      },
+
+      renderUpcomingRehearsals: function () {
+        var el = document.getElementById("upcomingRehearsals");
+        if (!el) return;
+
+        var rehearsals = (App.state.rehearsals || []).slice(0, 5);
+        el.innerHTML = rehearsals.length
+          ? rehearsals.map(App.renderRehearsalItem).join("")
+          : '<div class="empty">No upcoming rehearsals loaded yet.</div>';
+      },
+
+      renderRecentActivity: function () {
+        var el = document.getElementById("recentActivityFull");
+        if (!el) return;
+
+        var searches = App.safeLoadJson("specPortalRecentSearches", []).slice(0, 4);
+        var viewed = App.safeLoadJson("specPortalRecentlyViewed", []).slice(0, 4);
+        var activity = [];
+
+        searches.forEach(function (term) {
+          activity.push("Recent search: " + term);
+        });
+
+        viewed.forEach(function (item) {
+          activity.push("Recently viewed: " + (item.label || item.type));
+        });
+
+        el.innerHTML = activity.length
+          ? activity.map(function (line) { return '<div class="activityItem">' + App.escapeHtml(line) + '</div>'; }).join("")
+          : '<div class="empty">Recent searches and opened profiles will appear here.</div>';
+      },
+
+      renderAttendanceActionSummary: function () {
+        var el = document.getElementById("attendanceActionSummary");
+        if (!el) return;
+
+        el.innerHTML = App.state.attendanceUrl
+          ? 'Attendance app connected. Live action summaries will appear here next.'
+          : 'Configure the Attendance web app URL to show attendance actions here.';
+      },
+
+      getOutstandingActionCount: function () {
+        var count = 0;
+        if (!App.state.attendanceUrl) count++;
+        if (!(App.state.staffTeam || []).length) count++;
+        if (!(App.state.rehearsals || []).length) count++;
+        return count;
+      },
+
+      buildPersonalDashboardCards: function () {
+        var cards = [
+          { label: "Role", value: App.state.staff.role || "Staff" },
+          { label: "Department", value: App.state.staff.department || "Not connected" },
+          { label: "Events Today", value: App.state.todaysRehearsals.length },
+          { label: "Upcoming Rehearsals", value: App.state.rehearsals.length },
+          { label: "Attendance Rolls", value: App.state.attendanceUrl ? "Available" : "Not connected" }
+        ];
+
+        if (App.hasPermission("operations.view")) {
+          cards.push({
+            label: "Operations",
+            value: "Available",
+            note: "Open Operations for management controls"
+          });
+        }
+
+        return cards;
+      },
+
+      buildDashboardStats: function () {
+        var teachers = {};
+        var items = {};
+
+        App.state.participants.forEach(function (participant) {
+          var teacher = String(participant.teacherEmail || participant.teacherName || "").trim().toLowerCase();
+          var item = String(participant.item || "").trim().toLowerCase();
+          if (teacher) teachers[teacher] = true;
+          if (item) items[item] = true;
+        });
+
+        App.state.groups.forEach(function (group) {
+          var teacher = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
+          var item = String(group.item || "").trim().toLowerCase();
+          if (teacher) teachers[teacher] = true;
+          if (item) items[item] = true;
+        });
+
+        return [
+          { label: "Participants", value: App.getTotalParticipantCount(), note: App.getParticipantTotalNote() },
+          { label: "Schools", value: App.state.schools.length },
+          { label: "Groups", value: App.state.groups.length },
+          { label: "Items", value: Object.keys(items).length },
+          { label: "Teachers", value: Object.keys(teachers).length },
+          { label: "Staff Production Team", value: App.state.staffTeam.length },
+          { label: "Upcoming Rehearsals", value: App.state.rehearsals.length },
+          { label: "Today's Rehearsals", value: App.state.todaysRehearsals.length },
+          { label: "Attendance Events", value: App.state.attendanceEvents.length || (App.state.attendanceUrl ? 1 : 0) }
+        ];
+      },
+
+      renderParticipantStatus: function () {
+        var status = document.getElementById("participantStatus");
+        if (!status) return;
+
+        if (!App.state.ready) {
+          status.textContent = "Loading participant data...";
+          return;
+        }
+
+        status.textContent = "Ready - " + App.getTotalParticipantCount() + " participants, " +
+          App.state.groups.length + " groups and " + App.state.schools.length + " schools loaded" +
+          (App.getParticipantTotalNote() ? " - " + App.getParticipantTotalNote() : "");
+      },
+
+      loadCalendarData: function () {
+        if (App.state.calendarData) return;
+
+        var source = document.getElementById("calendarSource");
+        if (source) source.textContent = "Loading Timeline events...";
+
+        App.services.request("calendar", "portalGetCalendarData", { cacheMs: 120000, timeoutMs: 30000 })
+          .then(function (data) {
+            App.state.calendarData = data || { events: [] };
+            App.state.rehearsals = App.state.calendarData.events || App.state.rehearsals || [];
+            App.rebuildSearchProviders();
+            App.renderStatusRibbon();
+            if (App.state.currentPage === "calendar") App.renderCalendarPage();
+            if (App.state.currentPage === "rehearsals") App.renderRehearsalsPage();
+          })
+          .catch(function (error) {
+            App.state.calendarData = { events: [], source: "Timeline unavailable", error: App.getErrorMessage(error) };
+            App.notify("Calendar data could not be loaded: " + App.getErrorMessage(error));
+            if (App.state.currentPage === "calendar") App.renderCalendarPage();
+          });
+      },
+
+      renderCalendarPage: function () {
+        if (!App.state.calendarData) {
+          App.loadCalendarData();
+          App.renderCalendarLoading();
+          return;
+        }
+
+        var source = document.getElementById("calendarSource");
+        if (source) {
+          source.textContent = (App.state.calendarData.source || "Timeline data") +
+            (App.state.calendarData.generatedAt ? " · " + App.state.calendarData.generatedAt : "");
+        }
+
+        App.populateEventFilters("calendarTypeFilter", "type", App.getCalendarEvents());
+        App.populateEventFilters("calendarVenueFilter", "venue", App.getCalendarEvents());
+
+        var heading = document.getElementById("calendarHeading");
+        if (heading) {
+          heading.textContent = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric" }).format(App.state.calendarDate);
+        }
+
+        var month = document.getElementById("calendarMonth");
+        var agenda = document.getElementById("calendarAgenda");
+        if (!month || !agenda) return;
+
+        if (App.state.calendarView === "agenda") {
+          month.style.display = "none";
+          agenda.style.display = "grid";
+          App.renderCalendarAgenda(agenda);
+          return;
+        }
+
+        month.style.display = "grid";
+        agenda.style.display = "none";
+        App.renderCalendarMonth(month);
+      },
+
+      renderCalendarLoading: function () {
+        var month = document.getElementById("calendarMonth");
+        if (month) month.innerHTML = '<div class="empty" style="grid-column:1/-1;">Loading calendar events...</div>';
+      },
+
+      getCalendarEvents: function () {
+        var events = (App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || [];
+        var search = String((document.getElementById("calendarSearch") || {}).value || "").toLowerCase();
+        var type = String((document.getElementById("calendarTypeFilter") || {}).value || "");
+        var venue = String((document.getElementById("calendarVenueFilter") || {}).value || "");
+
+        return events.filter(function (event) {
+          var text = [event.title, event.event, event.venue, event.type, event.rehearsalType, (event.items || []).join(" ")].join(" ").toLowerCase();
+          if (search && text.indexOf(search) < 0) return false;
+          if (type && String(event.type || event.rehearsalType || "") !== type) return false;
+          if (venue && String(event.venue || "") !== venue) return false;
+          return true;
+        });
+      },
+
+      renderCalendarMonth: function (el) {
+        var date = App.state.calendarDate;
+        var first = new Date(date.getFullYear(), date.getMonth(), 1);
+        var start = new Date(first);
+        start.setDate(first.getDate() - first.getDay());
+        var events = App.getCalendarEvents();
+        var byDate = App.groupEventsByDate(events);
+        var html = "";
+
+        for (var i = 0; i < 42; i++) {
+          var day = new Date(start);
+          day.setDate(start.getDate() + i);
+          var key = App.toDateKey(day);
+          var dayEvents = byDate[key] || [];
+          html += '<div class="calendarDay' + (day.getMonth() === date.getMonth() ? "" : " muted") + '">' +
+            '<div class="calendarDayNumber">' + App.escapeHtml(App.formatShortDate(day)) + '</div>' +
+            dayEvents.slice(0, 3).map(function (event) {
+              return '<button class="calendarEvent" type="button" style="background:' + App.escapeHtml(event.colour || "#2d67b2") + '" onclick="App.showCalendarEventDetail(\'' + App.escapeJs(event.id) + '\')">' +
+                App.escapeHtml(event.title || event.event || "Event") +
+              '</button>';
+            }).join("") +
+            (dayEvents.length > 3 ? '<div class="moduleMeta">+' + (dayEvents.length - 3) + ' more</div>' : "") +
+          '</div>';
+        }
+
+        el.innerHTML = html;
+      },
+
+      renderCalendarAgenda: function (el) {
+        var events = App.getCalendarEvents().sort(App.sortEvents);
+        el.innerHTML = events.length
+          ? events.map(App.renderTimelineEventCard).join("")
+          : '<div class="empty">No events match the current filters.</div>';
+      },
+
+      showCalendarEventDetail: function (id) {
+        var events = ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []);
+        var event = events.find(function (item) { return String(item.id) === String(id); });
+        var el = document.getElementById("calendarEventDetail");
+        if (!event || !el) return;
+
+        App.state.selectedCalendarEvent = event;
+        el.className = "profilePanel";
+        el.innerHTML =
+          '<h2 class="profileTitle">' + App.escapeHtml(event.title || event.event || "Event") + '</h2>' +
+          App.profileLine("Date / time", [event.date, [event.start, event.finish].filter(Boolean).join(" - ")].filter(Boolean).join(" · ")) +
+          App.profileLine("Venue", event.venue) +
+          App.profileLine("Type", event.type || event.rehearsalType) +
+          App.profileLine("Groups / items", (event.items || event.groups || []).join(", ")) +
+          App.profileLine("Allocated staff", event.allocatedStaffCount ? event.allocatedStaffCount + " staff" : "Not connected") +
+          App.profileLine("Attendance", event.attendanceStatus || "Not connected") +
+          App.profileLine("Source", event.sourceRow ? "Timeline row " + event.sourceRow : event.source || "Placeholder");
+      },
+
+      goCalendarToday: function () {
+        App.state.calendarDate = new Date();
+        App.renderCalendarPage();
+      },
+
+      moveCalendar: function (months) {
+        var current = App.state.calendarDate;
+        App.state.calendarDate = new Date(current.getFullYear(), current.getMonth() + months, 1);
+        App.renderCalendarPage();
+      },
+
+      toggleCalendarView: function () {
+        App.state.calendarView = App.state.calendarView === "month" ? "agenda" : "month";
+        App.renderCalendarPage();
+      },
+
+      groupEventsByDate: function (events) {
+        return (events || []).reduce(function (map, event) {
+          var key = event.dateKey || App.toDateKey(event.date);
+          if (!key) return map;
+          map[key] = map[key] || [];
+          map[key].push(event);
+          return map;
+        }, {});
+      },
+
+      renderAttendancePage: function () {
+        var launch = document.getElementById("attendanceLaunch");
+        var frame = document.getElementById("attendanceFrame");
+        var placeholder = document.getElementById("attendancePlaceholder");
+        var heroStatus = document.getElementById("attendanceHeroStatus");
+        var sourceText = document.getElementById("attendanceSourceText");
+        var urlText = document.getElementById("attendanceUrlText");
+        if (!frame || !placeholder) return;
+
+        if (heroStatus) heroStatus.textContent = App.state.attendanceStatus || (App.state.attendanceUrl ? "Checking" : "Waiting");
+        if (sourceText) sourceText.textContent = App.state.attendanceSource || "Attendance API and standalone web app";
+        if (urlText) {
+          urlText.textContent = App.state.attendanceUrl
+            ? "The standalone Attendance application remains available below."
+            : "Configure SPEC_CENTRAL_ATTENDANCE_URL or ATTENDANCE_WEB_APP_URL.";
+        }
+
+        if (App.state.attendanceUrl) {
+          if (launch) {
+            launch.disabled = false;
+            launch.textContent = "Open Attendance";
+          }
+          if (frame.src !== App.state.attendanceUrl) frame.src = App.state.attendanceUrl;
+          frame.style.display = "block";
+          placeholder.style.display = "none";
+        } else {
+          if (launch) {
+            launch.disabled = true;
+            launch.textContent = "Attendance Not Configured";
+          }
+          frame.style.display = "none";
+          placeholder.style.display = "block";
+        }
+
+        App.renderAttendanceLiveData();
+        if (!App.state.attendanceLoaded && !App.state.loading.attendanceSummary) {
+          App.loadAttendanceData(false);
+        }
+      },
+
+      loadAttendanceData: function (forceRefresh) {
+        App.state.attendanceError = "";
+        App.state.loading.attendanceSummary = true;
+        App.renderAttendanceLiveData();
+
+        var summaryRequest = App.services.request("attendanceSummary", "portalGetAttendanceSummary", {
+          cacheMs: 2 * 60 * 1000,
+          timeoutMs: 30000,
+          forceRefresh: !!forceRefresh
+        });
+        var eventsRequest = App.services.request("attendanceEvents", "portalGetAttendanceEvents", {
+          cacheMs: 5 * 60 * 1000,
+          timeoutMs: 30000,
+          forceRefresh: !!forceRefresh
+        });
+
+        return Promise.all([summaryRequest, eventsRequest])
+          .then(function (results) {
+            var summaryResult = results[0] || {};
+            var eventsResult = results[1] || {};
+            App.state.attendanceLoaded = true;
+            App.state.attendanceSummary = summaryResult.ok ? summaryResult.data || {} : null;
+            App.state.attendanceEvents = eventsResult.ok && Array.isArray(eventsResult.data) ? eventsResult.data : [];
+            App.state.attendanceStatus = summaryResult.status || (summaryResult.ok ? "Connected" : "Degraded");
+
+            var errors = [];
+            if (!summaryResult.ok) errors.push(summaryResult.error || "Attendance summary is unavailable.");
+            if (!eventsResult.ok) errors.push(eventsResult.error || "Attendance events are unavailable.");
+            App.state.attendanceError = errors.join(" ");
+            App.setServiceStatus("attendance", App.state.attendanceStatus, App.formatTime(new Date()));
+            App.renderAttendanceLiveData();
+            App.renderStatusRibbon();
+            return results;
+          })
+          .catch(function (error) {
+            App.state.attendanceLoaded = true;
+            App.state.attendanceStatus = App.state.attendanceUrl ? "Degraded" : "Waiting";
+            App.state.attendanceError = App.getErrorMessage(error);
+            App.setServiceStatus("attendance", App.state.attendanceStatus, App.formatTime(new Date()));
+            App.renderAttendanceLiveData();
+          })
+          .finally(function () {
+            App.state.loading.attendanceSummary = false;
+            App.renderAttendanceLiveData();
+          });
+      },
+
+      renderAttendanceLiveData: function () {
+        var loading = document.getElementById("attendanceLoading");
+        var error = document.getElementById("attendanceError");
+        var content = document.getElementById("attendanceLiveContent");
+        var cards = document.getElementById("attendanceSummaryCards");
+        var counts = document.getElementById("attendanceStatusCounts");
+        var eventsList = document.getElementById("attendanceEventList");
+        if (!loading || !error || !content || !cards || !counts || !eventsList) return;
+
+        var summary = App.state.attendanceSummary;
+        loading.style.display = App.state.loading.attendanceSummary && !summary ? "block" : "none";
+        error.style.display = App.state.attendanceError ? "block" : "none";
+        error.innerHTML = App.state.attendanceError
+          ? '<strong>Attendance data is degraded</strong><br>' + App.escapeHtml(App.state.attendanceError) +
+            '<br><button class="quickLink compact" type="button" onclick="App.loadAttendanceData(true)">Retry</button>'
+          : "";
+
+        if (!summary) {
+          content.style.display = "none";
+          return;
+        }
+
+        content.style.display = "block";
+        var summaryCards = [
+          ["Total events", summary.totalEvents || 0],
+          ["Upcoming", summary.upcomingEvents || 0],
+          ["Past", summary.pastEvents || 0],
+          ["Student-event records", summary.totalStudentEventRecords || 0]
+        ];
+        cards.innerHTML = summaryCards.map(function (card) {
+          return '<div class="attendanceSummaryCard"><div class="attendanceSummaryValue">' +
+            App.escapeHtml(card[1]) + '</div><div class="attendanceSummaryLabel">' +
+            App.escapeHtml(card[0]) + '</div></div>';
+        }).join("") + '<div class="attendanceUpdated">Last updated ' + App.escapeHtml(App.formatAttendanceApiTime(summary.lastUpdated)) + '</div>';
+
+        var statusCounts = summary.countsByStatus || {};
+        var statusNames = Object.keys(statusCounts);
+        counts.innerHTML = statusNames.length
+          ? statusNames.map(function (status) {
+              return '<div class="attendanceStatusRow"><span>' + App.escapeHtml(status) + '</span><strong>' +
+                App.escapeHtml(statusCounts[status]) + '</strong></div>';
+            }).join("")
+          : '<div class="empty">No attendance status records yet.</div>';
+
+        var today = App.toDateKey(new Date());
+        var upcoming = (App.state.attendanceEvents || [])
+          .filter(function (event) { return !event.dateKey || event.dateKey >= today; })
+          .sort(function (a, b) {
+            return String(a.dateKey || a.date || "").localeCompare(String(b.dateKey || b.date || "")) ||
+              String(a.time || "").localeCompare(String(b.time || ""));
+          });
+
+        eventsList.className = "attendanceEventList";
+        eventsList.innerHTML = upcoming.length
+          ? upcoming.map(App.renderAttendanceEventCard).join("")
+          : '<div class="empty">No upcoming Attendance events.</div>';
+      },
+
+      renderAttendanceEventCard: function (event) {
+        var attendanceCounts = event.attendanceCounts && event.attendanceCounts.byStatus
+          ? event.attendanceCounts.byStatus
+          : {};
+        var countText = Object.keys(attendanceCounts)
+          .filter(function (status) { return Number(attendanceCounts[status]) > 0; })
+          .map(function (status) { return status + " " + attendanceCounts[status]; })
+          .join(" · ");
+
+        return '<article class="attendanceEventCard"><div><strong>' + App.escapeHtml(event.eventName || "Attendance event") +
+          '</strong><div class="attendanceEventMeta">' +
+          App.escapeHtml([event.date, event.time, event.location].filter(Boolean).join(" · ")) +
+          '</div><div class="attendanceEventCounts">' + App.escapeHtml(countText || "No attendance marks yet") +
+          '</div></div><strong>' + App.escapeHtml(event.studentCount || (event.attendanceCounts || {}).total || 0) +
+          '</strong></article>';
+      },
+
+      formatAttendanceApiTime: function (value) {
+        var date = value ? new Date(value) : null;
+        if (!date || isNaN(date.getTime())) return value || "Unavailable";
+        return date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      },
+
+      reloadAttendanceFrame: function () {
+        var frame = document.getElementById("attendanceFrame");
+        if (!frame || !App.state.attendanceUrl) {
+          App.notify("Attendance URL is not configured yet.");
+          return;
+        }
+        frame.src = App.state.attendanceUrl + (App.state.attendanceUrl.indexOf("?") >= 0 ? "&" : "?") + "refresh=" + Date.now();
+      },
+
+      renderRehearsalsPage: function () {
+        var el = document.getElementById("rehearsalListFull");
+        if (!el) return;
+
+        if (!App.state.calendarData) {
+          App.loadCalendarData();
+        }
+
+        App.populateEventFilters("rehearsalVenueFilter", "venue", App.state.rehearsals || []);
+        App.populateEventFilters("rehearsalTypeFilter", "type", App.state.rehearsals || []);
+
+        var rehearsals = App.getFilteredRehearsals();
+        el.innerHTML = rehearsals.length
+          ? rehearsals.map(App.renderTimelineEventCard).join("")
+          : '<div class="empty">No rehearsals match the current filters.</div>';
+      },
+
+      renderRehearsalItem: function (rehearsal) {
+        return App.renderTimelineEventCard(rehearsal);
+      },
+
+      renderTimelineEventCard: function (event) {
+        var date = event.date || event.dateDisplay || "TBC";
+        var time = [event.start, event.finish].filter(Boolean).join(" - ");
+        var title = event.event || event.title || "Rehearsal";
+        var meta = [
+          time,
+          event.venue,
+          event.type || event.rehearsalType,
+          (event.items || []).length ? (event.items || []).join(", ") : "",
+          event.allocatedStaffCount ? event.allocatedStaffCount + " staff" : "",
+          event.attendanceStatus || ""
+        ].filter(Boolean).join(" · ");
+
+        return '<button class="dateItem" type="button" onclick="App.showCalendarEventDetail(\'' + App.escapeJs(event.id || title) + '\')">' +
+          '<div class="dateBadge" style="background:' + App.escapeHtml(event.colour || "#fbcc39") + '">' + App.escapeHtml(date) + '</div>' +
+          '<div><strong>' + App.escapeHtml(title) + '</strong><br>' +
+          '<span class="moduleMeta">' + App.escapeHtml(meta || "Timeline event") + '</span></div>' +
+        '</button>';
+      },
+
+      setRehearsalMode: function (mode) {
+        App.state.rehearsalMode = mode;
+        App.renderRehearsalsPage();
+      },
+
+      getFilteredRehearsals: function () {
+        var events = (App.state.rehearsals || []).slice();
+        var search = String((document.getElementById("rehearsalSearch") || {}).value || "").toLowerCase();
+        var venue = String((document.getElementById("rehearsalVenueFilter") || {}).value || "");
+        var type = String((document.getElementById("rehearsalTypeFilter") || {}).value || "");
+        var today = App.toDateKey(new Date());
+        var mode = App.state.rehearsalMode || "upcoming";
+
+        return events.filter(function (event) {
+          var dateKey = event.dateKey || App.toDateKey(event.date);
+          var text = [event.title, event.event, event.venue, event.type, (event.items || []).join(" ")].join(" ").toLowerCase();
+          if (search && text.indexOf(search) < 0) return false;
+          if (venue && String(event.venue || "") !== venue) return false;
+          if (type && String(event.type || event.rehearsalType || "") !== type) return false;
+          if (mode === "today") return dateKey === today;
+          if (mode === "past") return dateKey && dateKey < today;
+          return !dateKey || dateKey >= today;
+        }).sort(App.sortEvents);
+      },
+
+      renderOperationsPage: function () {
+        var el = document.getElementById("operationsContent");
+        var source = document.getElementById("operationsSource");
+        if (!el) return;
+
+        if (!App.state.projectData) {
+          el.innerHTML = '<div class="empty">Loading operations data...</div>';
+          App.loadOperationsData();
+          return;
+        }
+
+        if (source) source.textContent = (App.state.projectData.source || "Operations") +
+          (App.state.projectData.generatedAt ? " · " + App.state.projectData.generatedAt : "");
+
+        var tasks = App.state.projectData.tasks || [];
+        var view = App.state.operationsView || "overview";
+
+        if (view === "overview") {
+          el.innerHTML = App.renderOperationsOverview();
+        } else if (view === "events") {
+          el.innerHTML = '<div class="empty">Event management will connect to Timeline in a later sprint.</div>';
+        } else if (view === "users") {
+          el.innerHTML = '<div class="empty">Users and permissions will connect to the Staff Production Team source.</div>';
+        } else if (view === "data") {
+          el.innerHTML = '<div class="empty">Import Centre, acceptance syncing and reconciliation tools will appear here.</div>';
+        } else if (view === "announcements") {
+          el.innerHTML = '<div class="empty">Announcement authoring will appear here once the source is connected.</div>';
+        } else if (view === "integrations") {
+          el.innerHTML = App.renderOperationsIntegrations();
+        } else if (view === "diagnostics") {
+          el.innerHTML = '<div class="empty">Diagnostics and audit logs will appear here after backend instrumentation is connected.</div>';
+        } else if (view === "table") {
+          el.innerHTML = App.renderProjectTable(tasks);
+        } else if (view === "milestones" || view === "projects") {
+          el.innerHTML = App.renderGroupedCards(tasks, "workstream");
+        } else if (view === "mine") {
+          el.innerHTML = App.renderProjectTable(App.filterMine(tasks, "owner"));
+        } else if (view === "risk") {
+          el.innerHTML = App.renderProjectTable(tasks.filter(function (task) {
+            return /blocked|waiting|overdue|risk/i.test([task.status, task.priority, task.notes].join(" "));
+          }));
+        } else {
+          el.innerHTML = App.renderTaskBoard(tasks, App.state.projectData.statuses || []);
+        }
+      },
+
+      renderOperationsOverview: function () {
+        var stats = App.buildDashboardStats();
+        return '<div class="moduleGrid">' + stats.map(function (stat) {
+          return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div>' + (stat.note ? '<div class="moduleNote">' + App.escapeHtml(stat.note) + '</div>' : '') + '</div>';
+        }).join("") + '</div>' +
+          '<h4 class="sectionTitle">Project Management</h4>' +
+          App.renderTaskBoard((App.state.projectData && App.state.projectData.tasks) || [], (App.state.projectData && App.state.projectData.statuses) || []);
+      },
+
+      renderOperationsIntegrations: function () {
+        return '<div class="moduleGrid">' + App.getStatusItems().map(function (item) {
+          return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(item.label) + '</div><div class="moduleMeta">' + App.escapeHtml(item.status || "Waiting") + '</div></div>';
+        }).join("") + '</div>';
+      },
+
+      loadOperationsData: function () {
+        App.services.request("operations", "portalGetOperationsData", { cacheMs: 120000, timeoutMs: 30000 })
+          .then(function (data) {
+            App.state.projectData = data || { tasks: [] };
+            if (App.state.currentPage === "operations") App.renderOperationsPage();
+          })
+          .catch(function (error) {
+            App.state.projectData = { tasks: [], source: "Unavailable: " + App.getErrorMessage(error) };
+            if (App.state.currentPage === "operations") App.renderOperationsPage();
+          });
+      },
+
+      setOperationsView: function (view) {
+        App.state.operationsView = view;
+        App.renderOperationsPage();
+      },
+
+      renderProjectManagementPage: function () {
+        App.renderOperationsPage();
+      },
+
+      loadProjectManagementData: function () {
+        App.loadOperationsData();
+      },
+
+      setProjectView: function (view) {
+        App.setOperationsView(view === "board" ? "projects" : view);
+      },
+
+      renderTaskBoard: function (tasks, statuses) {
+        statuses = statuses.length ? statuses : ["Not started", "In progress", "Waiting", "Ready for review", "Complete"];
+        return '<div class="boardGrid">' + statuses.map(function (status) {
+          var columnTasks = tasks.filter(function (task) { return String(task.status || "") === status; });
+          return '<div class="boardColumn"><strong>' + App.escapeHtml(status) + '</strong>' +
+            (columnTasks.length ? columnTasks.map(App.renderTaskCard).join("") : '<div class="moduleMeta">No tasks</div>') +
+          '</div>';
+        }).join("") + '</div>';
+      },
+
+      renderTaskCard: function (task) {
+        return '<div class="taskCard">' +
+          '<strong>' + App.escapeHtml(task.task || task.activity || "Untitled") + '</strong>' +
+          '<div class="moduleMeta">' + App.escapeHtml([task.workstream || task.campaign, task.owner, task.department].filter(Boolean).join(" · ")) + '</div>' +
+          '<div class="pillRow"><span class="pill">' + App.escapeHtml(task.status || "No status") + '</span><span class="pill">' + App.escapeHtml(task.priority || "Priority pending") + '</span></div>' +
+        '</div>';
+      },
+
+      renderProjectTable: function (tasks) {
+        var columns = ["task", "workstream", "owner", "department", "status", "priority", "startDate", "dueDate", "relatedEvent", "dependencies", "notes", "lastUpdated"];
+        return App.renderDataTable(tasks, columns);
+      },
+
+      renderMediaTimelinePage: function () {
+        var el = document.getElementById("mediaTimelineContent");
+        var source = document.getElementById("mediaSource");
+        if (!el) return;
+
+        if (!App.state.mediaData) {
+          el.innerHTML = '<div class="empty">Loading media timeline data...</div>';
+          App.loadMediaTimelineData();
+          return;
+        }
+
+        if (source) source.textContent = (App.state.mediaData.source || "Media Timeline") +
+          (App.state.mediaData.generatedAt ? " · " + App.state.mediaData.generatedAt : "");
+
+        var activities = App.state.mediaData.activities || [];
+        var view = App.state.mediaView || "gantt";
+
+        if (view === "calendar") {
+          el.innerHTML = App.renderGroupedCards(activities, "publishDate");
+        } else if (view === "campaigns") {
+          el.innerHTML = App.renderGroupedCards(activities, "campaign");
+        } else if (view === "mine") {
+          el.innerHTML = App.renderDataTable(App.filterMine(activities, "owner"), ["campaign", "activity", "channel", "owner", "status", "priority", "publishDate", "approvalStatus", "notes"]);
+        } else {
+          el.innerHTML = App.renderMediaGantt(activities);
+        }
+      },
+
+      loadMediaTimelineData: function () {
+        App.services.request("mediaTimeline", "portalGetMediaTimelineData", { cacheMs: 120000, timeoutMs: 30000 })
+          .then(function (data) {
+            App.state.mediaData = data || { activities: [] };
+            if (App.state.currentPage === "mediaTimeline") App.renderMediaTimelinePage();
+          })
+          .catch(function (error) {
+            App.state.mediaData = { activities: [], source: "Unavailable: " + App.getErrorMessage(error) };
+            if (App.state.currentPage === "mediaTimeline") App.renderMediaTimelinePage();
+          });
+      },
+
+      setMediaView: function (view) {
+        App.state.mediaView = view;
+        App.renderMediaTimelinePage();
+      },
+
+      renderMediaGantt: function (activities) {
+        return '<div class="ganttGrid">' + (activities.length ? activities.map(function (activity) {
+          return '<div class="ganttRow">' +
+            '<div><strong>' + App.escapeHtml(activity.campaign || "Campaign") + '</strong><div class="moduleMeta">' + App.escapeHtml(activity.activity || "") + '</div></div>' +
+            '<div class="ganttTrack"><div class="ganttBar" title="' + App.escapeHtml(activity.status || "") + '"></div></div>' +
+          '</div>';
+        }).join("") : '<div class="empty">No media activities found.</div>') + '</div>';
+      },
+
+      renderGroupedCards: function (items, field) {
+        var groups = {};
+        (items || []).forEach(function (item) {
+          var key = item[field] || "Unspecified";
+          groups[key] = groups[key] || [];
+          groups[key].push(item);
+        });
+
+        var keys = Object.keys(groups).sort();
+        return keys.length ? keys.map(function (key) {
+          return '<div class="boardColumn" style="margin-bottom:12px;"><strong>' + App.escapeHtml(key) + '</strong>' +
+            groups[key].map(App.renderTaskCard).join("") +
+          '</div>';
+        }).join("") : '<div class="empty">No records found.</div>';
+      },
+
+      renderDataTable: function (rows, columns) {
+        if (!rows.length) return '<div class="empty">No records found.</div>';
+        return '<table class="dataTable"><thead><tr>' +
+          columns.map(function (column) { return '<th>' + App.escapeHtml(App.toTitle(column)) + '</th>'; }).join("") +
+          '</tr></thead><tbody>' +
+          rows.map(function (row) {
+            return '<tr>' + columns.map(function (column) {
+              return '<td>' + App.escapeHtml(row[column] || "") + '</td>';
+            }).join("") + '</tr>';
+          }).join("") +
+          '</tbody></table>';
+      },
+
+      filterMine: function (items, ownerField) {
+        var email = String(App.state.staff.email || "").toLowerCase();
+        var name = String(App.state.staff.name || App.state.staff.displayName || "").toLowerCase();
+        return (items || []).filter(function (item) {
+          var owner = String(item[ownerField] || "").toLowerCase();
+          return owner && (owner.indexOf(email) >= 0 || owner.indexOf(name) >= 0);
+        });
+      },
+
+      toTitle: function (value) {
+        return String(value || "")
+          .replace(/([A-Z])/g, " $1")
+          .replace(/^./, function (char) { return char.toUpperCase(); });
+      },
+
+      renderStaffPage: function () {
+        var el = document.getElementById("staffProfileSummary");
+        if (!el) return;
+
+        var staff = App.state.staff || {};
+        el.innerHTML =
+          '<div class="profileLine"><strong>Email</strong><br>' + App.escapeHtml(staff.email || "Unknown user") + '</div>' +
+          '<div class="profileLine"><strong>Display name</strong><br>' + App.escapeHtml(staff.displayName || "Spec Central user") + '</div>' +
+          '<div class="profileLine"><strong>Role</strong><br>' + App.escapeHtml(staff.role || "Staff") + '</div>' +
+          '<div class="profileLine"><strong>Staff team records</strong><br>' + App.escapeHtml((App.state.staffTeam || []).length) + '</div>' +
+          '<div class="profileLine"><strong>Source</strong><br>' + App.escapeHtml(staff.source || "Placeholder") + '</div>';
+      },
+
+      openAttendance: function () {
+        if (App.state.attendanceUrl) {
+          window.open(App.state.attendanceUrl, "_blank");
+          return;
+        }
+        App.navigate("attendance");
+        App.notify("Attendance URL is not configured yet.");
+      },
+
+      focusParticipantsSearch: function () {
+        App.navigate("participants");
+        setTimeout(function () {
+          var search = document.getElementById("participantSearch");
+          if (search) search.focus();
+          App.ensurePortalDataLoaded().catch(function (error) {
+            App.notify("Participant data could not be loaded: " + App.getErrorMessage(error));
+          });
+        }, 0);
+      },
+
+      browseGlobal: function (type) {
+        App.navigate("participants");
+        setTimeout(function () {
+          var search = document.getElementById("participantSearch");
+          var resultsEl = document.getElementById("participantResults");
+          var statusEl = document.getElementById("participantStatus");
+          if (!search || !resultsEl || !statusEl) return;
+
+          search.value = "";
+          if (!App.state.ready) {
+            statusEl.textContent = "Loading participant data...";
+            App.ensurePortalDataLoaded()
+              .then(function () {
+                App.browseGlobal(type);
+              })
+              .catch(function (error) {
+                statusEl.textContent = "Participant data could not be loaded: " + App.getErrorMessage(error);
+              });
+            return;
+          }
+
+          if (type === "schools") {
+            App.state.latestResults = App.state.schools
+              .map(function (school) {
+                var title = App.getSchoolName(school);
+                return { resultType: "school", title: title, meta: "School", score: 100 };
+              })
+              .filter(function (result) { return result.title; })
+              .sort(function (a, b) { return a.title.localeCompare(b.title); })
+              .slice(0, 50);
+          } else {
+            var itemMap = {};
+            App.state.participants.forEach(function (participant) {
+              var item = participant.item || participant.Item || "";
+              if (!item) return;
+              itemMap[item] = (itemMap[item] || 0) + 1;
+            });
+            App.state.groups.forEach(function (group) {
+              var item = group.item || group.groupName || "";
+              if (!item) return;
+              itemMap[item] = itemMap[item] || 0;
+            });
+            App.state.latestResults = Object.keys(itemMap)
+              .sort()
+              .slice(0, 50)
+              .map(function (item) {
+                return { resultType: "item", title: item, meta: itemMap[item] + " participant" + (itemMap[item] === 1 ? "" : "s"), score: 100 };
+              });
+          }
+
+          statusEl.textContent = App.state.latestResults.length + " " + (type === "schools" ? "schools" : "items");
+          resultsEl.innerHTML = App.state.latestResults.map(App.renderResultCard).join("");
+          search.focus();
+        }, 0);
+      },
+
+      openImportCentre: function () {
+        App.notify("Open the spreadsheet menu: Spec Tools > Upload Acceptances/New Participant.");
+      },
+
+      notify: function (message) {
+        var el = document.getElementById("notifications");
+        if (!el) return;
+        el.textContent = message;
+        el.classList.add("show");
+      },
+
+      renderNotifications: function () {
+        var notifications = App.state.notifications || [];
+        if (notifications.length) {
+          App.notify(notifications[0].title + ": " + notifications[0].body);
+        }
+      },
+
+      clearNotification: function () {
+        var el = document.getElementById("notifications");
+        if (!el) return;
+        el.textContent = "";
+        el.classList.remove("show");
+      },
+
+
+    };
+  </script>

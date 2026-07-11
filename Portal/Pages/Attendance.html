@@ -1,11 +1,47 @@
 <template id="page-attendance">
   <section class="attendanceEmbed">
-    <div id="attendancePlaceholder" class="empty">Loading the existing Attendance web app...</div>
-    <iframe
-      id="attendanceFrame"
-      title="Spec Central Attendance"
-      referrerpolicy="no-referrer-when-downgrade"
-      allowfullscreen
-    ></iframe>
+    <div class="attendanceOverview">
+      <section class="panel attendanceHero">
+        <div>
+          <div class="sectionTitle">Live Attendance</div>
+          <h2>Attendance overview</h2>
+          <div id="attendanceSourceText" class="moduleMeta">Checking the Attendance API...</div>
+          <div id="attendanceUrlText" class="moduleMeta"></div>
+        </div>
+        <div class="attendanceHeaderActions">
+          <span id="attendanceHeroStatus" class="attendanceStatusChip">Loading</span>
+          <button class="quickLink compact" type="button" onclick="App.loadAttendanceData(true)">Retry</button>
+          <button id="attendanceLaunch" class="quickLink compact" type="button" onclick="App.openAttendance()">Open Attendance</button>
+        </div>
+      </section>
+
+      <div id="attendanceLoading" class="empty">Loading live Attendance summary...</div>
+      <div id="attendanceError" class="empty attendanceError" style="display:none;"></div>
+
+      <section id="attendanceLiveContent" style="display:none;">
+        <div id="attendanceSummaryCards" class="attendanceSummaryGrid"></div>
+
+        <div class="grid attendanceDataGrid">
+          <section class="panel span4">
+            <h3 class="sectionTitle">Attendance status</h3>
+            <div id="attendanceStatusCounts" class="attendanceStatusList"></div>
+          </section>
+          <section class="panel span8">
+            <h3 class="sectionTitle">Upcoming events</h3>
+            <div id="attendanceEventList"></div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <div class="attendanceFramePanel">
+      <div id="attendancePlaceholder" class="empty">Configure the Attendance URL to open the standalone app.</div>
+      <iframe
+        id="attendanceFrame"
+        title="Spec Central Attendance"
+        referrerpolicy="no-referrer-when-downgrade"
+        allowfullscreen
+      ></iframe>
+    </div>
   </section>
 </template>
