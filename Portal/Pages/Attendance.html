@@ -14,24 +14,6 @@
           <button id="attendanceLaunch" class="quickLink compact" type="button" onclick="App.openAttendance()">Open Attendance</button>
         </div>
       </section>
-
-      <div id="attendanceLoading" class="empty">Loading live Attendance summary...</div>
-      <div id="attendanceError" class="empty attendanceError" style="display:none;"></div>
-
-      <section id="attendanceLiveContent" style="display:none;">
-        <div id="attendanceSummaryCards" class="attendanceSummaryGrid"></div>
-
-        <div class="grid attendanceDataGrid">
-          <section class="panel span4">
-            <h3 class="sectionTitle">Attendance status</h3>
-            <div id="attendanceStatusCounts" class="attendanceStatusList"></div>
-          </section>
-          <section class="panel span8">
-            <h3 class="sectionTitle">Upcoming events</h3>
-            <div id="attendanceEventList"></div>
-          </section>
-        </div>
-      </section>
     </div>
 
     <div id="attendanceFramePanel" class="attendanceFramePanel">
@@ -44,5 +26,39 @@
         allowfullscreen
       ></iframe>
     </div>
+
+    <div id="attendanceLoading" class="empty attendanceBelowFrame">Loading live Attendance summary...</div>
+    <div id="attendanceError" class="empty attendanceError attendanceBelowFrame" style="display:none;"></div>
+
+    <section id="attendanceLiveContent" class="attendanceBelowFrame" style="display:none;">
+      <div id="attendanceSummaryCards" class="attendanceSummaryGrid"></div>
+
+      <div class="grid attendanceDataGrid">
+        <section class="panel span4 attendanceOperationsPanel">
+          <h3 class="sectionTitle">Attendance status</h3>
+          <div id="attendanceStatusCounts" class="attendanceStatusList"></div>
+        </section>
+        <section class="panel span8 attendanceOperationsPanel">
+          <div class="attendanceEventsHeader">
+            <h3 class="sectionTitle">Upcoming events</h3>
+            <input
+              id="attendanceEventSearch"
+              class="attendanceEventSearch"
+              type="search"
+              placeholder="Search events, venues, staff or categories..."
+              aria-label="Search Attendance events"
+              oninput="App.setAttendanceEventSearch(this.value)"
+            >
+          </div>
+          <div class="attendanceEventFilters" role="group" aria-label="Filter Attendance events">
+            <button type="button" data-attendance-filter="today" onclick="App.setAttendanceEventFilter('today')">Today</button>
+            <button type="button" data-attendance-filter="week" onclick="App.setAttendanceEventFilter('week')">This Week</button>
+            <button type="button" data-attendance-filter="upcoming" onclick="App.setAttendanceEventFilter('upcoming')">Upcoming</button>
+            <button type="button" data-attendance-filter="all" onclick="App.setAttendanceEventFilter('all')">All</button>
+          </div>
+          <div id="attendanceEventList" class="attendanceEventList"></div>
+        </section>
+      </div>
+    </section>
   </section>
 </template>

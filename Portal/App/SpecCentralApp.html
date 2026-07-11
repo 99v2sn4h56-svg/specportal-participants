@@ -24,6 +24,8 @@
         attendanceSummary: null,
         attendanceError: "",
         attendanceLoaded: false,
+        attendanceEventFilter: "upcoming",
+        attendanceEventSearch: "",
         selectedAttendanceSessionId: "",
         selectedAttendanceEventName: "",
         attendanceUrl: "",
@@ -1133,18 +1135,65 @@
             }).join("")
           : '<div class="empty">No attendance status records yet.</div>';
 
-        var today = App.toDateKey(new Date());
-        var upcoming = (App.state.attendanceEvents || [])
-          .filter(function (event) { return !event.dateKey || event.dateKey >= today; })
+        var search = document.getElementById("attendanceEventSearch");
+        if (search && search.value !== App.state.attendanceEventSearch) {
+          search.value = App.state.attendanceEventSearch;
+        }
+        Array.prototype.forEach.call(document.querySelectorAll("[data-attendance-filter]"), function (button) {
+          button.classList.toggle("active", button.getAttribute("data-attendance-filter") === App.state.attendanceEventFilter);
+        });
+
+        var filteredEvents = App.getFilteredAttendanceEvents()
           .sort(function (a, b) {
             return String(a.dateKey || a.date || "").localeCompare(String(b.dateKey || b.date || "")) ||
               String(a.time || "").localeCompare(String(b.time || ""));
           });
 
         eventsList.className = "attendanceEventList";
-        eventsList.innerHTML = upcoming.length
-          ? upcoming.map(App.renderAttendanceEventCard).join("")
-          : '<div class="empty">No upcoming Attendance events.</div>';
+        eventsList.innerHTML = filteredEvents.length
+          ? filteredEvents.map(App.renderAttendanceEventCard).join("")
+          : '<div class="empty">No Attendance events match this view.</div>';
+      },
+
+      setAttendanceEventFilter: function (filter) {
+        App.state.attendanceEventFilter = ["today", "week", "upcoming", "all"].indexOf(filter) >= 0
+          ? filter
+          : "upcoming";
+        App.renderAttendanceLiveData();
+      },
+
+      setAttendanceEventSearch: function (value) {
+        App.state.attendanceEventSearch = String(value || "").trim().toLowerCase();
+        App.renderAttendanceLiveData();
+      },
+
+      getFilteredAttendanceEvents: function () {
+        var todayDate = new Date();
+        var today = App.toDateKey(todayDate);
+        var day = todayDate.getDay();
+        var mondayOffset = day === 0 ? -6 : 1 - day;
+        var weekStartDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() + mondayOffset);
+        var weekEndDate = new Date(weekStartDate.getFullYear(), weekStartDate.getMonth(), weekStartDate.getDate() + 6);
+        var weekStart = App.toDateKey(weekStartDate);
+        var weekEnd = App.toDateKey(weekEndDate);
+        var filter = App.state.attendanceEventFilter || "upcoming";
+        var query = String(App.state.attendanceEventSearch || "").toLowerCase();
+
+        return (App.state.attendanceEvents || []).filter(function (event) {
+          var dateKey = event.dateKey || App.toDateKey(event.date);
+          var matchesDate = filter === "all" ||
+            (filter === "today" && dateKey === today) ||
+            (filter === "week" && dateKey && dateKey >= weekStart && dateKey <= weekEnd) ||
+            (filter === "upcoming" && (!dateKey || dateKey >= today));
+          if (!matchesDate) return false;
+          if (!query) return true;
+
+          return [event.eventName, event.location, event.staff, event.categories]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .indexOf(query) >= 0;
+        });
       },
 
       renderAttendanceEventCard: function (event) {
@@ -1161,15 +1210,24 @@
         var accessibleName = "Open Attendance roll for " + eventName;
         var encodedSessionId = App.encodeAttendanceInlineValue(sessionId);
         var encodedEventName = App.encodeAttendanceInlineValue(eventName);
+        var total = Number((event.attendanceCounts || {}).total || event.studentCount) || 0;
+        var present = Number(attendanceCounts.Present) || 0;
+        var progress = total > 0 ? Math.min(100, Math.round((present / total) * 100)) : 0;
+        var selected = sessionId && sessionId === App.state.selectedAttendanceSessionId;
+        var selectedBadge = selected ? '<span class="attendanceOpenBadge">Currently Open</span>' : "";
 
-        return '<article class="attendanceEventCard"><button class="attendanceEventMain" type="button" aria-label="' +
+        return '<article class="attendanceEventCard' + (selected ? ' selected' : '') + '"><button class="attendanceEventMain" type="button" aria-label="' +
           App.escapeHtml(accessibleName) + '" onclick="App.openAttendanceEvent(decodeURIComponent(\'' + encodedSessionId +
-          '\'),decodeURIComponent(\'' + encodedEventName + '\'),false)"><strong>' + App.escapeHtml(eventName) +
-          '</strong><div class="attendanceEventMeta">' +
+          '\'),decodeURIComponent(\'' + encodedEventName + '\'),false)"><div class="attendanceEventTitle"><strong>' +
+          App.escapeHtml(eventName) + '</strong>' + selectedBadge + '</div>' +
+          '<div class="attendanceEventMeta">' +
           App.escapeHtml([event.date, event.time, event.location].filter(Boolean).join(" · ")) +
           '</div><div class="attendanceEventCounts">' + App.escapeHtml(countText || "No attendance marks yet") +
-          '</div></button><div class="attendanceEventActions"><strong>' +
-          App.escapeHtml(event.studentCount || (event.attendanceCounts || {}).total || 0) +
+          '</div><div class="attendanceProgressText"><strong>' + present + ' / ' + total +
+          '</strong><span>' + progress + '% complete</span></div><div class="attendanceProgress" role="progressbar" aria-label="' +
+          App.escapeHtml(eventName + " attendance progress") + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' +
+          progress + '"><span style="width:' + progress + '%"></span></div></button><div class="attendanceEventActions">' +
+          '<strong>' + App.escapeHtml(total) +
           '</strong><button class="quickLink compact" type="button" onclick="App.openAttendanceEvent(decodeURIComponent(\'' +
           encodedSessionId + '\'),decodeURIComponent(\'' + encodedEventName + '\'),false)">Open roll →</button>' +
           '<button class="quickLink compact" type="button" aria-label="' + App.escapeHtml(accessibleName + " in a new tab") +
@@ -1206,6 +1264,7 @@
         App.state.selectedAttendanceSessionId = safeSessionId;
         App.state.selectedAttendanceEventName = String(eventName || "Attendance event");
         var target = App.buildAttendanceDeepLinkUrl(safeSessionId);
+        App.renderAttendanceLiveData();
 
         if (newTab) {
           window.open(target, "_blank");
@@ -1217,6 +1276,18 @@
 
         var panel = document.getElementById("attendanceFramePanel");
         if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        App.highlightAttendanceFramePanel();
+      },
+
+      highlightAttendanceFramePanel: function () {
+        var panel = document.getElementById("attendanceFramePanel");
+        if (!panel) return;
+        panel.classList.remove("attendanceFrameHighlight");
+        void panel.offsetWidth;
+        panel.classList.add("attendanceFrameHighlight");
+        setTimeout(function () {
+          panel.classList.remove("attendanceFrameHighlight");
+        }, 1600);
       },
 
       loadAttendanceFrameTarget: function (target, eventName) {
