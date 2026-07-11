@@ -39,6 +39,26 @@ const ProfilePhotoService = (() => {
     return getStudentPhotos();
   }
 
+  function getParticipantPhoto(participantOrKey) {
+    const photos = getStudentPhotos();
+    const key = toPhotoKey_(participantOrKey);
+    return key ? photos[key] || null : null;
+  }
+
+  function getTeacherPhoto(teacherOrKey) {
+    const photos = getStudentPhotos();
+    const key = toPhotoKey_(teacherOrKey);
+    return key ? photos[key] || null : null;
+  }
+
+  function prefetchPhotos() {
+    return getStudentPhotos();
+  }
+
+  function clearCache() {
+    clearStudentPhotosCache();
+  }
+
   function clearStudentPhotosCache() {
     const cache = CacheService.getScriptCache();
     const metaRaw = cache.get(`${CACHE_KEY}:meta`);
@@ -81,6 +101,35 @@ const ProfilePhotoService = (() => {
     return photos;
   }
 
+  function toPhotoKey_(source) {
+    if (!source) return "";
+
+    if (typeof source === "string") {
+      return normalisePhotoKey_(source);
+    }
+
+    const name = source.name ||
+      source.fullName ||
+      source.studentName ||
+      source["Student Name"] ||
+      [source.firstName || source.studentFirstName || source["Student First Name"], source.lastName || source.studentLastName || source["Student Last Name"]].filter(Boolean).join(" ") ||
+      source.teacherName ||
+      source.displayName ||
+      "";
+
+    return normalisePhotoKey_(name);
+  }
+
+  function normalisePhotoKey_(value) {
+    return String(value || "")
+      .replace(/\.[^.]+$/, "")
+      .replace(/\s*-\s*Headshot$/i, "")
+      .replace(/[\-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
   function cachePhotos_(photos) {
     const cache = CacheService.getScriptCache();
     const payload = JSON.stringify(photos || {});
@@ -104,6 +153,10 @@ const ProfilePhotoService = (() => {
     getStudentPhotos,
     getCachedStudentPhotos,
     refreshStudentPhotos,
-    clearStudentPhotosCache
+    clearStudentPhotosCache,
+    getParticipantPhoto,
+    getTeacherPhoto,
+    prefetchPhotos,
+    clearCache
   };
 })();

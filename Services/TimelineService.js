@@ -54,7 +54,18 @@ const TimelineService = (() => {
       rehearsalType: rehearsal.type || "Rehearsal",
       groups: rehearsal.items || [],
       items: rehearsal.items || [],
+      participants: rehearsal.participants || null,
+      schools: rehearsal.schools || null,
+      staff: rehearsal.staff || [],
       allocatedStaffCount: (rehearsal.staff || []).length,
+      attendanceEvent: {
+        sheet: rehearsal.attendanceSheet || null,
+        status: rehearsal.attendanceStatus || null,
+        participantCount: rehearsal.participantCount || null,
+        markedCount: rehearsal.markedCount || null,
+        outstandingCount: rehearsal.outstandingCount || null,
+        lastUpdated: rehearsal.attendanceLastUpdated || null
+      },
       attendanceStatus: rehearsal.attendanceStatus || "Not connected",
       status: rehearsal.status || "Upcoming",
       colour: rehearsal.colour || "#2d67b2",

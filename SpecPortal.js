@@ -41,27 +41,7 @@ function getCurrentStaffContext() {
 }
 
 function portalGetSpecCentralConfig() {
-  const properties = PropertiesService.getScriptProperties();
-  const timeline = TimelineService.getDashboardSummary();
-  const staffTeam = StaffService.getAll();
-  const currentStaff = getCurrentStaffContext();
-
-  return {
-    staff: currentStaff,
-    staffTeam,
-    timelineStatus: timeline.status || "",
-    timelineLastRefreshed: timeline.lastRefreshed || "",
-    staffStatus: staffTeam.length ? "Connected" : "Fallback / unavailable",
-    attendanceUrl: properties.getProperty("SPEC_CENTRAL_ATTENDANCE_URL") ||
-      properties.getProperty("ATTENDANCE_WEB_APP_URL") ||
-      "",
-    announcements: AnnouncementService.getActive(),
-    notifications: NotificationService.getForCurrentUser(),
-    rehearsals: timeline.upcomingRehearsals || [],
-    todaysRehearsals: timeline.todaysRehearsals || [],
-    attendanceEvents: [],
-    currentDate: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM")
-  };
+  return DashboardService.getContext();
 }
 
 function portalSearchParticipants(query) {
@@ -106,6 +86,10 @@ function portalRefreshRehearsals() {
 
 function portalGetCalendarData() {
   return TimelineService.getCalendarData();
+}
+
+function portalGetAttendanceConfig() {
+  return AttendanceService.getConfig();
 }
 
 function portalGetProjectManagementData() {

@@ -1,7 +1,7 @@
 const RehearsalService = (() => {
   const TIMELINE_ID = "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog";
   const TIMELINE_SHEET_NAME = "Operation Schedule";
-  const CACHE_KEY = "SPEC_REHEARSALS_V1";
+  const CACHE_KEY = "SPEC_REHEARSALS_V2";
   const CACHE_HOURS = 6;
 
   function getAll() {
@@ -105,12 +105,29 @@ const RehearsalService = (() => {
       return [];
     }
 
-    const headers = values.shift().map(header => String(header || "").trim());
+    const headerRowIndex = findHeaderRowIndex_(values);
+    const headers = values[headerRowIndex].map(header => String(header || "").trim());
+    const body = values.slice(headerRowIndex + 1);
 
-    return values
+    return body
       .filter(row => row.some(cell => String(cell || "").trim() !== ""))
-      .map((row, index) => buildRehearsal_(headers, row, index + 2))
+      .map((row, index) => buildRehearsal_(headers, row, headerRowIndex + index + 2))
       .filter(rehearsal => rehearsal.dateDisplay || rehearsal.title || rehearsal.details || rehearsal.venue);
+  }
+
+  function findHeaderRowIndex_(values) {
+    const maxRows = Math.min(values.length, 12);
+
+    for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
+      const headers = values[rowIndex].map(header => normaliseHeader_(header));
+      const hasDate = headers.some(header => ["date", "rehearsal date", "day date", "day/date"].includes(header));
+      const hasEvent = headers.some(header => ["activity", "title", "event", "rehearsal", "name", "details", "item", "items"].includes(header));
+      const hasVenue = headers.some(header => ["location", "venue", "venue location", "where"].includes(header));
+
+      if (hasDate && (hasEvent || hasVenue)) return rowIndex;
+    }
+
+    return 0;
   }
 
   function buildRehearsal_(headers, row, rowNumber) {
@@ -176,12 +193,13 @@ const RehearsalService = (() => {
     ]);
 
     const type = inferType_([title, details, venue].join(" "));
+    const dateKey = buildDateKey_(dateDisplay);
 
     return {
       id: `REH-${rowNumber}`,
       sourceRow: rowNumber,
       dateDisplay,
-      dateKey: buildDateKey_(dateDisplay),
+      dateKey,
       day: inferDay_(dateDisplay),
       start,
       finish,
@@ -191,7 +209,7 @@ const RehearsalService = (() => {
       type,
       notes,
       colour: colourForType_(type),
-      items: [],
+      items: parseItems_(details || title),
       participants: [],
       staff: [],
       raw
@@ -214,16 +232,58 @@ const RehearsalService = (() => {
       .trim();
   }
 
+  function normaliseHeader_(value) {
+    return normaliseText_(value)
+      .replace(/[^\w/ ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function buildDateKey_(dateDisplay) {
-    if (!dateDisplay) return "";
+    const parsed = parseTimelineDate_(dateDisplay);
 
-    const parsed = new Date(dateDisplay);
+    return parsed
+      ? Utilities.formatDate(parsed, Session.getScriptTimeZone(), "yyyy-MM-dd")
+      : "";
+  }
 
-    if (Object.prototype.toString.call(parsed) === "[object Date]" && !isNaN(parsed.getTime())) {
-      return Utilities.formatDate(parsed, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  function parseTimelineDate_(dateDisplay) {
+    const text = String(dateDisplay || "").trim();
+    if (!text) return null;
+
+    const hasExplicitYear = /\b\d{4}\b/.test(text) || /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/.test(text);
+    const parsed = new Date(text);
+    if (hasExplicitYear && Object.prototype.toString.call(parsed) === "[object Date]" && !isNaN(parsed.getTime())) {
+      return parsed;
     }
 
-    return "";
+    const currentYear = new Date().getFullYear();
+    const withoutDay = text.replace(/^(?:mon|tue|wed|thu|fri|sat|sun)(?:day)?[,]?\s+/i, "");
+    const dayMonthMatch = withoutDay.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s/.-]+([a-z]{3,9}|\d{1,2})(?:[\s/.-]+(\d{2,4}))?/i);
+
+    if (!dayMonthMatch) return null;
+
+    const day = Number(dayMonthMatch[1]);
+    const month = parseMonth_(dayMonthMatch[2]);
+    const year = normaliseYear_(dayMonthMatch[3] || currentYear);
+    if (!day || month < 0 || !year) return null;
+
+    const date = new Date(year, month, day);
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  function parseMonth_(value) {
+    const text = String(value || "").toLowerCase();
+    if (/^\d+$/.test(text)) return Number(text) - 1;
+
+    const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    return months.findIndex(month => text.indexOf(month) === 0);
+  }
+
+  function normaliseYear_(value) {
+    const year = Number(value);
+    if (!year) return 0;
+    return year < 100 ? 2000 + year : year;
   }
 
   function inferDay_(dateDisplay) {
@@ -248,6 +308,15 @@ const RehearsalService = (() => {
     if (value.includes("meeting")) return "Meeting";
 
     return "Rehearsal";
+  }
+
+  function parseItems_(value) {
+    return String(value || "")
+      .split(/[,;\n]+/)
+      .map(item => item.replace(/^[\s"'(]*(?:item\s*)?(?:\d+\s*)?[a-z]?\s*[\).:\-–—]\s*/i, ""))
+      .map(item => item.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .slice(0, 20);
   }
 
   function colourForType_(type) {

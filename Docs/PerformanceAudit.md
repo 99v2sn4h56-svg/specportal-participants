@@ -12,7 +12,7 @@ The highest-risk paths are whole-sheet reads, repeated full attendance refreshes
 2. Attendance `getAttendanceHistoryForStudent(studentKey)` scans every event sheet listed in Event Index.
 3. Attendance `refreshAttendanceDashboard()` scans every event sheet and every row inside each sheet.
 4. Participants `ParticipantService.getPortalData()` loads participants, groups, schools, and photos in one call; photo loading can be expensive.
-5. `ProfilePhotoService.getStudentPhotos()` scans the whole Drive headshot folder and has no cache.
+5. `ProfilePhotoService.getStudentPhotos()` is cached, but a cold cache still scans the whole Drive headshot folder.
 6. Attendance `syncStudentHeadshots()` scans Drive files and participant rows; this is correct as a manual sync task but should not be moved into startup.
 7. Attendance event sync reads timeline and participants workbooks and rewrites event sheets; it should remain a deliberate menu action.
 8. SpecCentral full-page app duplicates some search/profile logic from the sidebar, increasing maintenance cost.
@@ -30,7 +30,7 @@ The highest-risk paths are whole-sheet reads, repeated full attendance refreshes
 
 ## Medium-Risk Improvements
 
-- Add `CacheService` to `ProfilePhotoService.getStudentPhotos()` with explicit manual cache clear after photo sync.
+- Tune `ProfilePhotoService.getStudentPhotos()` cache TTL and explicit manual cache clear after photo sync.
 - Add a short-lived cache for Attendance sessions and dashboard messages.
 - Add a targeted attendance history index instead of scanning all event sheets per passport open.
 - Reduce Attendance refresh payload size by returning only changed rows or by increasing refresh interval for large rolls.
@@ -130,3 +130,32 @@ Behaviour preserved:
 - Search debounce remains 220 ms.
 - Keyboard navigation still uses Escape, Arrow Up/Down, and Enter.
 - Profile, dashboard, recent search, and recently viewed flows still call the same public functions.
+
+## Full-Page App Safe Performance Layer
+
+The full-page `SpecCentral.html` runtime now routes server calls through `App.services.request()` instead of calling `google.script.run` directly in startup/data paths.
+
+Safe improvements applied:
+
+- Every migrated full-page data call has a success handler, failure handler, and timeout.
+- Calendar, Project Management, and Media Timeline data use short-lived client memory caching.
+- Service loading and error states are emitted through `App.events`, giving future modules a common observability point.
+- Dashboard context is owned by `DashboardService.getContext()` and exposed through the existing `portalGetSpecCentralConfig()` wrapper.
+- Search providers are registered once and reused; `getParticipantResults()` now delegates to the universal search registry.
+
+Remaining performance risks:
+
+- The Participants payload still loads all participants, groups, schools, and cached photos in one request.
+- Universal item search currently builds item aggregates per search. If item search grows, cache item records after portal data load.
+- Full-page search and sidebar search still have separate implementations.
+- Apps Script cold starts and spreadsheet read latency remain the main real-world startup limits.
+
+## Integration Sprint Performance Notes
+
+Additional low-risk integration improvements:
+
+- Services now register once during application bootstrap.
+- The status ribbon renders from central status state instead of separate DOM-specific update branches.
+- Dashboard statistics are built by `App.buildDashboardStats()` and reused by widgets instead of recalculating in the widget itself.
+- Timeline, Project Management, and Media Timeline remain lazy-loaded until the user visits those modules.
+- Timeline events now share one contract across Calendar and Rehearsals, reducing future adapter work.

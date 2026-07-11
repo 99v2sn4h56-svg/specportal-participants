@@ -62,6 +62,7 @@ This keeps the sidebar behaviour unchanged while reducing `Portal.html` size and
 
 The current platform shell uses safe placeholder services so the dashboard can be designed before real module spreadsheets are connected:
 
+- `DashboardService`: full-page app startup context for staff, timeline status, announcements, notifications, attendance URL, and service health. `portalGetSpecCentralConfig()` remains the public wrapper.
 - `TimelineService`: calendar/rehearsal event contract backed by `RehearsalService`, with labelled fallback data if Timeline cannot load.
 - `StaffService`: active-user email, role, department, permissions, visible modules, and fallback context.
 - `AnnouncementService`: mock operational announcements.
@@ -70,6 +71,41 @@ The current platform shell uses safe placeholder services so the dashboard can b
 - `MediaTimelineService`: protected placeholder media planning model.
 
 These services are intentionally read-only and do not alter existing participant, attendance, acceptance, or dance workbook APIs.
+
+### Shared Client Runtime
+
+The full-page app now has a lightweight shared runtime inside `SpecCentral.html`:
+
+- `App.state` owns current module, selected records, permissions, loading flags, loaded service flags, local cache timestamps, search history, recently viewed records, and navigation history.
+- `App.events` is a small event bus for cross-module events such as `participant:selected`, `school:selected`, `event:selected`, `service:loaded`, and `service:error`.
+- `App.services.request()` wraps `google.script.run` calls with success handlers, failure handlers, timeout handling, simple in-memory caching, service status updates, and event emission.
+- Public gateway functions are unchanged. The wrapper calls existing functions such as `portalGetSpecCentralConfig()`, `portalGetPortalData()`, `portalGetCalendarData()`, `portalGetProjectManagementData()`, and `portalGetMediaTimelineData()`.
+
+This is intentionally not a bundler or framework. It gives the platform a single coordination layer while preserving Apps Script compatibility.
+
+The detailed service, event, search, state, and cache contracts are documented in `Docs/PlatformIntegration.md`.
+
+### Universal Search Providers
+
+Full-page search now runs through a provider registry:
+
+```
+Global search
+  -> App.runUniversalSearch()
+      -> participants provider
+      -> schools provider
+      -> groups provider
+      -> items provider
+      -> teachers provider
+      -> staff provider
+      -> timeline provider
+```
+
+Each provider returns a common result shape with `resultType`, `title`, `meta`, `score`, and an optional source object. `getParticipantResults()` remains as a compatibility method for the Participants page.
+
+### System Status
+
+The status ribbon now reads from central application/system state rather than four independent hardcoded labels. It reports Participants, Timeline, Attendance, Staff, Announcements, Project Management, and Media status, including last refresh timestamps where the client has them.
 
 ### Future Modules
 

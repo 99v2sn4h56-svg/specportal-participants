@@ -63,3 +63,36 @@ Moving those globals into a single `App.state` object should be done in a later 
 - Extract shared search helpers into one browser include used by both sidebar and full-page app.
 - Keep Apps Script public function names stable and wrap new services behind server-side adapters.
 - Add timing logs around `portalGetPortalData()` and `portalGetStudentPhotos()` for real-world startup measurement.
+
+## Platform Integration Sprint Notes
+
+This pass adds a safer platform layer without changing the existing sidebar or public Apps Script gateway names.
+
+Architecture improvements:
+
+- Added `DashboardService.getContext()` as the owner of full-page dashboard startup data.
+- Kept `portalGetSpecCentralConfig()` as the compatibility wrapper.
+- Expanded full-page `App.state` to hold current module, selected records, permissions, service load status, search history, recently viewed records, and navigation history.
+- Added `App.events` for lightweight cross-module events.
+- Added `App.services.request()` to standardise `google.script.run` success/failure/timeout handling.
+- Added explicit `App.registerService()` / `App.getService()` service registry APIs.
+- Added explicit `App.SearchRegistry` facade for provider-based search.
+- Expanded the status ribbon to Participants, Timeline, Attendance, Staff, Announcements, Project Management, and Media.
+- Added a shared Timeline event contract with attendance metadata placeholders.
+- Added a universal search provider registry for participants, schools, groups, items, teachers, staff, and timeline records.
+- Added additive `ProfilePhotoService` wrappers for participant/teacher photo lookup, prefetching, and cache clearing.
+- Added `Docs/PlatformIntegration.md` with service, event, search, state, cache, and Timeline contracts.
+
+Preserved behaviour:
+
+- `openSpecPortalHome()` and the spreadsheet sidebar remain unchanged.
+- Existing portal APIs remain callable with the same names.
+- Participant search still uses `getParticipantResults()` and the same rendered result card path.
+- Protected modules still use server-side permission checks in their services.
+
+Next engineering sprint:
+
+- Share one search/index implementation between the sidebar and full-page app.
+- Cache item and teacher aggregates after portal data load.
+- Move full-page runtime into client HTML includes once the Apps Script include strategy is settled.
+- Add a small browser test harness for route changes, provider ordering, and profile opening.
