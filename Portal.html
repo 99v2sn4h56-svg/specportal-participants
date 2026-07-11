@@ -160,6 +160,47 @@ const RECENT_SEARCHES_KEY = "specPortalRecentSearches";
       return accepted || allocated;
     }
 
+    function parseParticipantCount(value) {
+      const number = Number(String(value || "").replace(/,/g, "").trim());
+      return Number.isFinite(number) ? number : 0;
+    }
+
+    function getTotalGroupStudentCount() {
+      return (allGroups || []).reduce((total, group) => total + parseParticipantCount(getGroupStudentCount(group)), 0);
+    }
+
+    function hasNotAcceptedAllocationCounts() {
+      return (allGroups || []).some(group => {
+        const accepted = String(group && group.acceptedCount || "").trim();
+        const allocated = String(group && (group.allocatedCount || group.count) || "").trim();
+        return !accepted && parseParticipantCount(allocated) > 0;
+      });
+    }
+
+    function getTotalParticipantCount() {
+      return (allParticipants || []).length + getTotalGroupStudentCount();
+    }
+
+    function getParticipantTotalNote() {
+      return hasNotAcceptedAllocationCounts() ? "Includes not accepted yet allocations" : "";
+    }
+
+    function getSchoolParticipantTotal(schoolName) {
+      const key = String(schoolName || "").trim().toLowerCase();
+      const individualCount = (participantsBySchool.get(key) || []).length;
+      const groupCount = (groupsBySchool.get(key) || []).reduce((total, group) => total + parseParticipantCount(getGroupStudentCount(group)), 0);
+      return individualCount + groupCount;
+    }
+
+    function getSchoolParticipantTotalNote(schoolName) {
+      const key = String(schoolName || "").trim().toLowerCase();
+      return (groupsBySchool.get(key) || []).some(group => {
+        const accepted = String(group && group.acceptedCount || "").trim();
+        const allocated = String(group && (group.allocatedCount || group.count) || "").trim();
+        return !accepted && parseParticipantCount(allocated) > 0;
+      }) ? "Includes not accepted yet allocations" : "";
+    }
+
     function getGroupStudentCountLabel(group) {
       const accepted = String(group && group.acceptedCount || "").trim();
       const allocated = String(group && group.allocatedCount || group.count || "").trim();

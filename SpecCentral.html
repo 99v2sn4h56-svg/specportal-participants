@@ -753,6 +753,14 @@
       line-height: 1.35;
     }
 
+    .moduleNote {
+      margin-top: 6px;
+      color: var(--orange);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
     .participantLayout {
       display: grid;
       grid-template-columns: minmax(480px, 1fr) minmax(500px, 620px);
@@ -1052,6 +1060,17 @@
       letter-spacing: .08em;
       text-transform: uppercase;
       opacity: .9;
+    }
+
+    .scProfileHeroNote {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.18);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
     }
 
     .scProfileBody {
@@ -1819,7 +1838,7 @@
           {
             id: "portalData",
             label: "Participants",
-            status: App.state.ready ? "Connected · " + App.state.participants.length + " loaded" : (App.state.loading.portalData ? "Loading" : "Waiting"),
+            status: App.state.ready ? "Connected · " + App.getTotalParticipantCount() + " loaded" : (App.state.loading.portalData ? "Loading" : "Waiting"),
             lastRefresh: App.state.cacheTimestamps.portalData ? App.formatTime(App.state.cacheTimestamps.portalData) : ""
           },
           {
@@ -1903,7 +1922,7 @@
             ? App.state.dashboardStats || App.buildDashboardStats()
             : App.buildPersonalDashboardCards();
           stats.innerHTML = dashboardStats.map(function (stat) {
-            return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div></div>';
+            return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div>' + (stat.note ? '<div class="moduleNote">' + App.escapeHtml(stat.note) + '</div>' : '') + '</div>';
           }).join("");
         }
 
@@ -2005,7 +2024,7 @@
         });
 
         return [
-          { label: "Participants", value: App.state.participants.length },
+          { label: "Participants", value: App.getTotalParticipantCount(), note: App.getParticipantTotalNote() },
           { label: "Schools", value: App.state.schools.length },
           { label: "Groups", value: App.state.groups.length },
           { label: "Items", value: Object.keys(items).length },
@@ -2026,8 +2045,9 @@
           return;
         }
 
-        status.textContent = "Ready - " + App.state.participants.length + " participants, " +
-          App.state.groups.length + " groups and " + App.state.schools.length + " schools loaded";
+        status.textContent = "Ready - " + App.getTotalParticipantCount() + " participants, " +
+          App.state.groups.length + " groups and " + App.state.schools.length + " schools loaded" +
+          (App.getParticipantTotalNote() ? " - " + App.getParticipantTotalNote() : "");
       },
 
       runParticipantSearch: function () {
@@ -2119,11 +2139,12 @@
             return App.state.schools.map(function (school) {
               var name = App.getSchoolName(school);
               var score = App.getSearchScore(name, query);
-              var participants = App.getSchoolParticipants(name);
+              var participantTotal = App.getSchoolParticipantTotal(name);
+              var participantNote = App.getSchoolParticipantTotalNote(name);
               return {
                 resultType: "school",
                 title: name,
-                meta: participants.length + " participant" + (participants.length === 1 ? "" : "s"),
+                meta: participantTotal + " participant" + (participantTotal === 1 ? "" : "s") + (participantNote ? " - " + participantNote : ""),
                 school: school,
                 score: score
               };
@@ -2144,7 +2165,7 @@
               return {
                 resultType: "group",
                 title: title,
-                meta: [group.school, group.teacherName, group.count ? group.count + " students" : ""].filter(Boolean).join(" - "),
+                meta: [group.school, group.teacherName, App.getGroupStudentCountLabel(group)].filter(Boolean).join(" - "),
                 group: group,
                 score: score
               };
@@ -2173,6 +2194,7 @@
               if (!item) return;
               itemMap[item] = itemMap[item] || { participants: 0, schools: {} };
               if (group.school) itemMap[item].schools[group.school] = true;
+              itemMap[item].participants += App.parseParticipantCount(App.getGroupStudentCount(group));
             });
 
             return Object.keys(itemMap).map(function (item) {
@@ -2554,11 +2576,22 @@
           }
         });
 
+        var groupParticipantCount = groups.reduce(function (total, group) {
+          return total + App.parseParticipantCount(App.getGroupStudentCount(group));
+        }, 0);
+        var participantCountNote = groups.some(function (group) {
+          var accepted = String((group && group.acceptedCount) || "").trim();
+          var allocated = String((group && (group.allocatedCount || group.count)) || "").trim();
+          return !accepted && App.parseParticipantCount(allocated) > 0;
+        }) ? "Includes not accepted yet allocations" : "";
+
         return {
           schoolName: target,
           master: master,
           participants: participants.sort(App.sortByParticipantName),
           groups: groups,
+          participantCount: participants.length + groupParticipantCount,
+          participantCountNote: participantCountNote,
           teachers: App.objectValues(teachers).sort(App.sortByName),
           items: App.objectValues(items).sort(App.sortByName),
           categories: App.objectValues(categories).map(function (category) {
@@ -2579,11 +2612,12 @@
               '<div class="scProfileKicker">School Passport</div>' +
               '<h2>' + App.escapeHtml(name) + '</h2>' +
               App.renderProfileStats([
-                { value: school.participants.length, label: "Participants" },
+                { value: school.participantCount, label: "Participants" },
                 { value: school.teachers.length, label: "Teachers" },
                 { value: school.items.length, label: "Items" },
                 { value: school.groups.length, label: "Groups" }
               ]) +
+              (school.participantCountNote ? '<div class="scProfileHeroNote">' + App.escapeHtml(school.participantCountNote) + '</div>' : '') +
               '<div class="scProfileSubtitle">' +
                 [master.code ? "Code: " + master.code : "", master.directorate ? "Directorate: " + master.directorate : "", master.schoolEmail ? "Email: " + master.schoolEmail : ""].filter(Boolean).map(App.escapeHtml).join("<br>") +
               '</div>' +
@@ -2924,6 +2958,22 @@
         return (App.state.groups || []).filter(function (group) {
           return String(group.school || "").trim().toLowerCase() === target;
         });
+      },
+
+      getSchoolParticipantTotal: function (schoolName) {
+        var individualCount = App.getSchoolParticipants(schoolName).length;
+        var groupCount = App.getSchoolGroups(schoolName).reduce(function (total, group) {
+          return total + App.parseParticipantCount(App.getGroupStudentCount(group));
+        }, 0);
+        return individualCount + groupCount;
+      },
+
+      getSchoolParticipantTotalNote: function (schoolName) {
+        return App.getSchoolGroups(schoolName).some(function (group) {
+          var accepted = String((group && group.acceptedCount) || "").trim();
+          var allocated = String((group && (group.allocatedCount || group.count)) || "").trim();
+          return !accepted && App.parseParticipantCount(allocated) > 0;
+        }) ? "Includes not accepted yet allocations" : "";
       },
 
       objectValues: function (source) {
@@ -3314,7 +3364,7 @@
       renderOperationsOverview: function () {
         var stats = App.buildDashboardStats();
         return '<div class="moduleGrid">' + stats.map(function (stat) {
-          return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div></div>';
+          return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div>' + (stat.note ? '<div class="moduleNote">' + App.escapeHtml(stat.note) + '</div>' : '') + '</div>';
         }).join("") + '</div>' +
           '<h4 class="sectionTitle">Project Management</h4>' +
           App.renderTaskBoard((App.state.projectData && App.state.projectData.tasks) || [], (App.state.projectData && App.state.projectData.statuses) || []);
@@ -3803,6 +3853,33 @@
         var accepted = String((group && group.acceptedCount) || "").trim();
         var allocated = String((group && (group.allocatedCount || group.count)) || "").trim();
         return accepted || allocated;
+      },
+
+      parseParticipantCount: function (value) {
+        var number = Number(String(value || "").replace(/,/g, "").trim());
+        return Number.isFinite(number) ? number : 0;
+      },
+
+      getTotalGroupStudentCount: function () {
+        return (App.state.groups || []).reduce(function (total, group) {
+          return total + App.parseParticipantCount(App.getGroupStudentCount(group));
+        }, 0);
+      },
+
+      hasNotAcceptedAllocationCounts: function () {
+        return (App.state.groups || []).some(function (group) {
+          var accepted = String((group && group.acceptedCount) || "").trim();
+          var allocated = String((group && (group.allocatedCount || group.count)) || "").trim();
+          return !accepted && App.parseParticipantCount(allocated) > 0;
+        });
+      },
+
+      getTotalParticipantCount: function () {
+        return (App.state.participants || []).length + App.getTotalGroupStudentCount();
+      },
+
+      getParticipantTotalNote: function () {
+        return App.hasNotAcceptedAllocationCounts() ? "Includes not accepted yet allocations" : "";
       },
 
       getGroupStudentCountLabel: function (group) {

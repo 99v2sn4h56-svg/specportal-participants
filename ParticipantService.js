@@ -328,6 +328,23 @@ function normaliseSchoolNameKey_(value) {
     .toLowerCase();
 }
 
+function parseParticipantCount_(value) {
+  const number = Number(String(value || "").replace(/,/g, "").trim());
+  return Number.isFinite(number) ? number : 0;
+}
+
+function getGroupStudentCount_(group) {
+  const accepted = String(group && group.acceptedCount || "").trim();
+  const allocated = String(group && (group.allocatedCount || group.count) || "").trim();
+  return parseParticipantCount_(accepted || allocated);
+}
+
+function hasNotAcceptedAllocationCount_(group) {
+  const accepted = String(group && group.acceptedCount || "").trim();
+  const allocated = String(group && (group.allocatedCount || group.count) || "").trim();
+  return !accepted && parseParticipantCount_(allocated) > 0;
+}
+
 /**
  * Returns only schools that appear in live individual or group records.
  * Master data is used only to enrich those active schools.
@@ -438,7 +455,8 @@ ParticipantService.getSchoolProfile = function (schoolName) {
     master,
     groups,
     groupCount: groups.length,
-    participantCount: participants.length,
+    participantCount: participants.length + groups.reduce((total, group) => total + getGroupStudentCount_(group), 0),
+    participantCountNote: groups.some(hasNotAcceptedAllocationCount_) ? "Includes not accepted yet allocations" : "",
     teacherCount: teacherMap.size,
     itemCount: itemMap.size,
     teachers: Array.from(teacherMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),

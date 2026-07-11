@@ -52,17 +52,18 @@
       });
 
       const stats = [
-        ["Participants", allParticipants.length],
+        ["Participants", getTotalParticipantCount(), getParticipantTotalNote()],
         ["Schools", allSchools.length],
         ["Groups", allGroups.length],
         ["Teachers", teachers.size],
         ["Items", items.size]
       ];
 
-      dashboardStatsEl.innerHTML = stats.map(([label, value]) => `
+      dashboardStatsEl.innerHTML = stats.map(([label, value, note]) => `
         <div class="statCard">
           <div class="statNumber">${escapeHtml(value)}</div>
           <div class="statLabel">${escapeHtml(label)}</div>
+          ${note ? `<div class="statNote">${escapeHtml(note)}</div>` : ""}
         </div>
       `).join("");
     }
@@ -222,7 +223,8 @@
             return {
               resultType: "school",
               schoolName,
-              participantCount: (participantsBySchool.get(String(schoolName || "").toLowerCase()) || []).length,
+              participantCount: getSchoolParticipantTotal(schoolName),
+              participantCountNote: getSchoolParticipantTotalNote(schoolName),
               searchScore: 100
             };
           })

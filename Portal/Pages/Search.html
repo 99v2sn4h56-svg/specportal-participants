@@ -41,7 +41,7 @@
       resultsEl.innerHTML = "";
       setDashboardVisible(true);
       statusEl.textContent = portalReady
-        ? `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`
+        ? `Ready · ${getTotalParticipantCount()} participant${getTotalParticipantCount() === 1 ? "" : "s"} loaded${getParticipantTotalNote() ? " · " + getParticipantTotalNote() : ""}`
         : "Loading participant data...";
     }
 
@@ -179,7 +179,7 @@
 
           buildPortalIndexes();
           portalReady = true;
-          statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"}, ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} and ${allSchools.length} school${allSchools.length === 1 ? "" : "s"} loaded`;
+          statusEl.textContent = `Ready · ${getTotalParticipantCount()} participant${getTotalParticipantCount() === 1 ? "" : "s"}, ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} and ${allSchools.length} school${allSchools.length === 1 ? "" : "s"} loaded${getParticipantTotalNote() ? " · " + getParticipantTotalNote() : ""}`;
           renderDashboard();
 
           if (searchInput.value.trim()) {
@@ -227,7 +227,7 @@
 
       if (!query) {
         resultsEl.innerHTML = "";
-        statusEl.textContent = `Ready · ${allParticipants.length} participant${allParticipants.length === 1 ? "" : "s"} loaded`;
+        statusEl.textContent = `Ready · ${getTotalParticipantCount()} participant${getTotalParticipantCount() === 1 ? "" : "s"} loaded${getParticipantTotalNote() ? " · " + getParticipantTotalNote() : ""}`;
         latestResults = [];
         selectedResultIndex = -1;
         setDashboardVisible(true);
@@ -268,7 +268,8 @@
           return {
             resultType: "school",
             schoolName,
-            participantCount: (participantsBySchool.get(schoolKey) || []).length,
+            participantCount: getSchoolParticipantTotal(schoolName),
+            participantCountNote: getSchoolParticipantTotalNote(schoolName),
             searchScore: getTextSearchScore(schoolKey, q)
           };
         })
@@ -437,7 +438,8 @@
     function renderSchoolResultCard(p, idx) {
       const schoolName = getSchoolName(p) || "Unnamed school";
       const count = p.participantCount || 0;
-      return resultCardShell(p, idx, "🏫", schoolName, `${count} participant${Number(count) === 1 ? "" : "s"}`, "School");
+      const meta = `${count} participant${Number(count) === 1 ? "" : "s"}${p.participantCountNote ? " · " + p.participantCountNote : ""}`;
+      return resultCardShell(p, idx, "🏫", schoolName, meta, "School");
     }
 
     function renderGroupResultCard(p, idx) {

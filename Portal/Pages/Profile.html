@@ -331,12 +331,20 @@
         }
       });
 
+      const groupParticipantCount = groups.reduce((total, group) => total + parseParticipantCount(getGroupStudentCount(group)), 0);
+      const participantCountNote = groups.some(group => {
+        const accepted = String(group && group.acceptedCount || "").trim();
+        const allocated = String(group && (group.allocatedCount || group.count) || "").trim();
+        return !accepted && parseParticipantCount(allocated) > 0;
+      }) ? "Includes not accepted yet allocations" : "";
+
       return {
         schoolName: target,
         master: master,
         groups: groups,
         groupCount: groups.length,
-        participantCount: participants.length,
+        participantCount: participants.length + groupParticipantCount,
+        participantCountNote,
         teacherCount: teacherMap.size,
         itemCount: itemMap.size,
         teachers: Array.from(teacherMap.values()).sort((a, b) => String(a.name).localeCompare(String(b.name))),
@@ -658,6 +666,7 @@
               ${schoolStat(school.groupCount, "Groups", "school-groups")}
               ${schoolStat((school.disciplines || []).length, "Categories", "school-categories")}
             </div>
+            ${school.participantCountNote ? `<div class="profileHeroNote">${escapeHtml(school.participantCountNote)}</div>` : ""}
             ${school.master ? `<div style="margin-top:14px;font-size:13px;line-height:1.5;opacity:.98;">
               ${school.master.code ? `<div><strong>Code:</strong> ${escapeHtml(school.master.code)}</div>` : ""}
               ${school.master.directorate ? `<div><strong>Directorate:</strong> ${escapeHtml(school.master.directorate)}</div>` : ""}
