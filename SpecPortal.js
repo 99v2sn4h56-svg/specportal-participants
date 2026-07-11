@@ -68,6 +68,14 @@ function portalGetStudentPhotos() {
   return ProfilePhotoService.getStudentPhotos();
 }
 
+function portalGetPhotoDiagnostics() {
+  return ProfilePhotoService.getPhotoDiagnostics();
+}
+
+function portalRefreshPhotoCache() {
+  return ProfilePhotoService.refreshStudentPhotos();
+}
+
 function portalGetPortalData() {
   return ParticipantService.getPortalData();
 }

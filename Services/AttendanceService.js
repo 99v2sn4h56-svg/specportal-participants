@@ -1,5 +1,5 @@
 const AttendanceService = (() => {
-  const DEFAULT_WEB_APP_URL = "https://script.google.com/a/macros/education.nsw.gov.au/s/AKfycbwfl66Nd4oQFZT5JY3zP74hh-3K59YrmS_z-vINubnDdNnLrX347K9huAkQLT86UYy63w/exec";
+  const DEFAULT_WEB_APP_URL = "https://script.google.com/a/macros/education.nsw.gov.au/s/AKfycbxdsxgTxywWxGyF8mVTfvs04E1WeOcAma5hOEsjMBcbCXOOvHkeO5o7B6VqvtV33db9Tw/exec";
   const STALE_WEB_APP_URLS = [
     "https://script.google.com/a/macros/education.nsw.gov.au/s/AKfycbz4lRBirmgoHtz3T7d_Pba-gEVkFHzj_TQVlqg4XKT8A-5WPhxC9lONV9j9N3i3DH7sdA/exec",
     "https://script.google.com/a/macros/education.nsw.gov.au/s/AKfycbzcPYzqJQrJ8qeaxCic3ZGZdQGDd-HvtAHgklkE15LiM01vsudPX-9ok3IolHzHukc_NQ/exec"

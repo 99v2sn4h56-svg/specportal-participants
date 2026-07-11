@@ -45,6 +45,29 @@ const ProfilePhotoService = (() => {
     return key ? photos[key] || null : null;
   }
 
+  function getPhotoIndex() {
+    return getStudentPhotos();
+  }
+
+  function getPhotosForParticipantIds(ids, size) {
+    const photos = getStudentPhotos();
+    const requested = new Set((ids || []).map(value => String(value || "").trim()).filter(Boolean));
+    const output = {};
+    const width = Number(size) || 160;
+
+    Object.keys(photos || {}).forEach(key => {
+      const photo = photos[key] || {};
+      const fileId = photo.fileId || "";
+      if (!requested.size || requested.has(key) || requested.has(fileId)) {
+        output[key] = Object.assign({}, photo, {
+          url: buildThumbnailUrl_(fileId, width)
+        });
+      }
+    });
+
+    return output;
+  }
+
   function getTeacherPhoto(teacherOrKey) {
     const photos = getStudentPhotos();
     const key = toPhotoKey_(teacherOrKey);
@@ -94,11 +117,26 @@ const ProfilePhotoService = (() => {
 
       photos[key] = {
         fileId: file.getId(),
-        url: `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w300`
+        url: buildThumbnailUrl_(file.getId(), 300),
+        thumbnailUrl: buildThumbnailUrl_(file.getId(), 120),
+        profileUrl: buildThumbnailUrl_(file.getId(), 480)
       };
     }
 
     return photos;
+  }
+
+  function getPhotoDiagnostics() {
+    const cached = getCachedStudentPhotos();
+    const photos = cached || getStudentPhotos();
+    return {
+      folderConfigured: !!FOLDER_ID,
+      folderIdTail: FOLDER_ID ? FOLDER_ID.slice(-6) : "",
+      cacheHit: !!cached,
+      photoCount: Object.keys(photos || {}).length,
+      generatedAt: new Date().toISOString(),
+      urlStrategy: "drive-thumbnail"
+    };
   }
 
   function toPhotoKey_(source) {
@@ -130,6 +168,10 @@ const ProfilePhotoService = (() => {
       .toLowerCase();
   }
 
+  function buildThumbnailUrl_(fileId, size) {
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size || 300}`;
+  }
+
   function cachePhotos_(photos) {
     const cache = CacheService.getScriptCache();
     const payload = JSON.stringify(photos || {});
@@ -154,6 +196,9 @@ const ProfilePhotoService = (() => {
     getCachedStudentPhotos,
     refreshStudentPhotos,
     clearStudentPhotosCache,
+    getPhotoIndex,
+    getPhotosForParticipantIds,
+    getPhotoDiagnostics,
     getParticipantPhoto,
     getTeacherPhoto,
     prefetchPhotos,

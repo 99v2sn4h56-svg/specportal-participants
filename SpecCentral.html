@@ -1268,10 +1268,12 @@
         loadedServices: {},
         cacheTimestamps: {},
         serviceCache: {},
+        inFlightRequests: {},
         serviceRegistry: {},
         loading: {},
         systemStatus: {},
         dashboardStats: null,
+        dashboardRenderTimer: null,
         dashboardProfile: "operations",
         applicationVersion: "5",
         selectedParticipant: null,
@@ -1396,23 +1398,29 @@
           var args = options.args || [];
           var cacheMs = options.cacheMs || 0;
           var timeoutMs = options.timeoutMs || 25000;
+          var forceRefresh = !!options.forceRefresh;
           var cached = App.state.serviceCache[key];
           var cachedAt = App.state.cacheTimestamps[key] || 0;
 
-          if (cacheMs && cached && Date.now() - cachedAt < cacheMs) {
+          if (!forceRefresh && cacheMs && cached && Date.now() - cachedAt < cacheMs) {
             return Promise.resolve(cached);
+          }
+
+          if (!forceRefresh && App.state.inFlightRequests[key]) {
+            return App.state.inFlightRequests[key];
           }
 
           App.state.loading[key] = true;
           App.setServiceStatus(key, "Loading");
           App.events.emit("service:loading", { key: key, serverFunction: serverFunction });
 
-          return new Promise(function (resolve, reject) {
+          App.state.inFlightRequests[key] = new Promise(function (resolve, reject) {
             var settled = false;
             var timer = setTimeout(function () {
               if (settled) return;
               settled = true;
               App.state.loading[key] = false;
+              delete App.state.inFlightRequests[key];
               App.setServiceStatus(key, "Offline", App.formatTime(new Date()));
               var error = new Error(serverFunction + " timed out after " + Math.round(timeoutMs / 1000) + " seconds");
               App.events.emit("service:error", { key: key, serverFunction: serverFunction, error: error });
@@ -1424,6 +1432,7 @@
               settled = true;
               clearTimeout(timer);
               App.state.loading[key] = false;
+              delete App.state.inFlightRequests[key];
 
               if (success) {
                 App.state.loadedServices[key] = true;
@@ -1455,6 +1464,8 @@
               finish(false, err);
             }
           });
+
+          return App.state.inFlightRequests[key];
         }
       },
 
@@ -1516,15 +1527,23 @@
 
       bindApplicationEvents: function () {
         App.events.on("service:loaded", function () {
-          if (App.state.currentPage === "dashboard") App.renderDashboardPage();
+          if (App.state.currentPage === "dashboard") App.scheduleDashboardRender();
         });
         App.events.on("service:error", function () {
           App.renderStatusRibbon();
         });
         App.events.on("dashboard:refresh", function () {
           App.state.dashboardStats = App.buildDashboardStats();
-          App.renderDashboardPage();
+          App.scheduleDashboardRender();
         });
+      },
+
+      scheduleDashboardRender: function () {
+        if (App.state.dashboardRenderTimer) clearTimeout(App.state.dashboardRenderTimer);
+        App.state.dashboardRenderTimer = setTimeout(function () {
+          App.state.dashboardRenderTimer = null;
+          if (App.state.currentPage === "dashboard") App.renderDashboardPage();
+        }, 50);
       },
 
       navigate: function (page, options) {
@@ -2263,7 +2282,7 @@
         var avatar = '<div class="avatar">' + App.escapeHtml(icon) + '</div>';
 
         if (result.resultType === "participant") {
-          var photo = App.getParticipantPhotoUrl(result.participant);
+          var photo = App.getParticipantPhotoUrl(result.participant, false, 120);
           avatar = '<div class="avatar">' + (photo
             ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(icon) + '</span>'
             : App.escapeHtml(icon)) + '</div>';
@@ -2390,7 +2409,7 @@
         var panel = document.getElementById("participantProfilePanel");
         if (!panel) return;
 
-        var photo = App.getParticipantPhotoUrl(participant);
+        var photo = App.getParticipantPhotoUrl(participant, false, 480);
         var name = App.getParticipantName(participant) || "Unnamed participant";
         var school = App.getParticipantSchool(participant);
         var category = App.getParticipantCategory(participant);
@@ -2845,7 +2864,7 @@
       },
 
       renderParticipantListItem: function (participant) {
-        var photo = App.getParticipantPhotoUrl(participant);
+        var photo = App.getParticipantPhotoUrl(participant, false, 120);
         var name = App.getParticipantName(participant) || "Unnamed participant";
         var meta = [
           App.getParticipantSchool(participant),
@@ -3758,18 +3777,21 @@
           .toLowerCase();
       },
 
-      getParticipantPhotoUrl: function (participant, forceCache) {
+      getParticipantPhotoUrl: function (participant, forceCache, size) {
         if (!participant) return "";
-        if (!forceCache && participant.photoUrl) return App.normalisePhotoUrl(participant.photoUrl);
+        var explicitId = App.getField(participant, ["photoId", "Photo ID", "Drive Photo ID", "headshotId", "Headshot ID"]);
+        if (explicitId) return App.buildDriveThumbnailUrl(explicitId, size || 360);
+        if (!forceCache && participant.photoUrl) return App.normalisePhotoUrl(participant.photoUrl, size || 360);
         var photo = App.state.photos[App.getPhotoKey(participant)] || {};
-        if (typeof photo === "string") return App.normalisePhotoUrl(photo);
-        return App.normalisePhotoUrl(photo.url || photo.thumbnailUrl || "");
+        if (typeof photo === "string") return App.normalisePhotoUrl(photo, size || 360);
+        if (photo.fileId) return App.buildDriveThumbnailUrl(photo.fileId, size || 360);
+        return App.normalisePhotoUrl(photo.url || photo.thumbnailUrl || "", size || 360);
       },
 
-      normalisePhotoUrl: function (value) {
+      normalisePhotoUrl: function (value, size) {
         var text = String(value || "").trim();
         var fileId = App.extractDriveFileId(text);
-        if (fileId) return App.buildDriveThumbnailUrl(fileId, 360);
+        if (fileId) return App.buildDriveThumbnailUrl(fileId, size || 360);
         return text;
       },
 
