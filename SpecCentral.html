@@ -3779,9 +3779,10 @@
 
       getParticipantPhotoUrl: function (participant, forceCache, size) {
         if (!participant) return "";
-        var explicitId = App.getField(participant, ["photoId", "Photo ID", "Drive Photo ID", "headshotId", "Headshot ID"]);
-        if (explicitId) return App.buildDriveThumbnailUrl(explicitId, size || 360);
-        if (!forceCache && participant.photoUrl) return App.normalisePhotoUrl(participant.photoUrl, size || 360);
+        var explicitId = App.getField(participant, ["photoId", "PhotoID", "Photo ID", "Photo Id", "Drive Photo ID", "headshotId", "Headshot ID"]);
+        if (explicitId) return App.normalisePhotoUrl(explicitId, size || 360);
+        var explicitUrl = App.getField(participant, ["photoUrl", "Photo URL", "PhotoURL", "Headshot URL", "HeadshotURL", "imageUrl", "Image URL"]);
+        if (!forceCache && explicitUrl) return App.normalisePhotoUrl(explicitUrl, size || 360);
         var photo = App.state.photos[App.getPhotoKey(participant)] || {};
         if (typeof photo === "string") return App.normalisePhotoUrl(photo, size || 360);
         if (photo.fileId) return App.buildDriveThumbnailUrl(photo.fileId, size || 360);

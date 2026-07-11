@@ -104,6 +104,15 @@ ParticipantService.getAll = function () {
 
   const headers = data.shift();
   const getIndex = header => headers.indexOf(header);
+  const getFirstIndex = possibleHeaders => {
+    for (const header of possibleHeaders) {
+      const exactIndex = headers.indexOf(header);
+      if (exactIndex >= 0) return exactIndex;
+      const lowerIndex = headers.findIndex(value => String(value || "").trim().toLowerCase() === String(header || "").trim().toLowerCase());
+      if (lowerIndex >= 0) return lowerIndex;
+    }
+    return -1;
+  };
   const indexes = {
     firstName: getIndex(this.FIELDS.FIRST_NAME),
     lastName: getIndex(this.FIELDS.LAST_NAME),
@@ -124,7 +133,9 @@ ParticipantService.getAll = function () {
     teacherName: getIndex(this.FIELDS.TEACHER_NAME),
     teacherEmail: getIndex(this.FIELDS.TEACHER_EMAIL),
     studentId: getIndex(this.FIELDS.STUDENT_ID),
-    srn: getIndex(this.FIELDS.SRN)
+    srn: getIndex(this.FIELDS.SRN),
+    photoId: getFirstIndex(["PhotoID", "Photo ID", "Photo Id", "Drive Photo ID", "Headshot ID"]),
+    photoUrl: getFirstIndex(["Photo URL", "PhotoURL", "Headshot URL", "HeadshotURL", "Image URL"])
   };
   const getCell = (row, index) => index >= 0 ? row[index] : "";
 
@@ -159,7 +170,9 @@ ParticipantService.getAll = function () {
   teacherEmail: getCell(row, indexes.teacherEmail),
 
   studentId: getCell(row, indexes.studentId),
-  srn: getCell(row, indexes.srn)
+  srn: getCell(row, indexes.srn),
+  photoId: getCell(row, indexes.photoId),
+  photoUrl: getCell(row, indexes.photoUrl)
 
 };
 
