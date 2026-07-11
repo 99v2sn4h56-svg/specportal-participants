@@ -6,6 +6,7 @@ const AttendanceService = (() => {
   ];
   const SUMMARY_CACHE_SECONDS = 2 * 60;
   const EVENTS_CACHE_SECONDS = 5 * 60;
+  const PARTICIPANT_HISTORY_CACHE_SECONDS = 2 * 60;
   const ERROR_CACHE_SECONDS = 30;
   const CACHE_PREFIX = "SPEC_CENTRAL_ATTENDANCE_API_V1";
 
@@ -55,13 +56,101 @@ const AttendanceService = (() => {
   }
 
   function getParticipantHistory(studentKey) {
+    const action = "participant-history";
+    const key = String(studentKey || "").trim();
+    if (!key) return failureResult_(action, "Student Key is required.");
+
+    const secret = PropertiesService.getScriptProperties()
+      .getProperty("SPEC_CENTRAL_ATTENDANCE_SECRET");
+    if (!secret || secret.length < 32) {
+      return unavailableResult_(action, "Secure Attendance integration is not configured.");
+    }
+
+    const cache = CacheService.getScriptCache();
+    const cacheKey = `${CACHE_PREFIX}:participant-history:${digestCacheValue_(key)}`;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (err) {
+        cache.remove(cacheKey);
+      }
+    }
+
+    let result;
+    try {
+      const response = UrlFetchApp.fetch(getWebAppUrl(), {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ action, studentKey: key, secret }),
+        followRedirects: true,
+        muteHttpExceptions: true
+      });
+      const statusCode = response.getResponseCode();
+
+      result = statusCode >= 200 && statusCode < 300
+        ? parseParticipantHistoryResponse_(response.getContentText())
+        : failureResult_(action, `Attendance API returned HTTP ${statusCode}.`, statusCode);
+    } catch (err) {
+      result = failureResult_(
+        action,
+        `Attendance API request failed: ${err && err.message ? err.message : String(err)}`
+      );
+    }
+
+    if (result.ok) {
+      try {
+        cache.put(cacheKey, JSON.stringify(result), PARTICIPANT_HISTORY_CACHE_SECONDS);
+      } catch (err) {
+        Logger.log("AttendanceService participant history cache failed.");
+      }
+    }
+
+    return result;
+  }
+
+  function parseParticipantHistoryResponse_(responseText) {
+    const action = "participant-history";
+    let parsed;
+    try {
+      parsed = JSON.parse(String(responseText || ""));
+    } catch (err) {
+      return failureResult_(action, "Attendance API returned invalid JSON.");
+    }
+
+    if (!parsed || parsed.ok !== true || parsed.action !== action || !Array.isArray(parsed.data)) {
+      return failureResult_(action, parsed && parsed.error
+        ? parsed.error
+        : "Attendance API returned an invalid participant history response.");
+    }
+
     return {
-      ok: false,
-      action: "participant-history",
-      status: "Unavailable",
-      generatedAt: new Date().toISOString(),
-      error: "Secure cross-project participant history is not available yet."
+      ok: true,
+      action,
+      status: "Connected",
+      generatedAt: parsed.generatedAt || new Date().toISOString(),
+      data: parsed.data.map(sanitiseParticipantHistoryEntry_)
     };
+  }
+
+  function sanitiseParticipantHistoryEntry_(entry) {
+    entry = entry || {};
+    return {
+      date: entry.date || "",
+      time: entry.time || "",
+      eventName: entry.eventName || "",
+      location: entry.location || "",
+      status: entry.status || "Waiting",
+      attendanceNotes: entry.attendanceNotes || "",
+      markedTime: entry.markedTime || "",
+      markedBy: entry.markedBy || ""
+    };
+  }
+
+  function digestCacheValue_(value) {
+    return Utilities.base64EncodeWebSafe(
+      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ""))
+    ).slice(0, 32);
   }
 
   function getHealth() {
@@ -254,6 +343,16 @@ const AttendanceService = (() => {
     };
     if (httpStatus) result.httpStatus = httpStatus;
     return result;
+  }
+
+  function unavailableResult_(action, error) {
+    return {
+      ok: false,
+      action,
+      status: "Unavailable",
+      generatedAt: new Date().toISOString(),
+      error: String(error || "Attendance integration is unavailable.")
+    };
   }
 
   return {

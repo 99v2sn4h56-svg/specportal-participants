@@ -19,6 +19,8 @@ const ParticipantService = (() => {
     // Identity
     FIRST_NAME: "Student First Name",
     LAST_NAME: "Student Last Name",
+    NAME: "Student Name",
+    APPLICATION_ID: "Application ID",
     STUDENT_ID: "Student ID",
     SRN: "SRN",
 
@@ -116,7 +118,9 @@ ParticipantService.getAll = function () {
   const indexes = {
     firstName: getIndex(this.FIELDS.FIRST_NAME),
     lastName: getIndex(this.FIELDS.LAST_NAME),
-    school: getIndex(this.FIELDS.SCHOOL),
+    name: getFirstIndex([this.FIELDS.NAME, "Name"]),
+    applicationId: getFirstIndex([this.FIELDS.APPLICATION_ID, "Application Id", "Application"]),
+    school: getFirstIndex([this.FIELDS.SCHOOL, "School"]),
     year: getIndex(this.FIELDS.YEAR),
     discipline: getIndex(this.FIELDS.DISCIPLINE),
     subDiscipline: getIndex(this.FIELDS.SUB_DISCIPLINE),
@@ -132,7 +136,7 @@ ParticipantService.getAll = function () {
     additionalParentRelationship: getIndex(this.FIELDS.ADDITIONAL_PARENT_RELATIONSHIP),
     teacherName: getIndex(this.FIELDS.TEACHER_NAME),
     teacherEmail: getIndex(this.FIELDS.TEACHER_EMAIL),
-    studentId: getIndex(this.FIELDS.STUDENT_ID),
+    studentId: getFirstIndex([this.FIELDS.STUDENT_ID, this.FIELDS.SRN]),
     srn: getIndex(this.FIELDS.SRN),
     photoId: getFirstIndex(["PhotoID", "Photo ID", "Photo Id", "Drive Photo ID", "Headshot ID"]),
     photoUrl: getFirstIndex(["Photo URL", "PhotoURL", "Headshot URL", "HeadshotURL", "Image URL"])
@@ -145,6 +149,8 @@ ParticipantService.getAll = function () {
 
   firstName: getCell(row, indexes.firstName),
   lastName: getCell(row, indexes.lastName),
+  name: getCell(row, indexes.name),
+  applicationId: getCell(row, indexes.applicationId),
 
   school: getCell(row, indexes.school),
   year: getCell(row, indexes.year),
@@ -176,10 +182,32 @@ ParticipantService.getAll = function () {
 
 };
 
+    participant.name = participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" ");
+    participant.studentKey = this.makeStudentKey(participant);
+
     return participant;
 
   });
 
+};
+
+/**
+ * Matches Attendance.makeStudentKey_ exactly. Both projects read these values
+ * from the Participants workbook, so this is the canonical cross-project key.
+ */
+ParticipantService.makeStudentKey = function (participant) {
+  return [
+    participant && participant.applicationId,
+    participant && participant.studentId,
+    participant && (participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" ")),
+    participant && participant.school
+  ].filter(Boolean).join(" | ");
+};
+
+ParticipantService.hasStudentKey = function (studentKey) {
+  const target = String(studentKey || "").trim();
+  if (!target) return false;
+  return this.getAll().some(participant => participant.studentKey === target);
 };
 function testGetAllParticipants() {
 

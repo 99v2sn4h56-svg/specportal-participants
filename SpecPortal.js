@@ -116,6 +116,42 @@ function portalGetAttendanceHealth() {
   return AttendanceService.getHealth();
 }
 
+function portalGetParticipantAttendanceHistory(studentKey) {
+  const key = String(studentKey || "").trim();
+  if (!key) {
+    return {
+      ok: false,
+      action: "participant-history",
+      status: "Degraded",
+      generatedAt: new Date().toISOString(),
+      error: "Student Key is required."
+    };
+  }
+
+  const email = Session.getActiveUser().getEmail();
+  if (!email || !StaffService.hasPermission(email, "participants.view")) {
+    return {
+      ok: false,
+      action: "participant-history",
+      status: "Unavailable",
+      generatedAt: new Date().toISOString(),
+      error: "You do not have access to this participant profile."
+    };
+  }
+
+  if (!ParticipantService.hasStudentKey(key)) {
+    return {
+      ok: true,
+      action: "participant-history",
+      status: "Connected",
+      generatedAt: new Date().toISOString(),
+      data: []
+    };
+  }
+
+  return AttendanceService.getParticipantHistory(key);
+}
+
 function portalGetProjectManagementData() {
   return ProjectManagementService.getDashboardData();
 }
