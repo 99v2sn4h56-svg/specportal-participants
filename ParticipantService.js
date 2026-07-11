@@ -321,6 +321,52 @@ ParticipantService.getSchoolsMasterData = function () {
     .filter(school => school.schoolName);
 };
 
+function normaliseSchoolNameKey_(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+/**
+ * Returns only schools that appear in live individual or group records.
+ * Master data is used only to enrich those active schools.
+ */
+ParticipantService.getActiveSchoolsData = function (participants, groups) {
+  const activeSchools = new Map();
+
+  const addSchool = schoolName => {
+    const name = String(schoolName || "").trim().replace(/\s+/g, " ");
+    const key = normaliseSchoolNameKey_(name);
+    if (key && !activeSchools.has(key)) {
+      activeSchools.set(key, name);
+    }
+  };
+
+  (participants || []).forEach(participant => addSchool(participant.school));
+  (groups || []).forEach(group => addSchool(group.school));
+
+  if (!activeSchools.size) return [];
+
+  const masterByName = new Map();
+  this.getSchoolsMasterData().forEach(school => {
+    const key = normaliseSchoolNameKey_(school.schoolName);
+    if (key) masterByName.set(key, school);
+  });
+
+  return Array.from(activeSchools.entries())
+    .map(([key, schoolName]) => {
+      const master = masterByName.get(key) || {};
+      return {
+        code: master.code || "",
+        schoolName: master.schoolName || schoolName,
+        schoolEmail: master.schoolEmail || "",
+        directorate: master.directorate || ""
+      };
+    })
+    .sort((a, b) => String(a.schoolName || "").localeCompare(String(b.schoolName || "")));
+};
+
 /**
  * Returns profile data for one school.
  */
@@ -422,10 +468,13 @@ ParticipantService.getPortalData = function () {
     photos = {};
   }
 
+  const participants = this.getAll();
+  const groups = this.getGroups();
+
   return {
-    participants: this.getAll(),
-    groups: this.getGroups(),
-    schools: this.getSchoolsMasterData(),
+    participants,
+    groups,
+    schools: this.getActiveSchoolsData(participants, groups),
     photos
   };
 };
