@@ -4,6 +4,8 @@
 
 Spec Central should be treated as one Schools Spectacular platform with multiple owned data domains, not as a collection of unrelated Apps Script projects. The current repo already points in that direction: `SpecCentral.html` provides a full-page shell, `SpecPortal.js` acts as a gateway, `ParticipantService.js` owns participant access, `RehearsalService.js` reads Timeline data, and Attendance currently remains a separate source app with a documented migration path.
 
+Spec Central is the staff-facing portal. Operations is the protected management module inside Spec Central for organisation-wide running of Schools Spectacular. Normal staff should see personalised Home content, their accessible modules, rehearsals, attendance, announcements, and search. Organisation-wide statistics, diagnostics, imports, integration settings, and administrative actions belong in Operations.
+
 ```text
                          +-----------------------------+
                          |      Spec Central Shell      |
@@ -63,6 +65,8 @@ Spec Central can display and coordinate data from the other modules, but it shou
 | Notifications | Spec Central | Future notification service | Dashboard, module alerts |
 | Recent activity | Spec Central | Future activity log | Dashboard, module summaries |
 | App settings | Spec Central | Script/user properties or settings sheet | App shell and module configuration |
+
+| Operations overview/actions | Operations module | Protected Spec Central services | Operations administrators |
 
 Rule: a module may cache, display, or derive data from another module, but it must not silently become a second source of truth.
 
@@ -158,6 +162,15 @@ Spec Central
 
 - Purpose: unified staff landing page and application shell.
 - Inputs: participant summaries, rehearsal/event summaries, attendance summaries, permissions, announcements.
+- Staff-facing outputs: personalised Home, search, relevant rehearsals/events, attendance links, announcements, recent activity, and permitted modules.
+- Management outputs: delegated to the protected Operations module.
+
+### Operations
+
+- Purpose: restricted management area for running Schools Spectacular.
+- Inputs: Participants, Timeline, Attendance, Staff Production Team, announcements, diagnostics, import/reconciliation status.
+- Outputs: operations overview, event management, user/permission review, project management, data management, announcement authoring, integrations, diagnostics, and audit.
+- Consumers: operations administrators only.
 - Outputs: navigation state, notifications, dashboard views, user-facing module pages.
 - Consumers: all staff users.
 
@@ -224,7 +237,8 @@ These components should exist once and be reused across modules.
 
 | Component | Purpose | Current State |
 | --- | --- | --- |
-| Header | Suite identity and Schools Spectacular branding | `Portal/Components/Header.html` exists |
+| Full-page header | Suite identity and Schools Spectacular branding | `Portal/Components/FullPageHeader.html` exists |
+| Sidebar header | Compact Google Sheets sidebar identity | `Portal/Components/SidebarHeader.html` exists |
 | Top bar | Page title, description, global search | `Portal/Components/TopBar.html` exists |
 | Sidebar | Persistent module navigation | `Portal/Components/Sidebar.html` exists |
 | Notifications | Global warnings and action feedback | `Portal/Components/Notifications.html` exists |

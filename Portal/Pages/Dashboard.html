@@ -313,7 +313,7 @@
       <div class="operationalHeroGrid">
         <div>
           <div class="kicker">Schools Spectacular 2026</div>
-          <h2>What needs attention now?</h2>
+          <h2>What is relevant to me?</h2>
           <div id="dashboardGreeting" class="heroMeta">Good morning</div>
           <div id="dashboardDate" class="heroMeta">Today</div>
           <div class="heroMetricGrid">
@@ -347,7 +347,7 @@
     </section>
 
     <section class="panel span12">
-      <h3 class="sectionTitle">Live Overview</h3>
+      <h3 class="sectionTitle">My Overview</h3>
       <div id="dashboardStatsFull" class="moduleGrid"></div>
     </section>
 
@@ -369,7 +369,7 @@
         <button class="quickLink" type="button" onclick="App.browseGlobal('schools')">Browse Schools</button>
         <button class="quickLink" type="button" onclick="App.browseGlobal('items')">Browse Items</button>
         <button class="quickLink" type="button" onclick="App.navigate('rehearsals')">Today's Rehearsals</button>
-        <button class="quickLink" type="button" onclick="App.openImportCentre()">Upload Acceptance Data</button>
+        <button class="quickLink" type="button" data-permission="operations.data.manage" onclick="App.openImportCentre()">Upload Acceptance Data</button>
       </div>
     </section>
 

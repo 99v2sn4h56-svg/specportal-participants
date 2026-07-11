@@ -104,6 +104,10 @@ function portalGetProjectManagementData() {
   return ProjectManagementService.getDashboardData();
 }
 
+function portalGetOperationsData() {
+  return ProjectManagementService.getDashboardData();
+}
+
 function portalGetMediaTimelineData() {
   return MediaTimelineService.getDashboardData();
 }

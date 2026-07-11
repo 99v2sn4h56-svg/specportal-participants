@@ -1,13 +1,14 @@
-# Project Management Module
+# Project Management Section
 
 ## Purpose
-Project Management will track production workstreams, milestones, owners, dependencies, due dates, and risk.
+Project Management tracks production workstreams, milestones, owners, dependencies, due dates, and risk. It now lives as a section inside the protected Operations module rather than as a top-level staff-facing module.
 
 ## Current Implementation
-- Page: `Portal/Pages/ProjectManagement.html`
+- Page: `Portal/Pages/Operations.html`
 - Service: `ProjectManagementService`
-- Backend wrapper: `portalGetProjectManagementData()`
-- Permission: `projectManagement.view`
+- Backend wrapper: `portalGetOperationsData()`
+- Compatibility backend wrapper: `portalGetProjectManagementData()`
+- Permission: `operations.view`
 
 ## Views
 - Board
@@ -36,7 +37,8 @@ A future source should include:
 
 ## Permissions
 Future actions should use:
-- `projectManagement.view`
-- `projectManagement.edit`
-- `projectManagement.assign`
-- `projectManagement.admin`
+- `operations.projects.view`
+- `operations.projects.manage`
+- `operations.view`
+
+`projectManagement.view` remains a compatibility permission and expands to `operations.view`.

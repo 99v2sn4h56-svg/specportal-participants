@@ -1,5 +1,11 @@
 # Spec Central Portal Architecture
 
+## Spec Central And Operations
+
+Spec Central is the general staff-facing Schools Spectacular portal. It should help staff find information, search participants/schools/items/groups/teachers, view relevant rehearsals and calendar events, open attendance, read announcements, and see their own role and allocations.
+
+Organisation-wide management now belongs in the protected Operations module. Operations is hidden unless the current staff context includes `operations.view`, and protected backend calls must also validate that permission before returning data. The old `projectManagement` route is retained only as a compatibility alias that redirects to Operations.
+
 ## Full-page Spec Central Web App
 
 Spec Central now has two web surfaces:
@@ -10,9 +16,9 @@ Spec Central now has two web surfaces:
 The full-page app is intended to become the staff landing page for Schools Spectacular operations. It currently provides:
 
 - Schools Spectacular / Spec Central branding.
-- A persistent header, left sidebar, top bar, status ribbon, notifications area, and main page outlet.
-- Dashboard, Participants, Calendar, Rehearsals, Attendance, Staff, Project Management, Media Timeline, and Settings route support.
-- Permission-aware navigation for protected Project Management and Media Timeline routes.
+- A persistent full-page header, left sidebar, top bar, dashboard-only status ribbon, notifications area, and main page outlet.
+- Home, Participants, Calendar, Rehearsals, Attendance, Staff, Operations, Media Timeline, and Settings route support.
+- Permission-aware navigation for protected Operations, Media Timeline, and Settings routes.
 - Announcements, upcoming rehearsal panels, recent activity, quick actions, and an operational dashboard hero.
 - A Participants module that reuses the existing `portalGetPortalData()` API for participants, schools, groups, and photos.
 - Staff context from `StaffService`, with fallback context when the Production Team spreadsheet is unavailable or unmatched.
@@ -21,7 +27,7 @@ The full-page app is intended to become the staff landing page for Schools Spect
 
 The full-page shell is assembled in `SpecCentral.html` from reusable Apps Script HTML includes:
 
-- `Portal/Components/Header.html`
+- `Portal/Components/FullPageHeader.html`
 - `Portal/Components/Sidebar.html`
 - `Portal/Components/TopBar.html`
 - `Portal/Components/StatusRibbon.html`
@@ -31,7 +37,7 @@ The full-page shell is assembled in `SpecCentral.html` from reusable Apps Script
 - `Portal/Pages/Calendar.html`
 - `Portal/Pages/Attendance.html`
 - `Portal/Pages/Rehearsals.html`
-- `Portal/Pages/ProjectManagement.html`
+- `Portal/Pages/Operations.html`
 - `Portal/Pages/MediaTimeline.html`
 - `Portal/Pages/Staff.html`
 - `Portal/Pages/Settings.html`
@@ -40,7 +46,14 @@ Page content is stored in inert `<template>` blocks and swapped into the main ou
 
 ### Sidebar Module Boundaries
 
-The spreadsheet sidebar remains served by `Portal.html`, but the file is now primarily the shell and shared field helpers. Sidebar behaviour is split into Apps Script HTML includes:
+The spreadsheet sidebar remains served by `Portal.html`, but it is a separate presentation shell from the full-page app. It must not include full-page layout components such as `FullPageHeader`, `Sidebar`, `TopBar`, `StatusRibbon`, or the full `App` controller.
+
+Sidebar layout uses:
+
+- `Portal/Components/SidebarHeader.html`: compact Schools Spectacular / Spec Central Participant Search header.
+- `Portal/Styles/Portal.html`: sidebar-specific CSS, including `scSidebar*` header classes.
+
+Sidebar behaviour is split into Apps Script HTML includes:
 
 - `Portal/Pages/Dashboard.html`: dashboard storage, recent activity, and browse actions.
 - `Portal/Pages/Profile.html`: participant, school, item, group, and teacher profiles.
@@ -54,8 +67,11 @@ This keeps the sidebar behaviour unchanged while reducing `Portal.html` size and
 - `?app=mobile` opens the legacy mobile participant search app.
 - `openSpecPortalHome()` is unchanged and still opens the sidebar.
 - In the full-page app, sidebar buttons call `App.navigate("dashboard")`, `App.navigate("participants")`, `App.navigate("attendance")`, and the other module routes.
-- The baseline visible module set is Dashboard, Participants, Calendar, Rehearsals, Attendance, Staff, and Settings.
-- Project Management and Media Timeline are hidden unless the signed-in user has `projectManagement.view` or `mediaTimeline.view`.
+- The baseline visible module set is Home, Participants, Calendar, Rehearsals, Attendance, and Staff.
+- Operations is hidden unless the signed-in user has `operations.view`.
+- Media Timeline is hidden unless the signed-in user has `mediaTimeline.view`.
+- Settings is hidden unless the signed-in user has `settings.view`.
+- `App.navigate("projectManagement")` redirects to `App.navigate("operations")` for old links.
 - Measurements, Costumes, and Reports remain future modules and are not shown in this navigation pass.
 
 ### Placeholder Services
@@ -67,7 +83,7 @@ The current platform shell uses safe placeholder services so the dashboard can b
 - `StaffService`: active-user email, role, department, permissions, visible modules, and fallback context.
 - `AnnouncementService`: mock operational announcements.
 - `NotificationService`: mock per-user notifications.
-- `ProjectManagementService`: protected placeholder task model.
+- `ProjectManagementService`: protected Operations placeholder task model; public compatibility wrappers remain.
 - `MediaTimelineService`: protected placeholder media planning model.
 
 These services are intentionally read-only and do not alter existing participant, attendance, acceptance, or dance workbook APIs.
@@ -79,7 +95,7 @@ The full-page app now has a lightweight shared runtime inside `SpecCentral.html`
 - `App.state` owns current module, selected records, permissions, loading flags, loaded service flags, local cache timestamps, search history, recently viewed records, and navigation history.
 - `App.events` is a small event bus for cross-module events such as `participant:selected`, `school:selected`, `event:selected`, `service:loaded`, and `service:error`.
 - `App.services.request()` wraps `google.script.run` calls with success handlers, failure handlers, timeout handling, simple in-memory caching, service status updates, and event emission.
-- Public gateway functions are unchanged. The wrapper calls existing functions such as `portalGetSpecCentralConfig()`, `portalGetPortalData()`, `portalGetCalendarData()`, `portalGetProjectManagementData()`, and `portalGetMediaTimelineData()`.
+- Public gateway functions remain compatible. The wrapper calls functions such as `portalGetSpecCentralConfig()`, `portalGetPortalData()`, `portalGetCalendarData()`, `portalGetOperationsData()`, the compatibility `portalGetProjectManagementData()`, and `portalGetMediaTimelineData()`.
 
 This is intentionally not a bundler or framework. It gives the platform a single coordination layer while preserving Apps Script compatibility.
 
@@ -105,7 +121,7 @@ Each provider returns a common result shape with `resultType`, `title`, `meta`, 
 
 ### System Status
 
-The status ribbon now reads from central application/system state rather than four independent hardcoded labels. It reports Participants, Timeline, Attendance, Staff, Announcements, Project Management, and Media status, including last refresh timestamps where the client has them.
+The status ribbon now reads from central application/system state rather than four independent hardcoded labels. It appears on Home/Dashboard only and reports Participants, Timeline, Attendance, Staff, Announcements, Operations, and Media status, including last refresh timestamps where the client has them.
 
 ### Future Modules
 

@@ -15,8 +15,9 @@ Spec Central uses a shared visual language across the full-page app, sidebar, At
 - Navy: `#061D3D`
 
 ## Reusable Patterns
-- Header: `Portal/Components/Header.html`
-- Sidebar: `Portal/Components/Sidebar.html`
+- Full-page header: `Portal/Components/FullPageHeader.html`
+- Full-page sidebar navigation: `Portal/Components/Sidebar.html`
+- Spreadsheet sidebar header: `Portal/Components/SidebarHeader.html`
 - Top bar: `Portal/Components/TopBar.html`
 - Status ribbon: `Portal/Components/StatusRibbon.html`
 - Cards: `.panel`, `.moduleCard`, `.resultCard`, `.profilePanel`
@@ -32,3 +33,10 @@ Active sidebar items use a stronger selected state with a yellow left indicator.
 
 ## Known Limitations
 The full-page app still keeps most browser runtime code inside `SpecCentral.html`. Future work should extract client modules once an Apps Script-safe bundling/include strategy is chosen.
+
+## Shell Isolation
+Full-page and Google Sheets sidebar presentation shells are intentionally separate.
+
+- Full-page classes continue to use app-shell names such as `.suiteHeader`, `.appShell`, `.appSidebar`, `.topBar`, and `.pageOutlet`.
+- Sidebar-only layout uses prefixed classes such as `.scSidebarHeader`, `.scSidebarLogo`, and `.scSidebarBrand`.
+- Shared branding may reuse logo URLs, colours, typography, and tokens, but must not include layout-specific markup across both shells.

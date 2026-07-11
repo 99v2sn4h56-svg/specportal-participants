@@ -1206,7 +1206,7 @@
   </style>
 </head>
 <body>
-  <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Header').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/FullPageHeader').getContent(); ?>
 
   <div class="appShell">
     <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Sidebar').getContent(); ?>
@@ -1223,7 +1223,7 @@
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Calendar').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Attendance').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Rehearsals').getContent(); ?>
-  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/ProjectManagement').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Operations').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/MediaTimeline').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Staff').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Settings').getContent(); ?>
@@ -1290,8 +1290,8 @@
 
       pages: {
         dashboard: {
-          title: "Dashboard",
-          description: "Your Schools Spectacular operations hub.",
+          title: "Home",
+          description: "Your Schools Spectacular staff portal.",
           template: "page-dashboard"
         },
         participants: {
@@ -1320,11 +1320,18 @@
           description: "Staff context, roles and future permission sync.",
           template: "page-staff"
         },
+        operations: {
+          title: "Operations",
+          description: "Protected management area for Schools Spectacular operations.",
+          template: "page-operations",
+          permission: "operations.view"
+        },
         projectManagement: {
-          title: "Project Management",
-          description: "Production tasks, workstreams, milestones and at-risk actions.",
-          template: "page-project-management",
-          permission: "projectManagement.view"
+          title: "Operations",
+          description: "Compatibility route for the protected Operations module.",
+          template: "page-operations",
+          permission: "operations.view",
+          redirectTo: "operations"
         },
         mediaTimeline: {
           title: "Media Timeline",
@@ -1503,7 +1510,7 @@
           ["attendance", "Attendance", ""],
           ["staff", "Staff", "portalGetStaffProductionTeam"],
           ["announcements", "Announcements", ""],
-          ["projectManagement", "Project Management", "portalGetProjectManagementData"],
+          ["operations", "Operations", "portalGetOperationsData"],
           ["mediaTimeline", "Media", "portalGetMediaTimelineData"],
           ["photos", "Profile Photos", "portalGetStudentPhotos"]
         ].forEach(function (service) {
@@ -1548,6 +1555,7 @@
 
       navigate: function (page, options) {
         options = options || {};
+        if (page === "projectManagement") page = "operations";
         var config = App.pages[page] || App.pages.dashboard;
         var template = document.getElementById(config.template);
         var outlet = document.getElementById("appContent");
@@ -1574,13 +1582,14 @@
 
         App.renderStatusRibbon();
         outlet.innerHTML = template ? template.innerHTML : '<div class="empty">Page not found.</div>';
+        App.renderNavigation();
 
         if (page === "dashboard") App.renderDashboardPage();
         if (page === "participants") App.renderParticipantStatus();
         if (page === "calendar") App.renderCalendarPage();
         if (page === "attendance") App.renderAttendancePage();
         if (page === "rehearsals") App.renderRehearsalsPage();
-        if (page === "projectManagement") App.renderProjectManagementPage();
+        if (page === "operations") App.renderOperationsPage();
         if (page === "mediaTimeline") App.renderMediaTimelinePage();
         if (page === "staff") App.renderStaffPage();
       },
@@ -1661,7 +1670,7 @@
             if (App.state.currentPage === "dashboard") App.renderDashboardPage();
             if (App.state.currentPage === "calendar") App.renderCalendarPage();
             if (App.state.currentPage === "rehearsals") App.renderRehearsalsPage();
-            if (App.state.currentPage === "projectManagement") App.renderProjectManagementPage();
+            if (App.state.currentPage === "operations") App.renderOperationsPage();
             if (App.state.currentPage === "mediaTimeline") App.renderMediaTimelinePage();
             if (App.state.currentPage === "staff") App.renderStaffPage();
           })
@@ -1782,7 +1791,7 @@
           attendance: { icon: "✓", color: "#9dd085", bg: "rgba(157,208,133,.20)", purpose: "Rolls + check-in" },
           staff: { icon: "🪪", color: "#fbcc39", bg: "rgba(251,204,57,.24)", purpose: "Roles + access" },
           announcements: { icon: "!", color: "#ef509c", bg: "rgba(239,80,156,.16)", purpose: "Updates" },
-          projectManagement: { icon: "◆", color: "#bb529e", bg: "rgba(187,82,158,.16)", purpose: "Tasks + actions" },
+          operations: { icon: "◆", color: "#bb529e", bg: "rgba(187,82,158,.16)", purpose: "Management" },
           mediaTimeline: { icon: "▶", color: "#f79420", bg: "rgba(247,148,32,.18)", purpose: "Campaigns" }
         };
         return themes[id] || { icon: "•", color: "#667085", bg: "rgba(102,112,133,.12)", purpose: "Service" };
@@ -1836,10 +1845,10 @@
             lastRefresh: App.state.cacheTimestamps.config ? App.formatTime(App.state.cacheTimestamps.config) : ""
           },
           {
-            id: "projectManagement",
-            label: "Project",
-            status: App.state.projectData ? "Connected" : (App.state.loading.projectManagement ? "Loading" : "Waiting"),
-            lastRefresh: App.state.cacheTimestamps.projectManagement ? App.formatTime(App.state.cacheTimestamps.projectManagement) : ""
+            id: "operations",
+            label: "Operations",
+            status: App.state.projectData ? "Connected" : (App.state.loading.operations ? "Loading" : "Waiting"),
+            lastRefresh: App.state.cacheTimestamps.operations ? App.formatTime(App.state.cacheTimestamps.operations) : ""
           },
           {
             id: "mediaTimeline",
@@ -1888,7 +1897,9 @@
 
         var stats = document.getElementById("dashboardStatsFull");
         if (stats) {
-          var dashboardStats = App.state.dashboardStats || App.buildDashboardStats();
+          var dashboardStats = App.hasPermission("operations.view")
+            ? App.state.dashboardStats || App.buildDashboardStats()
+            : App.buildPersonalDashboardCards();
           stats.innerHTML = dashboardStats.map(function (stat) {
             return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div></div>';
           }).join("");
@@ -1961,6 +1972,16 @@
         if (!(App.state.staffTeam || []).length) count++;
         if (!(App.state.rehearsals || []).length) count++;
         return count;
+      },
+
+      buildPersonalDashboardCards: function () {
+        return [
+          { label: "Role", value: App.state.staff.role || "Staff" },
+          { label: "Department", value: App.state.staff.department || "Not connected" },
+          { label: "Events Today", value: App.state.todaysRehearsals.length },
+          { label: "Upcoming Rehearsals", value: App.state.rehearsals.length },
+          { label: "Attendance Rolls", value: App.state.attendanceUrl ? "Available" : "Not connected" }
+        ];
       },
 
       buildDashboardStats: function () {
@@ -3242,26 +3263,40 @@
         }).sort(App.sortEvents);
       },
 
-      renderProjectManagementPage: function () {
-        var el = document.getElementById("projectManagementContent");
-        var source = document.getElementById("projectSource");
+      renderOperationsPage: function () {
+        var el = document.getElementById("operationsContent");
+        var source = document.getElementById("operationsSource");
         if (!el) return;
 
         if (!App.state.projectData) {
-          el.innerHTML = '<div class="empty">Loading project management data...</div>';
-          App.loadProjectManagementData();
+          el.innerHTML = '<div class="empty">Loading operations data...</div>';
+          App.loadOperationsData();
           return;
         }
 
-        if (source) source.textContent = (App.state.projectData.source || "Project Management") +
+        if (source) source.textContent = (App.state.projectData.source || "Operations") +
           (App.state.projectData.generatedAt ? " · " + App.state.projectData.generatedAt : "");
 
         var tasks = App.state.projectData.tasks || [];
-        var view = App.state.projectView || "board";
+        var view = App.state.operationsView || "overview";
 
-        if (view === "table") {
+        if (view === "overview") {
+          el.innerHTML = App.renderOperationsOverview();
+        } else if (view === "events") {
+          el.innerHTML = '<div class="empty">Event management will connect to Timeline in a later sprint.</div>';
+        } else if (view === "users") {
+          el.innerHTML = '<div class="empty">Users and permissions will connect to the Staff Production Team source.</div>';
+        } else if (view === "data") {
+          el.innerHTML = '<div class="empty">Import Centre, acceptance syncing and reconciliation tools will appear here.</div>';
+        } else if (view === "announcements") {
+          el.innerHTML = '<div class="empty">Announcement authoring will appear here once the source is connected.</div>';
+        } else if (view === "integrations") {
+          el.innerHTML = App.renderOperationsIntegrations();
+        } else if (view === "diagnostics") {
+          el.innerHTML = '<div class="empty">Diagnostics and audit logs will appear here after backend instrumentation is connected.</div>';
+        } else if (view === "table") {
           el.innerHTML = App.renderProjectTable(tasks);
-        } else if (view === "milestones") {
+        } else if (view === "milestones" || view === "projects") {
           el.innerHTML = App.renderGroupedCards(tasks, "workstream");
         } else if (view === "mine") {
           el.innerHTML = App.renderProjectTable(App.filterMine(tasks, "owner"));
@@ -3274,21 +3309,48 @@
         }
       },
 
-      loadProjectManagementData: function () {
-        App.services.request("projectManagement", "portalGetProjectManagementData", { cacheMs: 120000, timeoutMs: 30000 })
+      renderOperationsOverview: function () {
+        var stats = App.buildDashboardStats();
+        return '<div class="moduleGrid">' + stats.map(function (stat) {
+          return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div></div>';
+        }).join("") + '</div>' +
+          '<h4 class="sectionTitle">Project Management</h4>' +
+          App.renderTaskBoard((App.state.projectData && App.state.projectData.tasks) || [], (App.state.projectData && App.state.projectData.statuses) || []);
+      },
+
+      renderOperationsIntegrations: function () {
+        return '<div class="moduleGrid">' + App.getStatusItems().map(function (item) {
+          return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(item.label) + '</div><div class="moduleMeta">' + App.escapeHtml(item.status || "Waiting") + '</div></div>';
+        }).join("") + '</div>';
+      },
+
+      loadOperationsData: function () {
+        App.services.request("operations", "portalGetOperationsData", { cacheMs: 120000, timeoutMs: 30000 })
           .then(function (data) {
             App.state.projectData = data || { tasks: [] };
-            if (App.state.currentPage === "projectManagement") App.renderProjectManagementPage();
+            if (App.state.currentPage === "operations") App.renderOperationsPage();
           })
           .catch(function (error) {
             App.state.projectData = { tasks: [], source: "Unavailable: " + App.getErrorMessage(error) };
-            if (App.state.currentPage === "projectManagement") App.renderProjectManagementPage();
+            if (App.state.currentPage === "operations") App.renderOperationsPage();
           });
       },
 
+      setOperationsView: function (view) {
+        App.state.operationsView = view;
+        App.renderOperationsPage();
+      },
+
+      renderProjectManagementPage: function () {
+        App.renderOperationsPage();
+      },
+
+      loadProjectManagementData: function () {
+        App.loadOperationsData();
+      },
+
       setProjectView: function (view) {
-        App.state.projectView = view;
-        App.renderProjectManagementPage();
+        App.setOperationsView(view === "board" ? "projects" : view);
       },
 
       renderTaskBoard: function (tasks, statuses) {

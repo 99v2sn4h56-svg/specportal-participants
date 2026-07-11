@@ -34,7 +34,7 @@ const DashboardService = (() => {
         attendance: attendance.status || "Waiting",
         announcements: announcements.length ? "Connected" : "No active announcements",
         notifications: notifications.length ? "Connected" : "No notifications",
-        projectManagement: "Lazy loaded",
+        operations: "Lazy loaded",
         mediaTimeline: "Lazy loaded"
       }
     };

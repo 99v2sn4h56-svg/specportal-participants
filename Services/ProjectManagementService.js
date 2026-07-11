@@ -1,5 +1,5 @@
 const ProjectManagementService = (() => {
-  const VIEW_PERMISSION = "projectManagement.view";
+  const VIEW_PERMISSION = "operations.view";
 
   function getDashboardData() {
     requirePermission_(VIEW_PERMISSION);
@@ -7,7 +7,7 @@ const ProjectManagementService = (() => {
     const tasks = getPlaceholderTasks_();
 
     return {
-      source: "Placeholder project management data",
+      source: "Protected Operations placeholder data",
       generatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM h:mma"),
       tasks,
       statuses: ["Not started", "In progress", "Waiting", "Ready for review", "Complete"],

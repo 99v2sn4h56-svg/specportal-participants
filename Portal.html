@@ -7,9 +7,9 @@
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Styles/Portal').getContent(); ?>
 </head>
 
-<body>
+<body data-app-context="sidebar">
   <div id="searchView" style="height:100vh;overflow-y:auto;overflow-x:hidden;">
-    <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Header').getContent(); ?>
+    <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/SidebarHeader').getContent(); ?>
 
     <div class="wrap">
       <div id="dashboard" class="dashboard" onclick="focusPortalSearch()">

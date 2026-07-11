@@ -128,13 +128,15 @@ const StaffService = (() => {
       .map(toPermission_)
       .filter(Boolean);
 
+    const expandedPermissions = expandPermissions_(permissions);
+
     return Array.from(new Set([
       "dashboard.view",
       "participants.view",
       "calendar.view",
       "rehearsals.view",
       "attendance.view",
-      ...permissions
+      ...expandedPermissions
     ])).sort();
   }
 
@@ -184,7 +186,7 @@ const StaffService = (() => {
       ["rehearsals", "rehearsals.view"],
       ["attendance", "attendance.view"],
       ["staff", "staff.view"],
-      ["projectManagement", "projectManagement.view"],
+      ["operations", "operations.view"],
       ["mediaTimeline", "mediaTimeline.view"],
       ["settings", "settings.view"]
     ];
@@ -208,13 +210,36 @@ const StaffService = (() => {
       attendance: "attendance.view",
       staff: "staff.view",
       settings: "settings.view",
-      "project management": "projectManagement.view",
-      "projectmanagement": "projectManagement.view",
+      operations: "operations.view",
+      operation: "operations.view",
+      "project management": "operations.view",
+      "projectmanagement": "operations.view",
+      "operations overview": "operations.overview.view",
+      "operations events": "operations.events.manage",
+      "operations users": "operations.users.manage",
+      "operations permissions": "operations.permissions.manage",
+      "operations projects": "operations.projects.view",
+      "operations project management": "operations.projects.manage",
+      "operations data": "operations.data.manage",
+      "operations announcements": "operations.announcements.manage",
+      "operations integrations": "operations.integrations.manage",
+      "operations diagnostics": "operations.diagnostics.view",
       "media timeline": "mediaTimeline.view",
       "mediatimeline": "mediaTimeline.view"
     };
 
     return permissionMap[key] || text;
+  }
+
+  function expandPermissions_(permissions) {
+    const set = new Set(permissions || []);
+    if (set.has("projectManagement.view")) set.add("operations.view");
+    Array.from(set).forEach(permission => {
+      if (String(permission || "").indexOf("operations.") === 0 && permission !== "operations.view") {
+        set.add("operations.view");
+      }
+    });
+    return Array.from(set);
   }
 
   function findHeaderRow_(values) {

@@ -40,7 +40,7 @@ Current registered services:
 | `attendance` | Attendance | External URL for now | Attendance app link and future event metadata |
 | `staff` | Staff | `portalGetStaffProductionTeam` | Staff Production Team records |
 | `announcements` | Announcements | Included in config | Active operational announcements |
-| `projectManagement` | Project Management | `portalGetProjectManagementData` | Protected production task data |
+| `operations` | Operations | `portalGetOperationsData` | Protected operations overview, project tasks, integrations and diagnostics |
 | `mediaTimeline` | Media | `portalGetMediaTimelineData` | Protected media timeline data |
 | `photos` | Profile Photos | `portalGetStudentPhotos` | Headshot map and future photo prefetch |
 

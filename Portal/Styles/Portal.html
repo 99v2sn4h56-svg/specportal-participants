@@ -32,59 +32,67 @@
       box-sizing: border-box;
     }
 
-    .suiteHeader,
-    .header {
+    .scSidebarHeader {
       background: linear-gradient(135deg, var(--blue), var(--purple));
       color: white;
-      padding: 18px;
+      padding: 14px;
       font-family: Poppins, Helvetica, Arial, sans-serif;
-      box-shadow: 0 10px 24px rgba(45, 103, 178, 0.22);
-    }
-
-    .suiteHeaderInner {
       display: flex;
       align-items: center;
-      gap: 18px;
-      max-width: 760px;
-      margin: 0 auto;
+      gap: 12px;
+      box-shadow: 0 10px 24px rgba(45, 103, 178, 0.18);
     }
 
-    .suiteLogo {
-      width: 92px;
-      height: 92px;
-      flex: 0 0 92px;
+    .scSidebarLogo {
+      width: 54px;
+      height: 54px;
+      flex: 0 0 54px;
       object-fit: contain;
-      border-radius: 18px;
+      border-radius: 14px;
       background: rgba(255, 255, 255, 0.13);
-      padding: 0;
-      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.16);
-      transform: scale(1.22);
-      transform-origin: center;
+      box-shadow: 0 6px 14px rgba(16, 24, 40, 0.14);
     }
 
-    .suiteBrand {
+    .scSidebarLogoFallback {
+      display: none;
+      place-items: center;
+      color: var(--yellow);
+      font-weight: 900;
+      letter-spacing: 0.04em;
+    }
+
+    .scSidebarBrand {
       min-width: 0;
     }
 
-    .kicker {
+    .scSidebarKicker {
       font-size: 11px;
       letter-spacing: 1.2px;
       text-transform: uppercase;
-      opacity: 0.85;
+      color: var(--yellow);
+      font-weight: 800;
       margin-bottom: 4px;
     }
 
-    h1 {
+    .scSidebarHeader h1 {
       margin: 0;
-      font-size: 25px;
+      font-size: 22px;
       line-height: 1.1;
       font-weight: 800;
     }
 
-    .subtitle {
+    .scSidebarSubtitle {
       margin-top: 6px;
       font-size: 13px;
       opacity: 0.9;
+    }
+
+    .kicker {
+      color: var(--yellow);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.1px;
+      text-transform: uppercase;
     }
 
     .wrap {
@@ -998,25 +1006,4 @@
       overflow-wrap: anywhere;
     }
 
-    @media (max-width: 420px) {
-      .suiteHeader {
-        padding: 16px 14px;
-      }
-
-      .suiteHeaderInner {
-        gap: 12px;
-      }
-
-      .suiteLogo {
-        width: 76px;
-        height: 76px;
-        flex-basis: 76px;
-        border-radius: 15px;
-        transform: scale(1.16);
-      }
-
-      h1 {
-        font-size: 23px;
-      }
-    }
   </style>
