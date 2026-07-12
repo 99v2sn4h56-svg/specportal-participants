@@ -135,6 +135,7 @@ ParticipantService.getAll = function () {
     region: getFirstIndex(["Region", "School Region"]),
     directorate: getFirstIndex(["Directorate"]),
     gender: getFirstIndex(["Gender", "Student Gender"]),
+    notes: getFirstIndex(["Notes", "Participant Notes", "Application Notes"]),
     lote: getFirstIndex(["LOTE", "Language Other Than English"]),
     aboriginal: getFirstIndex(["Aboriginal", "Aboriginal Student", "Aboriginality"]),
     torresStraitIslander: getFirstIndex(["Torres Strait Islander", "TSI"]),
@@ -159,6 +160,12 @@ ParticipantService.getAll = function () {
   const hasIndicator = value => {
     const text = String(value || "").trim().toLowerCase();
     return !!text && !["no", "n", "false", "none", "not required", "0"].includes(text);
+  };
+  const normaliseGender = value => {
+    const text = String(value || "").trim().toLowerCase();
+    if (["male", "m", "boy"].includes(text)) return "Male";
+    if (["female", "f", "girl"].includes(text)) return "Female";
+    return "N/A";
   };
 
   return data.map(row => {
@@ -200,7 +207,8 @@ ParticipantService.getAll = function () {
 
   region: getCell(row, indexes.region),
   directorate: getCell(row, indexes.directorate),
-  gender: getCell(row, indexes.gender),
+  gender: normaliseGender(getCell(row, indexes.gender)),
+  notes: getCell(row, indexes.notes),
   lote: getCell(row, indexes.lote),
   aboriginal: hasIndicator(getCell(row, indexes.aboriginal)),
   torresStraitIslander: hasIndicator(getCell(row, indexes.torresStraitIslander)),
@@ -228,7 +236,7 @@ ParticipantService.getAll = function () {
 
     return EntityModelService.participant(participant);
 
-  });
+  }).filter(participant => String(participant.firstName || participant.lastName || participant.name || "").trim());
 
 };
 
