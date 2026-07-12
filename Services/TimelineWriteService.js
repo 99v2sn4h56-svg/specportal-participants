@@ -120,7 +120,8 @@ const TimelineWriteService = (() => {
   function openSource_() {
     const config = SourceRegistryService.getSourceConfig("timeline");
     const spreadsheet = SpreadsheetApp.openById(config.spreadsheetId);
-    const sheet = spreadsheet.getSheetByName(config.sheetName) || spreadsheet.getSheets()[0];
+    const sheet = spreadsheet.getSheets().find(item => item.getSheetId() === Number(config.sheetId)) || spreadsheet.getSheetByName(config.sheetName);
+    if (!sheet) throw new Error("Configured Timeline sheet was not found.");
     const values = sheet.getDataRange().getDisplayValues();
     const headerRowIndex = findHeaderRowIndex_(values);
     return { spreadsheet, sheet, values, headerRowIndex, headerRow: headerRowIndex + 1, headers: (values[headerRowIndex] || []).map(value => String(value || "").trim()) };

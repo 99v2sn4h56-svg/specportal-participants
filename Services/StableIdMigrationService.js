@@ -185,7 +185,7 @@ const StableIdMigrationService = (() => {
   function getTimelineSheet_() {
     const source = SourceRegistryService.getSourceConfig("timeline");
     const spreadsheet = SpreadsheetApp.openById(source.spreadsheetId);
-    return spreadsheet.getSheetByName(source.sheetName) || spreadsheet.getSheets()[0];
+    return spreadsheet.getSheets().find(item => item.getSheetId() === Number(source.sheetId)) || spreadsheet.getSheetByName(source.sheetName) || null;
   }
 
   function requireAdmin_() {

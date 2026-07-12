@@ -97,7 +97,8 @@ const RehearsalService = (() => {
   function loadTimeline_() {
     const source = SourceRegistryService.getSourceConfig("timeline");
     const ss = SpreadsheetApp.openById(source.spreadsheetId);
-    const sheet = ss.getSheetByName(source.sheetName) || ss.getSheets()[0];
+    const sheet = ss.getSheets().find(item => item.getSheetId() === Number(source.sheetId)) || ss.getSheetByName(source.sheetName);
+    if (!sheet) throw new Error("Configured Timeline sheet was not found.");
     const values = sheet.getDataRange().getDisplayValues();
 
     if (values.length < 2) {

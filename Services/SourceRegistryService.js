@@ -1,7 +1,7 @@
 /** Authoritative source, synchronization and editing contract registry. */
 const SourceRegistryService = (() => {
   const SOURCE_CONFIGS = {
-    timeline: { spreadsheetId: "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog", sheetName: "Operation Schedule" },
+    timeline: { spreadsheetId: "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog", sheetId: 164020104, sheetName: "Operation Schedule" },
     staff: { spreadsheetId: "1PBO2aN4EBpo2TmEPrVwvagNrCdC2BbmIm1ZmLLG3wSE", sheetName: "SpecCentral" }
   };
   const REGISTRY = [

@@ -20,7 +20,7 @@ const TimelineService = (() => {
       rehearsals = RehearsalService.getAll();
     } catch (err) {
       Logger.log("TimelineService.getTimelineEvents failed: " + (err && err.message ? err.message : err));
-      throw new Error("Timeline data is unavailable.");
+      throw new Error("Timeline data is unavailable: " + (err && err.message ? err.message : String(err)));
     }
 
     let events = rehearsals.map(normaliseTimelineEvent_).filter(event => event.status !== "Archived");
