@@ -150,6 +150,7 @@
       init: function () {
         App.bootstrapState();
         App.restoreSidebarState();
+        App.loadIdentityContext();
         App.loadConfig();
         App.navigate("dashboard");
       },
@@ -470,10 +471,7 @@
             config = config || {};
             App.state.dashboardContext = config;
             App.state.dashboardProfile = config.dashboardProfile || "operations";
-            App.state.staff = config.staff || {};
-            App.state.currentUser = App.state.staff;
-            App.state.permissions = App.state.staff.permissions || [];
-            App.state.adminMode = !!App.state.staff.isAdmin;
+            App.applyStaffContext(config.staff || {});
             App.state.staffTeam = config.staffTeam || [];
             App.state.attendanceUrl = config.attendanceUrl || "";
             App.state.attendanceStatus = config.attendanceStatus || "";
@@ -490,12 +488,9 @@
             App.state.timelineLastRefreshed = config.timelineLastRefreshed || "";
             App.state.staffStatus = config.staffStatus || "";
             App.applyServerServiceStatuses(config.services || {});
-            App.renderNavigation();
-            App.renderStaffContext();
             App.renderStatusRibbon();
             App.renderNotifications();
             App.renderNotificationCount();
-            if (App.state.staff.isAdmin) App.loadViewingAsRoles();
             if (App.state.currentPage === "attendance") App.renderAttendancePage();
             if (App.state.currentPage === "dashboard") App.renderDashboardPage();
             if (App.state.currentPage === "calendar") App.renderCalendarPage();
@@ -505,8 +500,30 @@
             if (App.state.currentPage === "staff") App.renderStaffPage();
           })
           .catch(function (error) {
-            App.notify("Staff context could not be loaded: " + App.getErrorMessage(error));
+            App.notify("Dashboard data could not be loaded: " + App.getErrorMessage(error));
           });
+      },
+
+      loadIdentityContext: function () {
+        return App.services.request("identity", "getCurrentStaffContext", { cacheMs: 5 * 60 * 1000, timeoutMs: 15000 })
+          .then(function (staff) {
+            App.applyStaffContext(staff || {});
+            App.renderDashboardPage();
+            return staff;
+          })
+          .catch(function (error) {
+            App.notify("Staff identity could not be loaded: " + App.getErrorMessage(error));
+          });
+      },
+
+      applyStaffContext: function (staff) {
+        App.state.staff = staff || {};
+        App.state.currentUser = App.state.staff;
+        App.state.permissions = App.state.staff.permissions || [];
+        App.state.adminMode = !!App.state.staff.isAdmin;
+        App.renderNavigation();
+        App.renderStaffContext();
+        if (App.state.staff.isAdmin) App.loadViewingAsRoles();
       },
 
       loadPortalData: function () {
@@ -927,7 +944,7 @@
       },
 
       retryUserContext: function () {
-        App.services.request("userContextRefresh", "portalRefreshUserContext", { forceRefresh: true, timeoutMs: 45000 }).then(function (user) { App.state.staff = user || {}; App.state.currentUser = App.state.staff; App.state.permissions = App.state.staff.permissions || []; App.renderNavigation(); App.renderStaffContext(); App.renderDashboardPage(); App.notify("Identity context refreshed."); }).catch(function (error) { App.notify("Identity refresh failed: " + App.getErrorMessage(error)); });
+        App.services.request("userContextRefresh", "portalRefreshUserContext", { forceRefresh: true, timeoutMs: 45000 }).then(function (user) { App.applyStaffContext(user || {}); App.renderDashboardPage(); App.notify("Identity context refreshed."); }).catch(function (error) { App.notify("Identity refresh failed: " + App.getErrorMessage(error)); });
       },
 
       openIdentityDiagnostics: function () {

@@ -6,8 +6,11 @@ const DashboardService = (() => {
       .filter(item => staff.isOperations || !staff.department || String(item.department || item.team || "").toLowerCase() === String(staff.department).toLowerCase())
       .map(toSafeStaff_), []) : [];
     const timeline = UserContextService.hasCapability("Calendar.View") ? safeCall_("TimelineService.getDashboardSummary", () => TimelineService.getDashboardSummary(), {}) : {};
-    const attendance = UserContextService.hasCapability("Attendance.View") ? safeCall_("AttendanceService.getConfig", () => AttendanceService.getConfig(), {}) : {};
-    const attendanceEvents = UserContextService.hasCapability("Attendance.View") ? safeCall_("AttendanceService.getEvents", () => AttendanceService.getEvents(), { data: [] }) : { data: [] };
+    const attendance = UserContextService.hasCapability("Attendance.View") ? {
+      url: safeCall_("AttendanceService.getWebAppUrl", () => AttendanceService.getWebAppUrl(), ""),
+      status: "Lazy loaded",
+      source: "Attendance page"
+    } : {};
     const announcements = safeCall_("AnnouncementService.getActive", () => AnnouncementService.getActive(), []);
     const notifications = safeCall_("NotificationService.getForCurrentUser", () => NotificationService.getForCurrentUser(), []);
     const tasks = staff.isMatched ? safeCall_("TaskService.list", () => TaskService.list().filter(task => String(task.assignedUser || "").toLowerCase() === String(staff.email || "").toLowerCase()).slice(0, 12), []) : [];
@@ -31,7 +34,7 @@ const DashboardService = (() => {
       dashboardProfile: getDashboardProfile_(staff),
       rehearsals: timeline.upcomingRehearsals || [],
       todaysRehearsals: timeline.todaysRehearsals || [],
-      attendanceEvents: attendanceEvents.data || [],
+      attendanceEvents: [],
       currentDate: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM"),
       generatedAt: new Date().toISOString(),
       services: {
