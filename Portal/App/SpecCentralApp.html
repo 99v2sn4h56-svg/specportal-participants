@@ -56,7 +56,6 @@
         loading: {},
         systemStatus: {},
         dashboardRenderTimer: null,
-        dashboardParticipantLoadAttempted: false,
         operationsNavExpanded: true,
         dashboardProfile: "operations",
         applicationVersion: "5",
@@ -828,70 +827,67 @@
       },
 
       renderDashboardPage: function () {
-        if (App.hasPermission("Participants.View") && !App.state.ready && !App.state.loading.portalData && !App.state.dashboardParticipantLoadAttempted) {
-          App.state.dashboardParticipantLoadAttempted = true;
-          App.ensurePortalDataLoaded().catch(function () {});
-        }
-        var greeting = document.getElementById("dashboardGreeting");
         var homeWelcome = document.getElementById("homeWelcome");
         var date = document.getElementById("dashboardDate");
-        var staffName = document.getElementById("dashboardStaffName");
         var staffRole = document.getElementById("dashboardStaffRole");
         var staffDepartment = document.getElementById("dashboardStaffDepartment");
         var nextRehearsal = document.getElementById("dashboardNextRehearsal");
-        var todayRehearsals = document.getElementById("heroTodayRehearsals");
-        var upcomingRehearsals = document.getElementById("heroUpcomingRehearsals");
-        var outstandingActions = document.getElementById("heroOutstandingActions");
-        var attendanceAlerts = document.getElementById("heroAttendanceAlerts");
+        var actingPermissions = document.getElementById("dashboardActingPermissions");
 
-        if (greeting) greeting.textContent = App.getGreeting() + ", " + (App.state.staff.displayName || App.state.staff.name || "Authenticated user");
         if (homeWelcome) homeWelcome.textContent = App.getGreeting() + " " + (App.state.staff.firstName || App.state.staff.displayName || "");
         if (date) date.textContent = App.state.currentDate || App.formatShortDate(new Date());
-        if (staffName) staffName.textContent = App.state.staff.displayName || App.state.staff.name || App.state.staff.email || "Authenticated user";
         if (staffRole) staffRole.textContent = App.state.staff.role || "Staff";
         if (staffDepartment) staffDepartment.textContent = App.state.staff.department || "No department assigned";
         if (nextRehearsal) {
           var next = App.getRelevantHomeEvents(false)[0] || {};
           nextRehearsal.textContent = next.event || next.title || "Your schedule is clear";
         }
-        if (todayRehearsals) todayRehearsals.textContent = App.getRelevantHomeEvents(true).length;
-        if (upcomingRehearsals) upcomingRehearsals.textContent = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
-        if (outstandingActions) outstandingActions.textContent = App.getOutstandingActionCount();
-        if (attendanceAlerts) { var prefs = App.getNotificationPrefs(); attendanceAlerts.textContent = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length; }
+        if (actingPermissions) actingPermissions.textContent = App.state.viewingAsRole || ((App.state.staff.capabilities || []).length + " active capabilities");
 
-        App.renderAnnouncements();
-        App.renderUpcomingRehearsals();
-        App.renderRecentActivity();
+        App.renderDashboardBriefing();
+        App.renderDashboardSchedule();
         App.renderDashboardTasks();
-        App.renderDashboardAttention();
+        App.renderDashboardNotifications();
+        App.renderDashboardProjects();
         App.renderUnmatchedUserState();
-        App.renderWorkspaceMemory();
-        if (App.state.ready) App.renderDashboardRelationships();
       },
 
-      renderAnnouncements: function () {
-        var el = document.getElementById("announcementCards");
+      renderDashboardBriefing: function () {
+        var el = document.getElementById("dashboardBriefing");
         if (!el) return;
-
-        var announcements = App.state.announcements || [];
-        el.innerHTML = announcements.length
-          ? announcements.map(function (item) {
-              return '<div class="announcementCard ' + App.escapeHtml(item.tone || "") + '">' +
-                '<strong>' + App.escapeHtml(item.title) + '</strong>' +
-                '<div class="moduleMeta">' + App.escapeHtml(item.body) + '</div>' +
-              '</div>';
-            }).join("")
-          : App.emptyState("No active briefings", "There are no current announcements for your team.");
+        var prefs = App.getNotificationPrefs();
+        var todayEvents = App.getRelevantHomeEvents(true).length;
+        var openTasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
+        var approvals = Number((((App.state.dashboardContext || {}).workflowSummary || {}).queue || {}).pending || 0);
+        var unread = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length;
+        var rows = [
+          [todayEvents, todayEvents === 1 ? "scheduled event" : "scheduled events"],
+          [openTasks, openTasks === 1 ? "open task" : "open tasks"],
+          [approvals, approvals === 1 ? "approval waiting" : "approvals waiting"],
+          [unread, unread === 1 ? "unread update" : "unread updates"]
+        ];
+        el.innerHTML = rows.map(function (row) { return '<li><strong>' + row[0] + '</strong><span>' + App.escapeHtml(row[1]) + '</span></li>'; }).join("");
       },
 
-      renderUpcomingRehearsals: function () {
-        var el = document.getElementById("upcomingRehearsals");
+      renderDashboardSchedule: function () {
+        var el = document.getElementById("dashboardSchedule");
         if (!el) return;
-
-        var rehearsals = App.getRelevantHomeEvents(true).slice(0, 6);
-        el.innerHTML = rehearsals.length
-          ? rehearsals.map(App.renderRehearsalItem).join("")
-          : App.emptyState("Your schedule is clear", "No relevant events are scheduled for today.");
+        var today = App.toDateKey(new Date());
+        var tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+        var tomorrow = App.toDateKey(tomorrowDate);
+        var events = App.getRelevantHomeEvents(false).filter(function (event) {
+          var key = event.dateKey || App.toDateKey(event.date);
+          return key >= today;
+        }).slice(0, 10);
+        if (!events.length) { el.innerHTML = App.emptyState("Your schedule is clear", "No relevant events are currently scheduled."); return; }
+        var lastGroup = "";
+        el.innerHTML = events.map(function (event) {
+          var key = event.dateKey || App.toDateKey(event.date);
+          var group = key === today ? "Today" : key === tomorrow ? "Tomorrow" : (event.date || App.formatShortDate(key));
+          var heading = group !== lastGroup ? '<div class="scheduleDayLabel">' + App.escapeHtml(group) + '</div>' : "";
+          lastGroup = group;
+          return heading + '<button class="scheduleRow" type="button" onclick="App.navigate(\'calendar\')" aria-label="Open ' + App.escapeHtml(event.title || event.event || "event") + ' in Calendar"><time>' + App.escapeHtml(event.start || "All day") + '</time><span><strong>' + App.escapeHtml(event.title || event.event || "Scheduled event") + '</strong><small>' + App.escapeHtml([event.venue, event.area].filter(Boolean).join(" · ") || "Location to be confirmed") + '</small></span></button>';
+        }).join("");
       },
 
       getRelevantHomeEvents: function (todayOnly) {
@@ -905,31 +901,22 @@
         return events.filter(function (event) {
           var dateKey = event.dateKey || App.toDateKey(event.date);
           if (todayOnly && dateKey !== today) return false;
+          if (!todayOnly && dateKey && dateKey < today) return false;
           var text = [event.id, event.title, event.event, event.area, (event.staff || []).join(" ")].join(" ").toLowerCase();
           if (!name && !email && !department && !allocated.length) return true;
           return (name && text.indexOf(name) >= 0) || (email && text.indexOf(email) >= 0) || (department && text.indexOf(department) >= 0) || allocated.some(function (item) { return text.indexOf(item) >= 0; });
         }).sort(App.sortEvents);
       },
 
-      renderDashboardAttention: function () {
-        var el = document.getElementById("dashboardAttention");
+      renderDashboardNotifications: function () {
+        var el = document.getElementById("dashboardNotifications");
         if (!el) return;
         var prefs = App.getNotificationPrefs();
-        var unread = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length;
-        var openTasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
-        var attendance = (App.state.attendanceEvents || []).length;
-        var approvals = Number((((App.state.dashboardContext || {}).workflowSummary || {}).queue || {}).pending || 0);
-        var today = App.toDateKey(new Date());
-        var deadlines = (App.state.tasks || []).filter(function (item) { return item.dueDate && item.dueDate >= today && ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
-        var rows = [
-          { label: "Unread notifications", value: unread, action: "App.openNotificationCentre()" },
-          { label: "Open tasks", value: openTasks, action: "App.openOperationsView('projects')", permission: "operations.view" },
-          { label: "Attendance sessions", value: attendance, action: "App.navigate('attendance')" },
-          { label: "Approvals waiting", value: approvals, action: "App.openOperationsView('overview')", permission: "operations.view" },
-          { label: "Upcoming deadlines", value: deadlines, action: "App.openOperationsView('projects')", permission: "operations.view" },
-          { label: "Upcoming relevant events", value: App.getRelevantHomeEvents(false).length, action: "App.navigate('rehearsals')" }
-        ].filter(function (item) { return !item.permission || App.hasPermission(item.permission); });
-        el.innerHTML = rows.map(function (item) { return '<button class="attentionRow" type="button" onclick="' + item.action + '"><span>' + App.escapeHtml(item.label) + '</span><strong>' + App.escapeHtml(item.value) + '</strong></button>'; }).join("");
+        var rows = (App.state.notifications || []).slice().sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); }).slice(0, 6);
+        el.innerHTML = rows.length ? rows.map(function (item) {
+          var unread = !(prefs[item.id] || {}).read;
+          return '<button class="dashboardNotification ' + (unread ? "unread" : "") + '" type="button" onclick="App.openNotificationCentre()"><span class="notificationDot" aria-hidden="true"></span><span><strong>' + App.escapeHtml(item.title || "Platform update") + '</strong><small>' + App.escapeHtml([item.body, item.createdAt].filter(Boolean).join(" · ")) + '</small></span></button>';
+        }).join("") : App.emptyState("You are caught up", "New operational notifications will appear here.");
       },
 
       renderUnmatchedUserState: function () {
@@ -938,7 +925,7 @@
         var user = App.state.staff || {};
         var unmatched = user.isMatched === false;
         el.hidden = !unmatched;
-        Array.prototype.forEach.call((el.parentElement || document).querySelectorAll(":scope > section:not(.heroPanel):not(.unmatchedUserPanel)"), function (section) { section.hidden = unmatched; });
+        Array.prototype.forEach.call((el.parentElement || document).querySelectorAll(".dashboardPrimaryGrid, .dashboardSecondaryGrid"), function (section) { section.hidden = unmatched; });
         if (el.hidden) { el.innerHTML = ""; return; }
         el.innerHTML = '<div class="unmatchedIdentity"><div class="stateIcon">!</div><div><div class="scProfileKicker">Signed in as ' + App.escapeHtml(user.email || "Google user") + '</div><h3>' + App.escapeHtml(user.displayName || "Authenticated user") + '</h3><strong>' + App.escapeHtml(user.status || "No Staff Profile Found") + '</strong><p>You are authenticated, but no unique Staff Production Team record could be matched.</p><div class="profileActions"><a class="quickLink compact" href="mailto:?subject=SpecCentral access request&body=' + encodeURIComponent('Please add or repair my SpecCentral Staff Production Team profile for ' + (user.email || 'my Google account') + '.') + '">Request Access</a><button class="quickLink compact" type="button" onclick="App.retryUserContext()">Retry</button><button class="quickLink compact" type="button" onclick="App.openIdentityDiagnostics()">Diagnostics</button></div></div></div>';
       },
@@ -952,46 +939,37 @@
         App.services.request("identityDiagnostics", "portalGetUserContextDiagnostics", { forceRefresh: true, timeoutMs: 45000 }).then(function (data) { App.notify((data.checks || []).map(function (item) { return item.name + ": " + item.status; }).join(" · ")); }).catch(function (error) { App.notify("Diagnostics unavailable: " + App.getErrorMessage(error)); });
       },
 
-      renderRecentActivity: function () {
-        var el = document.getElementById("recentActivityFull");
-        if (!el) return;
-
-        var searches = App.safeLoadJson("specPortalRecentSearches", []).slice(0, 3);
-        var viewed = App.safeLoadJson("specPortalRecentlyViewed", []).slice(0, 3);
-        var activity = [];
-
-        (App.state.recentActivity || []).slice(0, 6).forEach(function (item) {
-          activity.push((item.actor || "SpecCentral") + " · " + (item.action || "Platform activity") + (item.occurredAt ? " · " + App.formatAdministrationTimestamp(item.occurredAt) : ""));
-        });
-
-        searches.forEach(function (term) {
-          activity.push("Recent search: " + term);
-        });
-
-        viewed.forEach(function (item) {
-          activity.push("Recently viewed: " + (item.label || item.type));
-        });
-
-        el.innerHTML = activity.length
-          ? activity.map(function (line) { return '<div class="activityItem">' + App.escapeHtml(line) + '</div>'; }).join("")
-          : App.emptyState("No recent activity", "Platform events, opened profiles and searches will appear here.");
-      },
-
       renderDashboardTasks: function () {
         var el = document.getElementById("dashboardTasks");
         if (!el) return;
         var tasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).slice(0, 7);
         el.innerHTML = tasks.length ? tasks.map(function (item) {
-          return '<button class="activityItem activityButton" type="button" onclick="App.navigate(\'operations\')"><strong>' + App.escapeHtml(item.title || item.task || "Task") + '</strong><span>' + App.escapeHtml([item.status, item.priority, item.dueDate].filter(Boolean).join(" · ")) + '</span></button>';
+          var priority = String(item.priority || "Normal");
+          var workflow = item.workflow || item.module || item.workstream || item.relatedEvent || "Task Service";
+          return '<button class="dashboardTask" type="button" onclick="App.openOperationsView(\'projects\')"><span class="taskPriority priority' + App.escapeHtml(priority.replace(/[^a-z]/gi, "")) + '">' + App.escapeHtml(priority) + '</span><span class="dashboardTaskBody"><strong>' + App.escapeHtml(item.title || item.task || "Task") + '</strong><small>' + App.escapeHtml([workflow, item.dueDate ? "Due " + item.dueDate : "No due date"].join(" · ")) + '</small></span><span class="taskStatus">' + App.escapeHtml(item.status || "Open") + '</span></button>';
         }).join("") : App.emptyState("No open tasks", "Your task queue has no pending work.");
       },
 
-      getOutstandingActionCount: function () {
-        var prefs = App.getNotificationPrefs();
-        var unread = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length;
-        var tasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
-        var attendance = (App.state.attendanceEvents || []).filter(function (item) { var counts = item.attendanceCounts || item.counts || {}; return Number(counts["Not Marked"] || counts.Unmarked || counts.unmarked || 0) > 0; }).length;
-        return unread + tasks + attendance;
+      renderDashboardProjects: function () {
+        var el = document.getElementById("dashboardProjects");
+        if (!el) return;
+        var tasks = App.state.tasks || [];
+        var names = {};
+        (App.state.staff.assignedItems || []).forEach(function (name) { if (name) names[name] = true; });
+        tasks.forEach(function (task) { var name = task.workstream || task.module || task.relatedEvent; if (name) names[name] = true; });
+        var projects = Object.keys(names).slice(0, 6);
+        if (!projects.length) { el.innerHTML = App.emptyState("No active projects", "Projects linked to your staff profile or task workflow will appear here."); return; }
+        var upcoming = App.getRelevantHomeEvents(false);
+        el.innerHTML = projects.map(function (name) {
+          var projectTasks = tasks.filter(function (task) { return [task.workstream, task.module, task.relatedEvent].filter(Boolean).indexOf(name) >= 0; });
+          var complete = projectTasks.filter(function (task) { return task.status === "Completed"; }).length;
+          var waiting = projectTasks.filter(function (task) { return ["Completed", "Cancelled"].indexOf(task.status) < 0; }).length;
+          var progress = projectTasks.length ? Math.round(complete / projectTasks.length * 100) : 0;
+          var milestone = projectTasks.filter(function (task) { return ["Completed", "Cancelled"].indexOf(task.status) < 0; }).sort(function (a, b) { return String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")); })[0];
+          var searchName = String(name).toLowerCase();
+          var rehearsal = upcoming.find(function (event) { return [event.title, event.event, event.area, (event.items || []).join(" ")].join(" ").toLowerCase().indexOf(searchName) >= 0; });
+          return '<button class="dashboardProjectCard" type="button" onclick="App.openOperationsView(\'projects\')"><span class="projectCardTop"><strong>' + App.escapeHtml(name) + '</strong><b>' + (projectTasks.length ? progress + "%" : "Active") + '</b></span><span class="projectProgress" aria-label="' + progress + ' percent complete"><i style="width:' + progress + '%"></i></span><small><b>Next milestone</b>' + App.escapeHtml(milestone ? (milestone.title || milestone.task || milestone.dueDate || "Open task") : "No linked milestone") + '</small><small><b>Waiting</b>' + waiting + ' item' + (waiting === 1 ? "" : "s") + '</small><small><b>Next rehearsal</b>' + App.escapeHtml(rehearsal ? [rehearsal.date, rehearsal.start].filter(Boolean).join(" · ") : "Not scheduled") + '</small></button>';
+        }).join("");
       },
 
       renderParticipantStatus: function () {
