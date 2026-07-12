@@ -24,14 +24,14 @@ const StaffService = (() => {
         name: findHeaderIndex_(headers, ["name", "staff name", "full name", "preferred name"]),
         firstName: findHeaderIndex_(headers, ["first name", "given name"]),
         lastName: findHeaderIndex_(headers, ["last name", "surname", "family name"]),
-        email: findHeaderIndex_(headers, ["speccentral email", "email", "email address", "det email", "work email"]),
-        primaryEmail: findHeaderIndex_(headers, ["speccentral email", "primary det email", "primary email", "det email", "work email", "email", "email address"]),
+        email: findPreferredHeaderIndex_(headers, ["speccentral email", "email", "email address", "det email", "work email"]),
+        primaryEmail: findPreferredHeaderIndex_(headers, ["speccentral email", "primary det email", "primary email", "det email", "work email", "email", "email address"]),
         secondaryEmail: findHeaderIndex_(headers, ["secondary email", "alternate email", "alternative email", "email 2"]),
         personalEmail: findHeaderIndex_(headers, ["personal email", "private email"]),
         aliasEmails: findHeaderIndex_(headers, ["alias email", "alias emails", "email aliases", "aliases"]),
         legacyEmails: findHeaderIndex_(headers, ["legacy email", "legacy emails", "previous email", "old email"]),
         staffId: findHeaderIndex_(headers, ["staff id", "employee id", "personnel id", "det user id"]),
-        role: findHeaderIndex_(headers, ["speccentral role", "role", "position", "production role", "team role"]),
+        role: findPreferredHeaderIndex_(headers, ["speccentral role", "role", "position", "production role", "team role"]),
         team: findHeaderIndex_(headers, ["team", "department", "area"]),
         department: findHeaderIndex_(headers, ["department", "team", "area"]),
         departments: findHeaderIndex_(headers, ["departments", "production areas", "areas"]),
@@ -250,6 +250,16 @@ const StaffService = (() => {
 
   function findHeaderIndex_(headers, aliases) {
     return EntityModelService.findHeaderIndex(headers, aliases);
+  }
+
+  function findPreferredHeaderIndex_(headers, aliases) {
+    const normalise = value => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+    const normalisedHeaders = (headers || []).map(normalise);
+    for (const alias of aliases || []) {
+      const index = normalisedHeaders.indexOf(normalise(alias));
+      if (index >= 0) return index;
+    }
+    return -1;
   }
 
   function getCell_(row, index) {
