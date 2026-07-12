@@ -1,12 +1,21 @@
 <header class="topBar">
-  <div>
-    <div id="topBarBreadcrumb" class="pageBreadcrumb">Spec Central / Home</div>
-    <h2 id="topBarTitle" class="pageTitle">Dashboard</h2>
-    <div id="topBarDescription" class="pageDescription">Your Schools Spectacular operations hub.</div>
+  <div class="workspaceTopRow">
+    <div class="topBarBrand">
+      <button class="topBarSidebarToggle" type="button" aria-label="Collapse sidebar" onclick="App.toggleSidebar()">☰</button>
+      <img class="topBarLogo" src="https://drive.google.com/thumbnail?id=1kK8A7JiFcuumLUM47CHLfj-MIw39-BQQ&sz=w600" alt="SpecCentral" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
+      <div class="topBarLogoFallback" aria-hidden="true">SS</div>
+    </div>
+    <button class="commandTrigger workspaceSearch" type="button" onclick="App.openCommandCentre('search')" aria-label="Open global search">Search Participants, Schools, Staff, Events... <kbd>⌘K</kbd></button>
+    <div class="workspaceUserArea">
+      <button class="notificationTrigger" type="button" onclick="App.openNotificationCentre()" aria-label="Open notifications">●<span id="notificationCount">0</span></button>
+      <div class="topBarUserAvatar" aria-hidden="true">SC</div>
+      <div class="workspaceWelcome"><span id="topBarWelcome">Welcome!</span><strong id="topBarUserRole">Staff</strong></div>
+      <label id="viewAsControl" class="viewAsControl" hidden><span>Viewing As</span><select id="viewAsRole" onchange="App.setViewingAsRole(this.value)"><option value="">Actual permissions</option></select></label>
+    </div>
   </div>
-  <div class="topBarActions">
+  <div id="viewingAsBadge" class="viewingAsBadge" hidden></div>
+  <div class="workspaceContextRow">
+    <div><div id="topBarBreadcrumb" class="pageBreadcrumb">Spec Central / Dashboard</div><h2 id="topBarTitle" class="pageTitle">Dashboard</h2><div id="topBarDescription" class="pageDescription">What you need today.</div></div>
     <span id="topBarContextStatus" class="topBarStatus">Live</span>
-    <button class="commandTrigger" type="button" onclick="App.openCommandCentre('search')" aria-label="Open global search">Search everything <kbd>⌘K</kbd></button>
-    <button class="notificationTrigger" type="button" onclick="App.openNotificationCentre()" aria-label="Open notifications">●<span id="notificationCount">0</span></button>
   </div>
 </header>

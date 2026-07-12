@@ -4,7 +4,7 @@
         if (!participant) return;
         App.state.selectedParticipant = participant;
         App.events.emit("participant:selected", participant);
-        App.recordRecentlyViewed("participant", App.getParticipantName(participant));
+        App.recordRecentlyViewed("participant", App.getParticipantName(participant), participant.id || participant.studentKey, App.getParticipantSchool(participant));
         App.renderParticipantProfile(participant);
       },
 
@@ -66,11 +66,14 @@
         var avatar = '<div class="scProfileAvatar">' + (photo
           ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(App.getInitials(name)) + '</span>'
           : App.escapeHtml(App.getInitials(name))) + '</div>';
+        App.recordRecentlyViewed("participant", name, participant.id || participant.studentKey, school);
+        App.setWorkspaceBreadcrumb(["Participants", name]);
 
         panel.innerHTML =
           '<div class="scProfileCard">' +
             '<div class="scProfileHero student">' +
               '<div class="scProfileKicker">Participant Passport</div>' +
+              App.favouriteButton("participant", participant.id || participant.studentKey, name, school) +
               avatar +
               '<h2>' + App.escapeHtml(name) + '</h2>' +
               (subtitle ? '<div class="scProfileSubtitle">' + App.escapeHtml(subtitle) + '</div>' : '') +
@@ -331,10 +334,13 @@
         if (!panel || !school) return;
         var name = school.schoolName || "School";
         var master = school.master || {};
+        App.recordRecentlyViewed("school", name, school.id || name, master.directorate || "School");
+        App.setWorkspaceBreadcrumb(["Participants", name]);
         panel.innerHTML =
           '<div class="scProfileCard">' +
             '<div class="scProfileHero school">' +
               '<div class="scProfileKicker">School Passport</div>' +
+              App.favouriteButton("school", school.id || name, name, master.directorate || "School") +
               '<h2>' + App.escapeHtml(name) + '</h2>' +
               App.renderProfileStats([
                 { value: school.participantCount, label: "Participants" },

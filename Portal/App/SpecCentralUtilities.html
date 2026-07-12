@@ -96,14 +96,15 @@
         App.safeSaveJson("specPortalRecentSearches", App.state.searchHistory);
       },
 
-      recordRecentlyViewed: function (type, label) {
+      recordRecentlyViewed: function (type, label, id, meta) {
         if (!type || !label) return;
-        var key = type + ":" + String(label).toLowerCase();
-        App.state.recentlyViewed = [{ type: type, label: label, key: key, at: Date.now() }].concat((App.state.recentlyViewed || []).filter(function (item) {
+        var key = type + ":" + String(id || label).toLowerCase();
+        App.state.recentlyViewed = [{ type: type, label: label, id: id || "", meta: meta || "", key: key, at: Date.now() }].concat((App.state.recentlyViewed || []).filter(function (item) {
           return item.key !== key;
-        })).slice(0, 12);
+        })).slice(0, 10);
         App.safeSaveJson("specCentralRecentlyViewed", App.state.recentlyViewed);
         App.safeSaveJson("specPortalRecentlyViewed", App.state.recentlyViewed);
+        if (App.state.currentPage === "dashboard" && App.renderWorkspaceMemory) App.renderWorkspaceMemory();
       },
 
       getSearchScore: function (text, query) {

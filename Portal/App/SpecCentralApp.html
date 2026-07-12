@@ -39,10 +39,14 @@
         searchProviders: [],
         searchHistory: [],
         recentlyViewed: [],
+        favourites: [],
         currentFilters: {},
         currentModule: "dashboard",
         currentUser: null,
         permissions: [],
+        authorizationModel: null,
+        viewingAsRole: "",
+        viewingAsCapabilities: null,
         dashboardContext: null,
         loadedServices: {},
         cacheTimestamps: {},
@@ -77,19 +81,19 @@
 
       pages: {
         dashboard: {
-          title: "Home",
-          description: "Your Schools Spectacular staff portal.",
+          title: "Dashboard",
+          description: "What you need today across Schools Spectacular.",
           template: "page-dashboard"
         },
         participants: {
           title: "Participants",
-          description: "Search participants, schools, items, groups and teachers.",
+          description: "View and manage students participating in Schools Spectacular.",
           template: "page-participants",
           permission: "Participants.View"
         },
         calendar: {
           title: "Calendar",
-          description: "Timeline events in month and agenda views.",
+          description: "Live rehearsal schedule and operational timeline.",
           template: "page-calendar",
           permission: "calendar.view"
         },
@@ -112,7 +116,7 @@
         },
         operations: {
           title: "Operations",
-          description: "Protected management area for Schools Spectacular operations.",
+          description: "Production management and operational control.",
           template: "page-operations",
           permission: "operations.view"
         },
@@ -130,7 +134,7 @@
           redirectTo: "operations"
         },
         mediaTimeline: {
-          title: "Media Timeline",
+          title: "Media",
           description: "Campaign planning, media milestones and publishing activity.",
           template: "page-media-timeline",
           permission: "mediaTimeline.view"
@@ -138,7 +142,8 @@
         settings: {
           title: "Settings",
           description: "Staff permissions, app configuration and module setup.",
-          template: "page-settings"
+          template: "page-settings",
+          permission: "Settings.Admin"
         }
       },
 
@@ -152,6 +157,7 @@
       bootstrapState: function () {
         App.state.searchHistory = App.safeLoadJson("specCentralSearchHistory", []);
         App.state.recentlyViewed = App.safeLoadJson("specCentralRecentlyViewed", []);
+        App.state.favourites = App.safeLoadJson("specCentralFavourites", []);
         App.registerCoreServices();
         App.bindApplicationEvents();
         App.registerDefaultSearchProviders();
@@ -411,7 +417,7 @@
         });
 
         App.renderStatusRibbon();
-        outlet.innerHTML = template ? template.innerHTML : '<div class="empty">Page not found.</div>';
+        outlet.innerHTML = template ? template.innerHTML : App.errorState("Workspace unavailable", "This module is not registered in the current shell.");
         App.renderNavigation();
 
         if (page === "dashboard") App.renderDashboardPage();
@@ -489,6 +495,7 @@
             App.renderStatusRibbon();
             App.renderNotifications();
             App.renderNotificationCount();
+            if (App.state.staff.isAdmin) App.loadViewingAsRoles();
             if (App.state.currentPage === "attendance") App.renderAttendancePage();
             if (App.state.currentPage === "dashboard") App.renderDashboardPage();
             if (App.state.currentPage === "calendar") App.renderCalendarPage();
@@ -585,10 +592,55 @@
         var el = document.getElementById("staffEmail");
         var name = document.getElementById("sidebarUserName");
         var avatar = document.querySelector(".userAvatar");
+        var topAvatar = document.querySelector(".topBarUserAvatar");
+        var welcome = document.getElementById("topBarWelcome");
+        var role = document.getElementById("topBarUserRole");
         if (el) el.textContent = App.state.staff.email || "Authentication required";
         if (name) name.textContent = App.state.staff.displayName || App.state.staff.name || "Authenticated user";
         if (avatar) avatar.innerHTML = App.state.staff.photo ? '<img src="' + App.escapeHtml(App.state.staff.photo) + '" alt="">' : App.escapeHtml(((App.state.staff.firstName || "S").charAt(0) + (App.state.staff.surname || "C").charAt(0)).toUpperCase());
+        if (topAvatar) topAvatar.innerHTML = avatar ? avatar.innerHTML : "SC";
+        if (welcome) welcome.textContent = "Welcome " + (App.state.staff.firstName || "there") + "!";
+        if (role) role.textContent = App.state.viewingAsRole || App.state.staff.role || "Staff";
+        App.renderViewingAsControl();
         App.renderWhoAmI();
+      },
+
+      loadViewingAsRoles: function () {
+        if (App.state.authorizationModel) { App.renderViewingAsControl(); return; }
+        App.services.request("authorizationModel", "portalGetAuthorizationModel", { cacheMs: 300000, timeoutMs: 45000 })
+          .then(function (data) { App.state.authorizationModel = data && data.model || null; App.renderViewingAsControl(); })
+          .catch(function () { App.state.authorizationModel = null; });
+      },
+
+      renderViewingAsControl: function () {
+        var control = document.getElementById("viewAsControl");
+        var select = document.getElementById("viewAsRole");
+        var badge = document.getElementById("viewingAsBadge");
+        var isAdministrator = !!App.state.staff.isAdmin && App.hasActualPermission("Administration.View");
+        if (control) control.hidden = !isAdministrator;
+        if (select && isAdministrator && App.state.authorizationModel) {
+          var roles = Object.keys(App.state.authorizationModel.roles || {});
+          select.innerHTML = '<option value="">Actual permissions</option>' + roles.map(function (name) { return '<option value="' + App.escapeHtml(name) + '"' + (name === App.state.viewingAsRole ? ' selected' : '') + '>' + App.escapeHtml(name) + '</option>'; }).join("");
+        }
+        if (badge) { badge.hidden = !App.state.viewingAsRole; badge.textContent = App.state.viewingAsRole ? "VIEWING AS: " + App.state.viewingAsRole : ""; }
+      },
+
+      setViewingAsRole: function (role) {
+        if (!App.state.staff.isAdmin || !App.hasActualPermission("Administration.View")) return;
+        var roles = App.state.authorizationModel && App.state.authorizationModel.roles || {};
+        App.state.viewingAsRole = roles[role] ? role : "";
+        App.state.viewingAsCapabilities = App.state.viewingAsRole ? (roles[App.state.viewingAsRole] || []).slice() : null;
+        App.closeAdministrationDetail();
+        App.renderStaffContext();
+        var page = App.state.currentPage;
+        var config = App.pages[page] || App.pages.dashboard;
+        if (config.permission && !App.hasPermission(config.permission)) App.navigate("dashboard", { replace: true });
+        else App.navigate(page, { replace: true });
+        App.notify(App.state.viewingAsRole ? "Viewing the workspace as " + App.state.viewingAsRole + ". Server permissions remain unchanged." : "Restored your actual workspace permissions.");
+      },
+
+      hasActualPermission: function (permission) {
+        return App.permissionListHas((App.state.staff.permissions || []).concat(App.state.staff.capabilities || []), permission);
       },
 
       toggleWhoAmI: function () {
@@ -608,14 +660,33 @@
       },
 
       hasPermission: function (permission) {
-        var permissions = (App.state.staff.permissions || []).concat(App.state.staff.capabilities || []);
+        var permissions = App.state.viewingAsCapabilities || (App.state.staff.permissions || []).concat(App.state.staff.capabilities || []);
+        return App.permissionListHas(permissions, permission);
+      },
+
+      permissionListHas: function (permissions, permission) {
         var aliases = {
+          "participant.view": "Participants.View",
+          "participant.edit": "Participants.Edit",
+          "participants.view": "Participants.View",
+          "participants.edit": "Participants.Edit",
+          "attendance.view": "Attendance.View",
+          "attendance.mark": "Attendance.Mark",
+          "calendar.view": "Calendar.View",
+          "calendar.edit": "Calendar.Edit",
+          "rehearsals.view": "Calendar.View",
           "operations.view": "Operations.View",
           "operations.users.manage": "Users.Manage",
           "operations.permissions.manage": "Permissions.Manage",
-          "operations.events.manage": "Timeline.Edit"
+          "operations.events.manage": "Timeline.Edit",
+          "settings.view": "Settings.Admin",
+          "settings.admin": "Settings.Admin",
+          "administration.view": "Administration.View"
         };
-        return permissions.indexOf(permission) >= 0 || permissions.indexOf(aliases[permission]) >= 0;
+        var target = aliases[String(permission || "").toLowerCase()] || permission;
+        return (permissions || []).some(function (granted) {
+          return (aliases[String(granted || "").toLowerCase()] || granted) === target;
+        });
       },
 
       renderNavigation: function () {
@@ -777,6 +848,7 @@
         App.renderDashboardTasks();
         App.renderDashboardAttention();
         App.renderUnmatchedUserState();
+        App.renderWorkspaceMemory();
         if (App.state.ready) App.renderDashboardRelationships();
       },
 
@@ -980,7 +1052,7 @@
 
       renderCalendarLoading: function () {
         var month = document.getElementById("calendarMonth");
-        if (month) month.innerHTML = '<div class="empty" style="grid-column:1/-1;">Loading calendar events...</div>';
+        if (month) month.innerHTML = '<div style="grid-column:1/-1;">' + App.loadingState("Loading calendar events") + '</div>';
       },
 
       getCalendarEvents: function () {
@@ -1044,7 +1116,7 @@
           var dayEvents = (byDate[key] || []).sort(App.sortEvents);
           html += '<section class="calendarRangeDay">' +
             '<h4>' + App.escapeHtml(App.formatShortDate(day)) + '</h4>' +
-            (dayEvents.length ? dayEvents.map(App.renderTimelineEventCard).join("") : '<div class="empty">No events</div>') +
+            (dayEvents.length ? dayEvents.map(App.renderTimelineEventCard).join("") : App.emptyState("No events today", "Enjoy the quiet while it lasts.")) +
           '</section>';
         }
         el.className = "calendarRange calendarRange" + days;
@@ -1055,7 +1127,7 @@
         var events = App.getCalendarEvents().sort(App.sortEvents);
         el.innerHTML = events.length
           ? events.map(App.renderTimelineEventCard).join("")
-          : '<div class="empty">No events match the current filters.</div>';
+          : App.emptyState("No matching events", "Try adjusting the date, venue or event filters.");
       },
 
       showCalendarEventDetail: function (id) {
@@ -1067,6 +1139,8 @@
         if (!event || !el) return;
 
         App.state.selectedCalendarEvent = event;
+        App.recordRecentlyViewed("event", event.title || event.event || "Event", event.id, [event.date, event.venue].filter(Boolean).join(" · "));
+        App.setWorkspaceBreadcrumb(["Calendar", event.eventType || "Event", event.title || event.event || "Event"]);
         el.className = "profilePanel";
         el.innerHTML =
           '<h2 class="profileTitle">' + App.escapeHtml(event.title || event.event || "Event") + '</h2>' +
@@ -1085,6 +1159,7 @@
           App.profileLine("Notes", event.notes) +
           App.profileLine("Source", event.sourceRow ? "Timeline row " + event.sourceRow : event.source || "Timeline") +
           '<div class="profileActions">' +
+            App.favouriteButton("event", event.id, event.title || event.event || "Event", [event.date, event.venue].filter(Boolean).join(" · ")) +
             (event.venue ? '<button class="quickLink compact" type="button" onclick="App.openVenueFromEvent(\'' + App.escapeJs(event.venue) + '\')">Venue</button>' : '') +
             ((event.categories || []).length ? '<button class="quickLink compact" type="button" onclick="App.searchEventAssignments(\'' + App.escapeJs((event.categories || [])[0]) + '\')">Participants</button>' : '') +
             (event.attendanceSession ? '<button class="quickLink compact" type="button" onclick="App.openAttendanceEvent(\'' + App.escapeJs(event.attendanceSession.sessionId) + '\',\'' + App.escapeJs(event.title || event.event || "Event") + '\')">Attendance roll →</button>' : '') +
@@ -1272,7 +1347,7 @@
               return '<div class="attendanceStatusRow"><span>' + App.escapeHtml(status) + '</span><strong>' +
                 App.escapeHtml(statusCounts[status]) + '</strong></div>';
             }).join("")
-          : '<div class="empty">No attendance status records yet.</div>';
+          : App.emptyState("No attendance marks yet", "Status totals will appear when a roll is marked.");
 
         var search = document.getElementById("attendanceEventSearch");
         if (search && search.value !== App.state.attendanceEventSearch) {
@@ -1291,7 +1366,7 @@
         eventsList.className = "attendanceEventList";
         eventsList.innerHTML = filteredEvents.length
           ? filteredEvents.map(App.renderAttendanceEventCard).join("")
-          : '<div class="empty">No Attendance events match this view.</div>';
+          : App.emptyState("No matching attendance sessions", "Try another date range or search term.");
       },
 
       setAttendanceEventFilter: function (filter) {
@@ -1402,6 +1477,8 @@
 
         App.state.selectedAttendanceSessionId = safeSessionId;
         App.state.selectedAttendanceEventName = String(eventName || "Attendance event");
+        App.recordRecentlyViewed("attendance", App.state.selectedAttendanceEventName, safeSessionId, "Attendance session");
+        App.setWorkspaceBreadcrumb(["Attendance", App.state.selectedAttendanceEventName]);
         var target = App.buildAttendanceDeepLinkUrl(safeSessionId);
         App.renderAttendanceLiveData();
 
@@ -1485,7 +1562,7 @@
         var rehearsals = App.getFilteredRehearsals();
         el.innerHTML = rehearsals.length
           ? rehearsals.map(App.renderTimelineEventCard).join("")
-          : '<div class="empty">No rehearsals match the current filters.</div>';
+          : App.emptyState("No rehearsals found", "Enjoy the quiet while it lasts, or adjust the filters.");
       },
 
       renderRehearsalItem: function (rehearsal) {
@@ -1547,7 +1624,7 @@
         if (!el) return;
 
         if (!App.state.projectData) {
-          el.innerHTML = '<div class="empty">Loading operations data...</div>';
+          el.innerHTML = App.loadingState("Loading Operations workspace");
           App.loadOperationsData();
           return;
         }
@@ -1674,16 +1751,15 @@
 
       renderOperationsUsers: function (users) {
         if (!users.length) return App.emptyState("No staff records", "The Staff Production Team source returned no visible users.");
-        return '<div class="adminModeBanner">Capability-based access · ' + users.length + ' known users</div>' +
-          App.renderDataTable(users.map(function (user) {
-            return {
-              name: user.name,
-              email: user.email,
-              department: user.department,
-              role: user.role,
-              status: user.status
-            };
-          }), ["name", "email", "department", "role", "status"]);
+        return '<div class="adminModeBanner">Capability-based access · ' + users.length + ' known users</div><div class="adminTableWrap"><table class="adminTable"><thead><tr><th></th><th>Name</th><th>Email</th><th>Department</th><th>Role</th><th>Status</th></tr></thead><tbody>' + users.map(function (user, index) { return '<tr><td>' + App.favouriteButton("staff", user.id || user.email, user.name, [user.department, user.role].filter(Boolean).join(" · ")) + '</td><td><button type="button" onclick="App.openOperationsStaff(' + index + ')">' + App.escapeHtml(user.name) + '</button></td><td>' + App.escapeHtml(user.email) + '</td><td>' + App.escapeHtml(user.department) + '</td><td>' + App.escapeHtml(user.role) + '</td><td>' + App.escapeHtml(user.status) + '</td></tr>'; }).join("") + '</tbody></table></div>';
+      },
+
+      openOperationsStaff: function (index) {
+        var staff = ((App.state.projectData || {}).users || [])[index];
+        if (!staff) return;
+        App.recordRecentlyViewed("staff", staff.name || staff.email || "Staff member", staff.id || staff.email, [staff.department, staff.role].filter(Boolean).join(" · "));
+        App.setWorkspaceBreadcrumb(["Operations", "Staff", staff.name || "Staff member"]);
+        App.notify([staff.name, staff.role, staff.department, staff.status].filter(Boolean).join(" · "));
       },
 
       renderOperationsEvents: function (events) {
@@ -1760,7 +1836,7 @@
         if (!el) return;
 
         if (!App.state.mediaData) {
-          el.innerHTML = '<div class="empty">Loading media timeline data...</div>';
+          el.innerHTML = App.loadingState("Loading Media workspace");
           App.loadMediaTimelineData();
           return;
         }
@@ -1857,7 +1933,7 @@
         var content = document.getElementById("administrationContent");
         if (!content) return;
         if (!App.state.administrationData) {
-          content.innerHTML = '<div class="empty">Loading platform services...</div>';
+          content.innerHTML = App.loadingState("Loading platform services");
           App.loadAdministrationData();
           return;
         }
@@ -1888,6 +1964,7 @@
 
       setAdministrationView: function (view) {
         App.state.administrationView = view;
+        App.setWorkspaceBreadcrumb(["Administration", App.toTitle(view)]);
         App.closeAdministrationDetail();
         App.renderAdministrationPage();
       },
