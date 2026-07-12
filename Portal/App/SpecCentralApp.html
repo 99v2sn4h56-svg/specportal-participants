@@ -427,6 +427,8 @@
         }
         document.getElementById("topBarTitle").textContent = config.title;
         document.getElementById("topBarDescription").textContent = config.description;
+        var searchLabel = document.getElementById("workspaceSearchLabel");
+        if (searchLabel) searchLabel.textContent = page === "dashboard" ? "Quick participant lookup…" : "Search Participants, Schools, Staff, Events…";
         var breadcrumb = document.getElementById("topBarBreadcrumb");
         var contextStatus = document.getElementById("topBarContextStatus");
         if (breadcrumb) breadcrumb.textContent = page === "operations" ? "Spec Central / Operations / " + App.toTitle(App.state.operationsView || "dashboard") : "Spec Central / " + config.title;

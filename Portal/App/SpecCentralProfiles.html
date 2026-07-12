@@ -68,7 +68,7 @@
           ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(App.getInitials(name)) + '</span>'
           : App.escapeHtml(App.getInitials(name))) + '</div>';
         App.recordRecentlyViewed("participant", name, participant.id || participant.studentKey, school);
-        App.setWorkspaceBreadcrumb(["Participants", name]);
+        if (App.state.currentPage !== "dashboard") App.setWorkspaceBreadcrumb(["Participants", name]);
 
         panel.innerHTML =
           '<button class="participantProfileClose" type="button" onclick="App.closeParticipantProfile()" aria-label="Close Participant Passport">×</button>' +
