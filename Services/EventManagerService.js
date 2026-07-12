@@ -1,111 +1,135 @@
 /**
- * Canonical read-only Event Manager aggregation service.
- * Timeline remains authoritative; related services are projected without
- * exposing contact, medical, support-plan or attendance-write information.
+ * Canonical, permission-filtered, read-only Event Manager aggregation service.
+ * Timeline owns event details and notes. Related services are projections only;
+ * no Event Manager read creates or modifies source records.
  */
 const EventManagerService = (() => {
-  const SECTIONS = ["overview", "people", "assignments", "staff", "venue", "attendance", "tasks", "communications", "activity", "diagnostics"];
+  const CACHE_VERSION = "EVENT_MANAGER_V2";
+  const SECTIONS = ["overview", "participants", "schools-groups", "staff", "venue", "attendance", "tasks", "communications", "activity", "diagnostics"];
 
   function getLanding() {
-    UserContextService.requireCapability("Operations.View");
-    const timeline = TimelineService.getTimelineEvents();
-    const attendance = getAttendanceEvents_();
-    const events = timeline.map(event => buildSummary_(event, matchAttendance_(event, attendance)));
-    const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-    const warningCount = events.reduce((sum, event) => sum + event.warnings.length, 0);
+    const user = UserContextService.requireCapability("Operations.View");
+    const started = Date.now();
+    const timeline = TimelineService.getTimelineEvents().filter(event => scopeAllowsEvent_(user, event));
+    const attendance = UserContextService.hasCapability("Attendance.View") ? getAttendanceEvents_() : [];
+    const duplicateIds = duplicatePersistentIds_(timeline);
+    const events = timeline.map(event => {
+      const relationship = matchAttendance_(event, attendance);
+      return buildSummary_(event, relationship, duplicateIds);
+    });
+    const today = todayKey_();
     return {
-      source: "Timeline · Operation Schedule",
-      sourceHealth: "Connected",
-      generatedAt: new Date().toISOString(),
+      source: "Timeline · Operation Schedule", sourceHealth: "Connected", cacheVersion: CACHE_VERSION,
+      generatedAt: new Date().toISOString(), elapsedMs: Date.now() - started,
       summary: {
-        events: events.length,
         today: events.filter(event => event.dateKey === today).length,
-        upcoming: events.filter(event => event.dateKey && event.dateKey >= today).length,
-        warnings: warningCount,
-        attendanceLinked: events.filter(event => event.attendance && event.attendance.linked).length
+        rehearsals: events.filter(event => event.eventType === "Rehearsal").length,
+        operationalEvents: events.filter(event => event.eventType === "Operational Event").length,
+        attendanceLinked: events.filter(event => event.attendance.linked).length,
+        requiresAttention: events.filter(event => event.warnings.some(warning => warning.severity === "Critical" || warning.severity === "Warning")).length
       },
-      filters: buildFilters_(events),
-      events,
-      permissions: permissionModel_()
+      filters: buildFilters_(events), events, permissions: permissionModel_(user)
     };
   }
 
-  function getWorkspace(eventId, section) {
-    UserContextService.requireCapability("Operations.View");
-    const target = String(eventId || "");
-    const event = TimelineService.getTimelineEvents().find(item => item.id === target || item.eventId === target || (item.legacyIds || []).includes(target));
+  function getWorkspace(eventId, section, options) {
+    const user = UserContextService.requireCapability("Operations.View");
+    const event = findEvent_(eventId, user);
     if (!event) throw new Error("The requested event is unavailable or inaccessible.");
     const requested = SECTIONS.includes(String(section || "overview")) ? String(section || "overview") : "overview";
-    const attendance = matchAttendance_(event, getAttendanceEvents_());
-    const impact = requested === "overview" || requested === "people" || requested === "assignments"
-      ? RelationshipService.getAffectedParticipantsWithReasons(event.id)
-      : { participants: [], unresolvedSelections: [] };
+    const attendanceRelationship = UserContextService.hasCapability("Attendance.View") ? matchAttendance_(event, getAttendanceEvents_()) : noAttendance_("permission-restricted");
+    const needsImpact = ["overview", "participants", "schools-groups", "diagnostics"].includes(requested) && UserContextService.hasCapability("Participants.View");
+    const impact = needsImpact ? RelationshipService.getAffectedParticipantsWithReasons(event.id) : { participants: [], unresolvedSelections: [], matchSummary: {} };
+    const warnings = buildWarnings_(event, attendanceRelationship, impact.unresolvedSelections, []);
     const workspace = {
-      event: buildSummary_(event, attendance),
-      participants: [], schools: [], groups: [], items: [], categories: [], staff: [], venue: null,
-      attendance: attendance ? safeAttendance_(attendance) : { linked: false, status: "Not linked" },
-      tasks: [], communications: [], activity: [], warnings: buildWarnings_(event, attendance, impact.unresolvedSelections),
-      permissions: permissionModel_(), editableActions: editableActions_(), diagnostics: null,
+      event: buildSummary_(event, attendanceRelationship, []), participants: [], participantPage: null,
+      schools: [], groups: [], items: [], categories: [], staff: [], venue: null,
+      attendance: attendanceRelationship.session ? safeAttendance_(attendanceRelationship) : { linked: false, status: "Not linked", matchMethod: attendanceRelationship.method },
+      tasks: [], communications: { status: "Unavailable", items: [], message: "Communications are not connected yet." },
+      activity: [], warnings, permissions: permissionModel_(user), editableActions: editableActions_(user), diagnostics: null,
       deferred: SECTIONS.filter(name => name !== requested), section: requested, generatedAt: new Date().toISOString()
     };
-    if (["overview", "people", "assignments"].includes(requested)) {
-      workspace.participants = impact.participants.map(safeParticipant_);
-      workspace.schools = unique_(impact.participants.map(item => item.school).filter(Boolean));
-      workspace.groups = unique_((event.schoolGroups || []).concat(event.studentGroups || []));
-      workspace.items = unique_(impact.participants.map(item => item.item).filter(Boolean));
-      workspace.categories = unique_((event.categories || []).concat(impact.participants.map(item => item.category || item.discipline).filter(Boolean)));
-    }
-    if (requested === "staff" || requested === "overview") workspace.staff = safeStaff_(event.staff || []);
-    if (requested === "venue" || requested === "overview") workspace.venue = { name: event.venue || "Not assigned", area: event.area || "", date: event.date || "", start: event.start || "", finish: event.finish || "" };
-    if (requested === "tasks") workspace.tasks = tasksForEvent_(event);
-    if (requested === "communications") workspace.communications = [{ status: "Unavailable", message: "Communications are not connected to Event Manager." }];
-    if (requested === "activity" && UserContextService.hasCapability("Audit.View")) workspace.activity = AuditService.list(100).filter(item => JSON.stringify(item).indexOf(event.id) >= 0 || (event.eventId && JSON.stringify(item).indexOf(event.eventId) >= 0));
-    if (requested === "diagnostics" && UserContextService.hasCapability("Administration.View")) workspace.diagnostics = { sourceRow: event.sourceRow || null, eventIdSource: event.eventIdSource || "Derived", fingerprintPresent: !!event.fingerprint, commandMode: "disabled" };
+    if (["overview", "participants", "schools-groups"].includes(requested)) addImpact_(workspace, impact, options);
+    if (requested === "staff" || requested === "overview") workspace.staff = staffForEvent_(event.staff || [], user);
+    if (requested === "venue" || requested === "overview") workspace.venue = { name: event.venue || "Not assigned", area: event.area || "", date: event.date || "", start: event.start || "", finish: event.finish || "", source: "Timeline" };
+    if (requested === "tasks") workspace.tasks = tasksForEvent_(event, attendanceRelationship.session);
+    if (requested === "activity" && UserContextService.hasCapability("Audit.View")) workspace.activity = activityForEvent_(event, attendanceRelationship.session);
+    if (requested === "diagnostics" && permissionModel_(user).canViewDiagnostics) workspace.diagnostics = diagnostics_(event, attendanceRelationship, impact, warnings);
     return workspace;
   }
 
-  function buildSummary_(event, attendance) {
+  function addImpact_(workspace, impact, options) {
+    const opts = options || {}, page = Math.max(1, Number(opts.page) || 1), pageSize = Math.min(250, Math.max(25, Number(opts.pageSize) || 100));
+    const safe = impact.participants.map(safeParticipant_);
+    workspace.participantPage = { page, pageSize, total: safe.length, hasMore: page * pageSize < safe.length };
+    workspace.participants = safe.slice((page - 1) * pageSize, page * pageSize);
+    const schoolCounts = countBy_(safe, "school");
+    workspace.schools = Object.keys(schoolCounts).sort().map(name => ({ name, studentCount: schoolCounts[name] }));
+    workspace.groups = unique_((workspace.event.schoolGroups || []).concat(workspace.event.studentGroups || []));
+    workspace.items = unique_(safe.map(item => item.item));
+    workspace.categories = unique_((workspace.event.categories || []).concat(safe.map(item => item.category)));
+  }
+
+  function buildSummary_(event, attendanceRelationship, duplicateIds) {
+    const attendance = attendanceRelationship.session ? safeAttendance_(attendanceRelationship) : { linked: false, status: "Not linked", matchMethod: attendanceRelationship.method };
+    const warnings = buildWarnings_(event, attendanceRelationship, [], duplicateIds || []);
     return {
       id: event.id || "", eventId: event.eventId || "", persistentEventId: event.persistentEventId || "",
-      eventIdSource: event.eventIdSource || (event.persistentEventId ? "Timeline" : "Derived"), title: event.title || event.event || "Event",
-      date: event.date || "", dateKey: event.dateKey || "", start: event.start || "", finish: event.finish || "",
-      venue: event.venue || "", area: event.area || "", eventType: event.eventType || "Event", status: event.status || "Upcoming",
-      categories: event.categories || [], schoolGroups: event.schoolGroups || [], studentGroups: event.studentGroups || [],
-      individualStudents: event.individualStudents || [], staff: event.staff || [], notes: event.notes || "",
-      sourceRow: event.sourceRow || "", attendance: attendance ? safeAttendance_(attendance) : { linked: false, status: "Not linked" },
-      warnings: buildWarnings_(event, attendance, [])
+      eventIdSource: event.eventIdSource || (event.persistentEventId ? "Timeline" : "Derived"), legacyIds: event.legacyIds || [],
+      title: event.title || event.event || "Event", date: event.date || "", dateKey: event.dateKey || "", start: event.start || "", finish: event.finish || "",
+      venue: event.venue || "", area: event.area || "", segment: event.segment || event.area || "", eventType: event.eventType || "Event", status: event.status || "Active",
+      categories: event.categories || [], schoolGroups: event.schoolGroups || [], studentGroups: event.studentGroups || [], individualStudents: event.individualStudents || [],
+      items: event.items || [], schools: event.schoolGroups || [], staff: event.staff || [], notes: event.notes || "", sourceRow: event.sourceRow || "", sourceRowValid: Number(event.sourceRow) > 1,
+      sourceHealth: "Connected", participantCount: attendance.studentCount || null,
+      schoolGroupCount: unique_((event.schoolGroups || []).concat(event.studentGroups || [])).length,
+      attendance, warnings, warningCount: warnings.length, attentionState: attentionState_(warnings)
     };
   }
 
-  function buildWarnings_(event, attendance, unresolved) {
-    const warnings = [];
-    if (!event.persistentEventId) warnings.push(warning_("Missing persistent Event ID", "Warning", "This event currently uses a derived compatibility ID."));
-    if (!event.dateKey) warnings.push(warning_("Invalid or missing date", "Critical", "The Timeline date could not be normalised."));
-    if (!event.venue) warnings.push(warning_("Venue not assigned", "Warning", "Location/Venue is blank."));
-    if (event.eventType === "Rehearsal" && !attendance) warnings.push(warning_("Attendance not linked", "Info", "No compatible Attendance session was found."));
-    (unresolved || []).forEach(value => warnings.push(warning_("Unresolved participant selection", "Warning", value)));
+  function buildWarnings_(event, relationship, unresolved, duplicateIds) {
+    const warnings = [], entityId = event.id || event.eventId || "";
+    if (!event.persistentEventId) warnings.push(warning_("MISSING_EVENT_ID", "Warning", "Missing persistent Event ID", "This event uses a derived compatibility ID; editing must remain unavailable.", entityId, "Add a persistent Event ID in a separately approved migration.", "Timeline"));
+    if (event.persistentEventId && (duplicateIds || []).includes(event.persistentEventId)) warnings.push(warning_("DUPLICATE_EVENT_ID", "Critical", "Duplicate Event ID", "More than one Timeline row uses this persistent Event ID.", entityId, "Resolve the duplicate in the authoritative Timeline.", "Timeline"));
+    if (!event.dateKey) warnings.push(warning_("INVALID_DATE", "Critical", "Invalid or missing date", "The Timeline date could not be normalised.", entityId, "Review the Timeline date value.", "Timeline"));
+    if (!event.venue) warnings.push(warning_("MISSING_VENUE", "Warning", "Venue not assigned", "Location/Venue is blank.", entityId, "Review the event location.", "Timeline"));
+    if (event.eventType === "Rehearsal" && !relationship.session) warnings.push(warning_("ATTENDANCE_UNLINKED", "Info", "Attendance not linked", "No compatible Attendance Session was found.", entityId, "Attendance can be created through its existing workflow when required.", "Attendance"));
+    if (relationship.session) {
+      const counts = safeAttendance_(relationship).attendanceCounts, total = safeAttendance_(relationship).studentCount;
+      const waiting = Number(counts.Waiting || counts["Not Marked"] || counts.Unmarked || 0);
+      if (total && waiting === total) warnings.push(warning_("ATTENDANCE_NOT_STARTED", "Info", "Attendance not started", "No attendance records have been marked yet.", entityId, "Open the Attendance roll.", "Attendance"));
+      else if (waiting > 0) warnings.push(warning_("ATTENDANCE_INCOMPLETE", "Warning", "Attendance incomplete", waiting + " attendance records remain unmarked.", entityId, "Open the Attendance roll.", "Attendance"));
+    }
+    (unresolved || []).forEach(message => warnings.push(warning_("UNRESOLVED_SELECTION", "Warning", "Unresolved participant selection", message, entityId, "Use a unique ID, email, or name plus school.", "Timeline")));
     return warnings;
   }
 
-  function warning_(title, severity, detail) { return { title, severity, detail }; }
+  function warning_(code, severity, title, message, entityId, action, source) { return { code, severity, title, message, entityId, action, source }; }
+  function attentionState_(warnings) { if (warnings.some(item => item.severity === "Critical")) return "Critical"; if (warnings.some(item => item.severity === "Warning")) return "Requires Attention"; if (warnings.some(item => item.source === "Attendance")) return "Attendance Warning"; if (warnings.length) return "Source Warning"; return "Healthy"; }
+  function findEvent_(eventId, user) { const target = String(eventId || ""); return TimelineService.getTimelineEvents().filter(event => scopeAllowsEvent_(user, event)).find(event => event.id === target || event.eventId === target || (event.legacyIds || []).includes(target)) || null; }
+  function scopeAllowsEvent_(user, event) { const scope = user.scope || { type: "production", values: [] }; if (!scope.type || scope.type === "production") return true; const values = (scope.values || []).map(EntityModelService.normaliseKey); if (!values.length) return false; const candidates = scope.type === "department" ? [event.area] : scope.type === "category" ? event.categories : scope.type === "item" ? (event.items || []).concat(event.studentGroups || []) : scope.type === "school" ? event.schoolGroups : scope.type === "event" ? [event.id, event.eventId].concat(event.legacyIds || []) : []; return candidates.map(EntityModelService.normaliseKey).some(value => values.includes(value)); }
   function getAttendanceEvents_() { try { const result = AttendanceService.getEvents(); return result && result.ok && Array.isArray(result.data) ? result.data : []; } catch (err) { return []; } }
   function matchAttendance_(event, sessions) {
-    if (event.eventType !== "Rehearsal") return null;
-    return (sessions || []).find(session => {
-      if (event.persistentEventId && [session.eventId, session.timelineEventId].filter(Boolean).includes(event.persistentEventId)) return true;
-      if (session.dateKey && event.dateKey && session.dateKey !== event.dateKey) return false;
-      if (EntityModelService.normaliseKey(session.eventName) !== EntityModelService.normaliseKey(event.title)) return false;
-      const a = EntityModelService.normaliseKey(session.location), b = EntityModelService.normaliseKey(event.venue);
-      return !a || !b || a === b;
-    }) || null;
+    if (event.eventType !== "Rehearsal") return noAttendance_("not-applicable");
+    let session = (sessions || []).find(item => event.persistentEventId && [item.eventId, item.timelineEventId].filter(Boolean).includes(event.persistentEventId));
+    if (session) return { session, method: "persistent-event-id" };
+    session = (sessions || []).find(item => event.attendanceSession && [item.sessionId, item.id].includes(event.attendanceSession.sessionId || event.attendanceSession.id));
+    if (session) return { session, method: "stable-session-id" };
+    session = (sessions || []).find(item => { if (item.dateKey && event.dateKey && item.dateKey !== event.dateKey) return false; if (EntityModelService.normaliseKey(item.eventName) !== EntityModelService.normaliseKey(event.title)) return false; const a = EntityModelService.normaliseKey(item.location), b = EntityModelService.normaliseKey(event.venue); return !a || !b || a === b; });
+    return session ? { session, method: "date-name-venue-compatibility" } : noAttendance_("none");
   }
-  function safeAttendance_(session) { return { linked: true, id: session.id || "", sessionId: session.sessionId || "", sheetName: session.sheetName || "", status: session.status || "Connected", studentCount: Number(session.studentCount || (session.attendanceCounts || {}).total) || 0, attendanceCounts: (session.attendanceCounts || {}).byStatus || {}, date: session.date || "", time: session.time || "" }; }
-  function safeParticipant_(item) { return { id: item.id || "", studentKey: item.studentKey || "", name: item.name || [item.firstName, item.lastName].filter(Boolean).join(" "), school: item.school || "", item: item.item || "", category: item.category || item.discipline || "", matchReasons: item.matchReasons || [] }; }
-  function safeStaff_(names) { const allowed = unique_(names); return allowed.map(name => ({ name, assignment: "Timeline allocation" })); }
-  function tasksForEvent_(event) { return TaskService.list().filter(task => task.relatedEvent === event.id || task.relatedEvent === event.eventId || (task.entity && [event.id, event.eventId].includes(task.entity.id))); }
-  function editableActions_() { return CommandRegistryService.list().map(item => ({ id: item.id, label: item.label, enabled: false, reason: "Editing is not enabled." })); }
-  function permissionModel_() { return { canView: true, canViewDiagnostics: UserContextService.hasCapability("Administration.View"), canEdit: false, commandMode: "disabled" }; }
+  function noAttendance_(method) { return { session: null, method }; }
+  function safeAttendance_(relationship) { const session = relationship.session || {}, counts = (session.attendanceCounts || {}).byStatus || {}; const total = Number(session.studentCount || (session.attendanceCounts || {}).total) || 0; const waiting = Number(counts.Waiting || counts["Not Marked"] || counts.Unmarked || 0); return { linked: true, id: session.id || "", sessionId: session.sessionId || "", sheetName: session.sheetName || "", status: waiting ? "In Progress" : total ? "Complete" : "Waiting", studentCount: total, attendanceCounts: counts, completionPercentage: total ? Math.round(((total - waiting) / total) * 100) : 0, date: session.date || "", time: session.time || "", matchMethod: relationship.method }; }
+  function safeParticipant_(item) { return { id: item.id || "", studentKey: item.studentKey || "", name: item.name || [item.firstName, item.lastName].filter(Boolean).join(" "), school: item.school || "", year: item.year || item.schoolYear || "", item: item.item || "", group: item.group || "", category: item.category || item.discipline || "", attendanceStatus: "Unavailable", matchReasons: item.matchReasons || [] }; }
+  function staffForEvent_(names, user) { const wanted = unique_(names), canContact = AuthorizationService.hasCapability(user, "Users.Manage"); let records = []; try { records = StaffService.getAll(); } catch (err) {} return wanted.map(name => { const key = EntityModelService.normaliseKey(name); const match = records.find(item => [item.name, item.displayName, item.staffId].map(EntityModelService.normaliseKey).includes(key)); const output = { name: match && (match.displayName || match.name) || name, role: match && match.role || "", department: match && (match.department || match.team) || "", source: "Timeline Staff" }; if (canContact && match) output.email = match.email || match.primaryEmail || ""; return output; }); }
+  function tasksForEvent_(event, session) { const ids = [event.id, event.eventId, session && session.id, session && session.sessionId].filter(Boolean); return TaskService.list().filter(task => ids.includes(task.relatedEvent) || ids.includes(task.projectId) || ids.includes(task.workflowExecutionId) || (task.entity && ids.includes(task.entity.id))).map(task => ({ id: task.id, title: task.title, assignedUser: task.assignedUser, dueDate: task.dueDate, priority: task.priority, status: task.status, relatedEvent: task.relatedEvent || "", workflowExecutionId: task.workflowExecutionId || "" })); }
+  function activityForEvent_(event, session) { const ids = [event.id, event.eventId, session && session.id, session && session.sessionId].filter(Boolean); return AuditService.list(120).filter(item => ids.some(id => JSON.stringify(item).indexOf(id) >= 0)).map(item => ({ id: item.id, action: item.action, actor: item.actor, occurredAt: item.occurredAt, entity: item.entity })); }
+  function diagnostics_(event, relationship, impact, warnings) { const source = SourceRegistryService.getSourceConfig("timeline"); return { sourceSpreadsheet: source.spreadsheetId, sourceSheet: source.sheetName, sourceSheetId: source.sheetId, sourceRow: event.sourceRow || null, sourceRowValid: Number(event.sourceRow) > 1, detectedSchema: "Heading-based Timeline schema", eventIdSource: event.eventIdSource || "Derived", legacyIds: event.legacyIds || [], classificationReason: event.eventType === "Rehearsal" ? "Participant assignment selections contain data" : "No participant assignment selections", participantMatching: impact.matchSummary || {}, unresolvedSelections: impact.unresolvedSelections || [], attendanceMatchMethod: relationship.method, fingerprint: event.fingerprint || "", cacheVersion: CACHE_VERSION, warnings }; }
+  function editableActions_(user) { if (!AuthorizationService.hasCapability(user, "Timeline.Edit") || !AuthorizationService.hasCapability(user, "Administration.View")) return []; return CommandRegistryService.list().filter(item => item.entityType === "TimelineEvent").map(item => ({ commandId: item.commandId, label: item.label, enabled: false, reason: "Editing is not enabled for this data source yet." })); }
+  function permissionModel_(user) { return { canView: true, canViewParticipants: AuthorizationService.hasCapability(user, "Participants.View"), canViewAttendance: AuthorizationService.hasCapability(user, "Attendance.View"), canViewAudit: AuthorizationService.hasCapability(user, "Audit.View"), canViewDiagnostics: AuthorizationService.hasCapability(user, "Administration.View"), canEdit: false, commandMode: "disabled", scope: user.scope || { type: "production", values: [] } }; }
+  function duplicatePersistentIds_(events) { const counts = {}; (events || []).forEach(event => { if (event.persistentEventId) counts[event.persistentEventId] = (counts[event.persistentEventId] || 0) + 1; }); return Object.keys(counts).filter(id => counts[id] > 1); }
+  function buildFilters_(events) { return { types: unique_(events.map(item => item.eventType)), areas: unique_(events.map(item => item.area)), segments: unique_(events.map(item => item.segment)), venues: unique_(events.map(item => item.venue)), categories: unique_(events.flatMap(item => item.categories || [])), items: unique_(events.flatMap(item => item.items || [])), groups: unique_(events.flatMap(item => (item.schoolGroups || []).concat(item.studentGroups || []))), schools: unique_(events.flatMap(item => item.schools || [])), staff: unique_(events.flatMap(item => item.staff || [])), attendanceStatuses: unique_(events.map(item => item.attendance.status)), attentionStates: ["Critical", "Requires Attention", "Healthy", "Source Warning", "Attendance Warning"] }; }
+  function countBy_(items, field) { const counts = {}; (items || []).forEach(item => { const key = String(item[field] || "Unassigned"); counts[key] = (counts[key] || 0) + 1; }); return counts; }
   function unique_(values) { return Array.from(new Set((values || []).map(value => String(value || "").trim()).filter(Boolean))); }
-  function buildFilters_(events) { return { types: unique_(events.map(item => item.eventType)), areas: unique_(events.map(item => item.area)), venues: unique_(events.map(item => item.venue)), categories: unique_(events.flatMap(item => item.categories || [])), groups: unique_(events.flatMap(item => (item.schoolGroups || []).concat(item.studentGroups || []))), staff: unique_(events.flatMap(item => item.staff || [])) }; }
+  function todayKey_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"); }
   return { getLanding, getWorkspace };
 })();

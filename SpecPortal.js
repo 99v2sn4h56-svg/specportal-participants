@@ -231,8 +231,8 @@ function portalGetEventManagerLanding() {
   return EventManagerService.getLanding();
 }
 
-function portalGetEventWorkspace(eventId, section) {
-  return EventManagerService.getWorkspace(eventId, section);
+function portalGetEventWorkspace(eventId, section, options) {
+  return EventManagerService.getWorkspace(eventId, section, options || {});
 }
 
 function portalGetCommandArchitecture() {

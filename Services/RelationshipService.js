@@ -47,7 +47,7 @@ const RelationshipService = (() => {
 
   function getAffectedParticipantsWithReasons(eventId) {
     const event = findTimelineEvent_(eventId);
-    if (!event) return { participants: [], unresolvedSelections: [] };
+    if (!event) return { participants: [], unresolvedSelections: [], matchSummary: {} };
     const all = ParticipantService.getAll();
     const selections = (event.individualStudents || []).map(EntityModelService.normaliseKey).filter(Boolean);
     const nameCounts = {};
@@ -55,20 +55,37 @@ const RelationshipService = (() => {
       const key = EntityModelService.normaliseKey(participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" "));
       if (key) nameCounts[key] = (nameCounts[key] || 0) + 1;
     });
-    const unresolvedSelections = selections.filter(selection => nameCounts[selection] > 1)
-      .map(selection => "The selection '" + selection + "' matches more than one participant; use an ID, email, or name plus school.");
+    const matchedSelections = {};
+    const unresolvedSelections = [];
     const participants = all.map(participant => {
       const reasons = [];
-      const values = [participant.category, participant.discipline, participant.subDiscipline, participant.item].map(EntityModelService.normaliseKey).filter(Boolean);
-      const categoryGroups = (event.categories || []).concat(event.studentGroups || []).map(EntityModelService.normaliseKey).filter(Boolean);
-      if (values.some(value => categoryGroups.includes(value))) reasons.push("Category or student group");
-      if ((event.schoolGroups || []).map(EntityModelService.normaliseKey).includes(EntityModelService.normaliseKey(participant.school))) reasons.push("School group");
+      const categoryValues = [participant.category, participant.discipline, participant.subDiscipline].map(EntityModelService.normaliseKey).filter(Boolean);
+      const itemValue = EntityModelService.normaliseKey(participant.item);
+      const categories = (event.categories || []).map(EntityModelService.normaliseKey).filter(Boolean);
+      const studentGroups = (event.studentGroups || []).map(EntityModelService.normaliseKey).filter(Boolean);
+      if (categoryValues.some(value => categories.includes(value))) reasons.push("Category");
+      if (itemValue && studentGroups.includes(itemValue)) reasons.push("Item");
+      if (categoryValues.some(value => studentGroups.includes(value))) reasons.push("Individual Student Group");
+      if ((event.schoolGroups || []).map(EntityModelService.normaliseKey).includes(EntityModelService.normaliseKey(participant.school))) reasons.push("School Group");
       const name = EntityModelService.normaliseKey(participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" "));
-      const strongIdentities = [participant.applicationId, participant.studentId, participant.studentEmail, [participant.name, participant.school].filter(Boolean).join(" ")].map(EntityModelService.normaliseKey).filter(Boolean);
-      if (selections.some(selection => strongIdentities.includes(selection) || (selection === name && nameCounts[name] === 1))) reasons.push("Individual student");
+      const identities = [
+        ["Application ID", participant.applicationId], ["Student ID", participant.studentId],
+        ["Email", participant.studentEmail || participant.email], ["Name and School", [participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" "), participant.school].filter(Boolean).join(" ")]
+      ];
+      selections.forEach(selection => {
+        const strong = identities.find(identity => EntityModelService.normaliseKey(identity[1]) === selection);
+        if (strong) { reasons.push(strong[0]); matchedSelections[selection] = true; }
+        else if (selection === name && nameCounts[name] === 1) { reasons.push("Name"); matchedSelections[selection] = true; }
+      });
       return Object.assign({}, participant, { matchReasons: reasons });
     }).filter(participant => participant.matchReasons.length);
-    return { participants, unresolvedSelections };
+    selections.forEach(selection => {
+      if (nameCounts[selection] > 1) unresolvedSelections.push("An individual name selection is ambiguous; use an ID, email, or name plus school.");
+      else if (!matchedSelections[selection]) unresolvedSelections.push("An individual student selection could not be resolved.");
+    });
+    const matchSummary = {};
+    participants.forEach(participant => participant.matchReasons.forEach(reason => { matchSummary[reason] = (matchSummary[reason] || 0) + 1; }));
+    return { participants, unresolvedSelections: Array.from(new Set(unresolvedSelections)), matchSummary };
   }
 
   function getSchoolsForSegment(segment) {
