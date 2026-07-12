@@ -4,7 +4,22 @@ const ProjectManagementService = (() => {
   function getDashboardData() {
     requirePermission_(VIEW_PERMISSION);
 
-    const tasks = getPlaceholderTasks_();
+    const workflowTasks = TaskService.list();
+    const tasks = workflowTasks.map(task => ({
+      id: task.id,
+      task: task.title,
+      workstream: task.module || "Operations",
+      owner: task.assignedUser || "Unassigned",
+      department: task.module || "Operations",
+      status: task.status,
+      priority: task.priority,
+      startDate: task.createdAt || "",
+      dueDate: task.dueDate || "",
+      relatedEvent: task.relatedEvent || "",
+      dependencies: task.entity && [task.entity.type, task.entity.id].filter(Boolean).join(": ") || "",
+      notes: task.notes || "",
+      lastUpdated: task.updatedAt || task.createdAt || ""
+    }));
     const user = StaffService.getCurrentUser();
     const users = StaffService.getAll().map(staff => ({
       name: staff.name || staff.displayName || "",
@@ -26,9 +41,9 @@ const ProjectManagementService = (() => {
       modules: SourceRegistryService.getForUser(user),
       adminMode: !!user.isAdmin,
       tasks,
-      workflowTasks: TaskService.list(),
-      tasksSource: "Placeholder until a production task source is selected",
-      statuses: ["Not started", "In progress", "Waiting", "Ready for review", "Complete"],
+      workflowTasks,
+      tasksSource: "SpecCentral Task Service",
+      statuses: TaskService.STATUSES.slice(),
       milestones: ["Applications", "Auditions", "Acceptances", "Rehearsals", "Production", "Show Week", "Post-event"]
     };
   }
@@ -38,41 +53,6 @@ const ProjectManagementService = (() => {
     if (!StaffService.hasPermission(email, permission)) {
       throw new Error(`Permission required: ${permission}`);
     }
-  }
-
-  function getPlaceholderTasks_() {
-    return [
-      {
-        id: "PM-001",
-        task: "Confirm acceptance import workflow",
-        workstream: "Acceptances",
-        owner: "Spec Central",
-        department: "Operations",
-        status: "In progress",
-        priority: "High",
-        startDate: "",
-        dueDate: "",
-        relatedEvent: "",
-        dependencies: "Participants source data",
-        notes: "Placeholder until a production task source is connected.",
-        lastUpdated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM")
-      },
-      {
-        id: "PM-002",
-        task: "Connect Timeline event allocations",
-        workstream: "Rehearsals",
-        owner: "Timeline",
-        department: "Operations",
-        status: "Waiting",
-        priority: "Medium",
-        startDate: "",
-        dueDate: "",
-        relatedEvent: "Timeline",
-        dependencies: "Staff Production Team permissions",
-        notes: "Placeholder task for future integration.",
-        lastUpdated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM")
-      }
-    ];
   }
 
   return {

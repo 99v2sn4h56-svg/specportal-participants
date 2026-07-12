@@ -3,11 +3,8 @@
     <h2 id="topBarTitle" class="pageTitle">Dashboard</h2>
     <div id="topBarDescription" class="pageDescription">Your Schools Spectacular operations hub.</div>
   </div>
-  <input
-    id="globalSearch"
-    class="globalSearch"
-    type="search"
-    placeholder="Search participants, schools, items or groups..."
-    autocomplete="off"
-  >
+  <div class="topBarActions">
+    <button class="commandTrigger" type="button" onclick="App.openCommandCentre('search')" aria-label="Open global search">Search everything <kbd>⌘K</kbd></button>
+    <button class="notificationTrigger" type="button" onclick="App.openNotificationCentre()" aria-label="Open notifications">●<span id="notificationCount">0</span></button>
+  </div>
 </header>

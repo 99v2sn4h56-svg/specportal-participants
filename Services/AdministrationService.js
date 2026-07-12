@@ -15,7 +15,7 @@ const AdministrationService = (() => {
       lastSync: "Not tracked",
       stableId: source.identityField,
       readCapability: readCapabilityFor_(source.id),
-      futureEditor: source.editable ? `Future ${source.id} editor` : "Read-only projection"
+      interaction: source.editable ? "Preview and capability metadata" : "Read-only projection"
     }));
     const consoleData = safeCall_("Operations Console", () => OperationsConsoleService.getData(), emptyConsole_());
     const workflows = WorkflowRegistryService.getAll();

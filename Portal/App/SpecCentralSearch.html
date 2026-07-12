@@ -1,0 +1,358 @@
+  <script>
+    Object.assign(App, {
+      runParticipantSearch: function () {
+        if (App.state.participantSearchTimer) {
+          clearTimeout(App.state.participantSearchTimer);
+          App.state.participantSearchTimer = null;
+        }
+        var search = document.getElementById("participantSearch");
+        var resultsEl = document.getElementById("participantResults");
+        var statusEl = document.getElementById("participantStatus");
+        var query = String((search && search.value) || "").trim().toLowerCase();
+
+        if (!resultsEl || !statusEl) return;
+
+        if (!App.state.ready) {
+          statusEl.textContent = "Loading participant data...";
+          resultsEl.innerHTML = "";
+          App.ensurePortalDataLoaded()
+            .then(function () {
+              App.queueParticipantSearch();
+            })
+            .catch(function (error) {
+              statusEl.textContent = "Participant data could not be loaded: " + App.getErrorMessage(error);
+            });
+          return;
+        }
+
+        if (!query) {
+          App.state.latestResults = [];
+          resultsEl.innerHTML = "";
+          App.renderParticipantStatus();
+          return;
+        }
+
+        App.recordSearch(query);
+        App.state.latestResults = App.getParticipantResults(query);
+        statusEl.textContent = App.state.latestResults.length ? App.state.latestResults.length + " results" : "No matches found";
+        resultsEl.innerHTML = App.state.latestResults.length
+          ? App.state.latestResults.map(App.renderResultCard).join("")
+          : '<div class="empty">No matches found.</div>';
+      },
+
+      queueParticipantSearch: function () {
+        if (App.state.participantSearchTimer) clearTimeout(App.state.participantSearchTimer);
+        App.state.participantSearchTimer = setTimeout(App.runParticipantSearch, 160);
+      },
+
+      registerSearchProvider: function (provider) {
+        if (!provider || !provider.id || typeof provider.search !== "function") return;
+        App.state.searchProviders = (App.state.searchProviders || []).filter(function (item) {
+          return item.id !== provider.id;
+        });
+        App.state.searchProviders.push(provider);
+        App.state.searchProviders.sort(function (a, b) {
+          return (a.priority || 50) - (b.priority || 50);
+        });
+      },
+
+      registerDefaultSearchProviders: function () {
+        App.state.searchProviders = [];
+
+        App.registerSearchProvider({
+          id: "participants",
+          priority: 10,
+          search: function (query) {
+            return App.state.participants.map(function (participant) {
+              var title = App.getParticipantName(participant);
+              var text = [
+                title,
+                App.getParticipantSchool(participant),
+                App.getParticipantItem(participant),
+                App.getParticipantCategory(participant),
+                App.getParticipantCategoryDetail(participant),
+                App.getParticipantTeacherName(participant),
+                App.getParticipantTeacherEmail(participant)
+              ].filter(Boolean).join(" ");
+              var score = App.getSearchScore(text, query);
+
+              return {
+                resultType: "participant",
+                title: title,
+                meta: [App.getParticipantSchool(participant), App.getParticipantYear(participant) ? "Year " + App.getParticipantYear(participant) : "", App.getParticipantItem(participant) || App.getParticipantCategory(participant)].filter(Boolean).join(" - "),
+                participant: participant,
+                score: score
+              };
+            }).filter(function (result) {
+              return result.title && result.score > 0;
+            });
+          }
+        });
+
+        App.registerSearchProvider({
+          id: "schools",
+          priority: 20,
+          search: function (query) {
+            return App.state.schools.map(function (school) {
+              var name = App.getSchoolName(school);
+              var score = App.getSearchScore(name, query);
+              var participantTotal = App.getSchoolParticipantTotal(name);
+              var participantNote = App.getSchoolParticipantTotalNote(name);
+              return {
+                resultType: "school",
+                title: name,
+                meta: participantTotal + " participant" + (participantTotal === 1 ? "" : "s") + (participantNote ? " - " + participantNote : ""),
+                school: school,
+                score: score
+              };
+            }).filter(function (result) {
+              return result.title && result.score > 0;
+            });
+          }
+        });
+
+        App.registerSearchProvider({
+          id: "groups",
+          priority: 30,
+          search: function (query) {
+            return App.state.groups.map(function (group) {
+              var title = [group.item, group.groupName].filter(Boolean).join(" - ") || group.category || "Unnamed group";
+              var text = [group.item, group.groupName, group.category, group.school, group.teacherName, group.teacherEmail].filter(Boolean).join(" ");
+              var score = App.getSearchScore(text, query);
+              return {
+                resultType: "group",
+                title: title,
+                meta: [group.school, group.teacherName, App.getGroupStudentCountLabel(group)].filter(Boolean).join(" - "),
+                group: group,
+                score: score
+              };
+            }).filter(function (result) {
+              return result.score > 0;
+            });
+          }
+        });
+
+        App.registerSearchProvider({
+          id: "items",
+          priority: 40,
+          search: function (query) {
+            var itemMap = {};
+            App.state.participants.forEach(function (participant) {
+              var item = App.normaliseItemTitle(App.getParticipantItem(participant));
+              if (!item) return;
+              itemMap[item] = itemMap[item] || { participants: 0, schools: {} };
+              itemMap[item].participants++;
+              var school = App.getParticipantSchool(participant);
+              if (school) itemMap[item].schools[school] = true;
+            });
+
+            App.state.groups.forEach(function (group) {
+              var item = App.normaliseItemTitle(group.item || group.groupName || "");
+              if (!item) return;
+              itemMap[item] = itemMap[item] || { participants: 0, schools: {} };
+              if (group.school) itemMap[item].schools[group.school] = true;
+              itemMap[item].participants += App.parseParticipantCount(App.getGroupStudentCount(group));
+            });
+
+            return Object.keys(itemMap).map(function (item) {
+              var score = App.getSearchScore(item, query);
+              var stats = itemMap[item];
+              var schoolCount = Object.keys(stats.schools).length;
+              return {
+                resultType: "item",
+                title: item,
+                meta: [schoolCount ? schoolCount + " schools" : "", stats.participants ? stats.participants + " participants" : ""].filter(Boolean).join(" - "),
+                score: score
+              };
+            }).filter(function (result) {
+              return result.score > 0;
+            });
+          }
+        });
+
+        App.registerSearchProvider({
+          id: "teachers",
+          priority: 50,
+          search: function (query) {
+            var teachers = {};
+            App.state.groups.forEach(function (group) {
+              var key = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
+              if (!key) return;
+              teachers[key] = teachers[key] || {
+                resultType: "teacher",
+                title: group.teacherName || group.teacherEmail,
+                meta: [group.teacherEmail, group.school].filter(Boolean).join(" - "),
+                teacher: group,
+                score: 0
+              };
+              teachers[key].score = Math.max(teachers[key].score, App.getSearchScore([group.teacherName, group.teacherEmail, group.school, group.item].join(" "), query));
+            });
+
+            return Object.keys(teachers).map(function (key) {
+              return teachers[key];
+            }).filter(function (result) {
+              return result.title && result.score > 0;
+            });
+          }
+        });
+
+        App.registerSearchProvider({
+          id: "staff",
+          priority: 60,
+          search: function (query) {
+            return (App.state.staffTeam || []).map(function (staff) {
+              var title = staff.displayName || staff.name || staff.email;
+              var score = App.getSearchScore([title, staff.email, staff.role, staff.department, staff.team].join(" "), query);
+              return {
+                resultType: "staff",
+                title: title,
+                meta: [staff.role, staff.department || staff.team, staff.email].filter(Boolean).join(" - "),
+                staff: staff,
+                score: score
+              };
+            }).filter(function (result) {
+              return result.title && result.score > 0;
+            });
+          }
+        });
+
+        App.registerSearchProvider({
+          id: "timeline",
+          priority: 70,
+          search: function (query) {
+            var events = ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []);
+            return events.map(function (event) {
+              var title = event.title || event.event || "Event";
+              var score = App.getSearchScore([title, event.venue, event.type, event.rehearsalType, (event.items || []).join(" ")].join(" "), query);
+              return {
+                resultType: "timeline",
+                title: title,
+                meta: [event.date || event.dateDisplay, event.venue, event.type || event.rehearsalType].filter(Boolean).join(" - "),
+                event: event,
+                score: score
+              };
+            }).filter(function (result) {
+              return result.title && result.score > 0;
+            });
+          }
+        });
+      },
+
+      rebuildSearchProviders: function () {
+        App.registerDefaultSearchProviders();
+        App.events.emit("search:providers-ready", { count: App.state.searchProviders.length });
+      },
+
+      runUniversalSearch: function (query, limit) {
+        var normalisedQuery = String(query || "").trim().toLowerCase();
+        if (!normalisedQuery) return [];
+
+        return (App.state.searchProviders || []).reduce(function (results, provider) {
+          try {
+            return results.concat((provider.search(normalisedQuery) || []).map(function (result) {
+              result.providerId = provider.id;
+              result.providerPriority = provider.priority || 50;
+              return result;
+            }));
+          } catch (err) {
+            console.error("Search provider failed", provider.id, err);
+            return results;
+          }
+        }, []).sort(function (a, b) {
+          return b.score - a.score ||
+            (a.providerPriority || 50) - (b.providerPriority || 50) ||
+            String(a.title || "").localeCompare(String(b.title || ""));
+        }).slice(0, limit || 50);
+      },
+
+      getParticipantResults: function (query) {
+        return App.runUniversalSearch(query, 50);
+      },
+
+      renderResultCard: function (result, index) {
+        var icon = result.resultType === "school"
+          ? "🏫"
+          : result.resultType === "group" || result.resultType === "item"
+          ? "🎭"
+          : result.resultType === "teacher"
+          ? "👩‍🏫"
+          : result.resultType === "staff"
+          ? "🪪"
+          : result.resultType === "timeline"
+          ? "📅"
+          : App.getInitials(result.title);
+        var avatar = '<div class="avatar">' + App.escapeHtml(icon) + '</div>';
+
+        if (result.resultType === "participant") {
+          var photo = App.getParticipantPhotoUrl(result.participant, false, 120);
+          avatar = '<div class="avatar">' + (photo
+            ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(icon) + '</span>'
+            : App.escapeHtml(icon)) + '</div>';
+        }
+
+        return '<button class="resultCard resultCard--' + App.escapeHtml(result.resultType || "item") + '" type="button" onclick="App.openResult(' + index + ')">' +
+          '<div class="resultTop">' +
+            avatar +
+            '<div>' +
+              '<div class="resultTitle">' + App.escapeHtml(result.title || "Untitled") + '</div>' +
+              '<div class="resultMeta">' + App.escapeHtml(result.meta || result.resultType) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div class="pillRow"><span class="pill">' + App.escapeHtml(result.resultType) + '</span></div>' +
+        '</button>';
+      },
+
+      openResult: function (index) {
+        var result = App.state.latestResults[index];
+        if (!result) return;
+
+        if (result.resultType === "participant") {
+          App.openParticipant(result.participant);
+          return;
+        }
+
+        if (result.resultType === "school") {
+          App.state.selectedSchool = result.school || result.title;
+          App.events.emit("school:selected", App.state.selectedSchool);
+          App.recordRecentlyViewed("school", result.title);
+          App.renderSchoolProfile(App.buildSchoolProfile(result.title));
+          return;
+        }
+
+        if (result.resultType === "item") {
+          App.state.selectedItem = result.title;
+          App.events.emit("item:selected", result.title);
+          App.recordRecentlyViewed("item", result.title);
+          App.renderItemProfile(App.buildItemProfile(result.title));
+          return;
+        }
+
+        if (result.resultType === "group") {
+          var group = result.group || {};
+          App.state.selectedGroup = group;
+          App.events.emit("group:selected", group);
+          App.recordRecentlyViewed("group", result.title);
+          App.renderGroupProfile(group);
+          return;
+        }
+
+        if (result.resultType === "teacher") {
+          App.state.selectedTeacher = result.teacher || result.title;
+          App.events.emit("teacher:selected", App.state.selectedTeacher);
+          App.recordRecentlyViewed("teacher", result.title);
+          App.renderTeacherProfile(App.buildTeacherProfile(result.teacher || result.title));
+          return;
+        }
+
+        if (result.resultType === "staff") {
+          App.openStaff(result.staff || result.title);
+          return;
+        }
+
+        if (result.resultType === "timeline") {
+          App.openEvent(result.event);
+        }
+      },
+
+    });
+  </script>

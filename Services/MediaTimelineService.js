@@ -4,10 +4,30 @@ const MediaTimelineService = (() => {
   function getDashboardData() {
     requirePermission_(VIEW_PERMISSION);
 
-    const activities = getPlaceholderActivities_();
+    const mediaTasks = TaskService.list().filter(item => /media|marketing|communications/i.test([item.module, item.department, item.notes].join(" ")));
+    const timelineActivities = TimelineService.getTimelineEvents().filter(item => /media|marketing|communications|promotion|launch/i.test([item.area, item.type, item.title, item.notes].join(" "))).map(item => ({
+      id: item.id,
+      campaign: item.area || "Production",
+      activity: item.title,
+      channel: item.type || "Timeline",
+      audience: (item.categories || []).join(", "),
+      owner: (item.staff || []).join(", "),
+      department: item.area || "",
+      startDate: item.dateKey || item.date,
+      publishDate: item.dateKey || item.date,
+      endDate: item.dateKey || item.date,
+      status: item.status || "Scheduled",
+      priority: "",
+      relatedEvent: item.id,
+      relatedItem: (item.items || []).join(", "),
+      approvalStatus: "Timeline source",
+      notes: item.notes || ""
+    }));
+    const taskActivities = mediaTasks.map(item => ({ id: item.id, campaign: item.module || "Media", activity: item.title, channel: "Task", audience: "", owner: item.assignedUser || "", department: "Media", startDate: item.createdAt || "", publishDate: item.dueDate || "", endDate: item.dueDate || "", status: item.status, priority: item.priority, relatedEvent: item.relatedEvent || "", relatedItem: "", approvalStatus: "Task Service", notes: item.notes || "" }));
+    const activities = timelineActivities.concat(taskActivities);
 
     return {
-      source: "Placeholder media timeline data",
+      source: "Timeline + SpecCentral Task Service",
       generatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM h:mma"),
       activities,
       statuses: ["Idea", "Drafting", "Awaiting assets", "Awaiting approval", "Scheduled", "Published", "Complete"],
@@ -20,51 +40,6 @@ const MediaTimelineService = (() => {
     if (!StaffService.hasPermission(email, permission)) {
       throw new Error(`Permission required: ${permission}`);
     }
-  }
-
-  function getPlaceholderActivities_() {
-    return [
-      {
-        id: "MT-001",
-        campaign: "Acceptances",
-        activity: "Acceptance reminder communications",
-        channel: "School communications",
-        audience: "Schools",
-        owner: "Media team",
-        department: "Media",
-        startDate: "",
-        publishDate: "",
-        endDate: "",
-        status: "Drafting",
-        priority: "High",
-        relatedEvent: "",
-        relatedItem: "",
-        assetLink: "",
-        copyLink: "",
-        approvalStatus: "Not connected",
-        notes: "Placeholder until the media planning source is connected."
-      },
-      {
-        id: "MT-002",
-        campaign: "Rehearsals",
-        activity: "Rehearsal week social schedule",
-        channel: "Social media",
-        audience: "Community",
-        owner: "Media team",
-        department: "Media",
-        startDate: "",
-        publishDate: "",
-        endDate: "",
-        status: "Idea",
-        priority: "Medium",
-        relatedEvent: "Timeline",
-        relatedItem: "",
-        assetLink: "",
-        copyLink: "",
-        approvalStatus: "Not connected",
-        notes: "Placeholder activity for future campaign planning."
-      }
-    ];
   }
 
   return {

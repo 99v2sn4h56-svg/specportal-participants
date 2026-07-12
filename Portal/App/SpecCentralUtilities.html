@@ -1,0 +1,362 @@
+  <script>
+    Object.assign(App, {
+      profileLine: function (label, value) {
+        if (!value) return "";
+        return '<div class="scProfileLine"><strong>' + App.escapeHtml(label) + '</strong>' + App.escapeHtml(value) + '</div>';
+      },
+
+      getGreeting: function () {
+        var hour = new Date().getHours();
+        if (hour < 12) return "Good morning";
+        if (hour < 18) return "Good afternoon";
+        return "Good evening";
+      },
+
+      formatShortDate: function (value) {
+        try {
+          return new Intl.DateTimeFormat("en-AU", {
+            weekday: "short",
+            day: "numeric",
+            month: "short"
+          }).format(value instanceof Date ? value : new Date(value));
+        } catch (err) {
+          return String(value || "");
+        }
+      },
+
+      formatTime: function (value) {
+        var date = value instanceof Date ? value : new Date(value);
+        if (typeof value === "number") date = new Date(value);
+        if (isNaN(date.getTime())) return "";
+
+        try {
+          return new Intl.DateTimeFormat("en-AU", {
+            hour: "numeric",
+            minute: "2-digit"
+          }).format(date);
+        } catch (err) {
+          return "";
+        }
+      },
+
+      toDateKey: function (value) {
+        if (!value) return "";
+        var date = value instanceof Date ? value : new Date(value);
+        if (isNaN(date.getTime())) return "";
+        var year = date.getFullYear();
+        var month = String(date.getMonth() + 1).padStart(2, "0");
+        var day = String(date.getDate()).padStart(2, "0");
+        return year + "-" + month + "-" + day;
+      },
+
+      sortEvents: function (a, b) {
+        return String(a.dateKey || "").localeCompare(String(b.dateKey || "")) ||
+          String(a.start || "").localeCompare(String(b.start || "")) ||
+          String(a.title || a.event || "").localeCompare(String(b.title || b.event || ""));
+      },
+
+      populateEventFilters: function (elementId, field, events) {
+        var select = document.getElementById(elementId);
+        if (!select || select.dataset.ready === "true") return;
+
+        var values = Array.from(new Set((events || [])
+          .map(function (event) { return String(event[field] || (field === "type" ? event.rehearsalType : "") || "").trim(); })
+          .filter(Boolean)))
+          .sort();
+
+        select.innerHTML = '<option value="">All ' + App.escapeHtml(field === "venue" ? "venues" : "types") + '</option>' +
+          values.map(function (value) {
+            return '<option value="' + App.escapeHtml(value) + '">' + App.escapeHtml(value) + '</option>';
+          }).join("");
+        select.dataset.ready = "true";
+      },
+
+      safeLoadJson: function (key, fallback) {
+        try {
+          var raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (err) {
+          return fallback;
+        }
+      },
+
+      safeSaveJson: function (key, value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch (err) {}
+      },
+
+      recordSearch: function (query) {
+        var term = String(query || "").trim();
+        if (term.length < 2) return;
+        App.state.searchHistory = [term].concat((App.state.searchHistory || []).filter(function (item) {
+          return String(item).toLowerCase() !== term.toLowerCase();
+        })).slice(0, 10);
+        App.safeSaveJson("specCentralSearchHistory", App.state.searchHistory);
+        App.safeSaveJson("specPortalRecentSearches", App.state.searchHistory);
+      },
+
+      recordRecentlyViewed: function (type, label) {
+        if (!type || !label) return;
+        var key = type + ":" + String(label).toLowerCase();
+        App.state.recentlyViewed = [{ type: type, label: label, key: key, at: Date.now() }].concat((App.state.recentlyViewed || []).filter(function (item) {
+          return item.key !== key;
+        })).slice(0, 12);
+        App.safeSaveJson("specCentralRecentlyViewed", App.state.recentlyViewed);
+        App.safeSaveJson("specPortalRecentlyViewed", App.state.recentlyViewed);
+      },
+
+      getSearchScore: function (text, query) {
+        text = String(text || "").toLowerCase();
+        if (!text || !query) return 0;
+        if (text === query) return 100;
+        if (text.indexOf(query) === 0) return 75;
+        if (text.indexOf(query) >= 0) return 30;
+        return 0;
+      },
+
+      getField: function (source, names) {
+        if (!source) return "";
+        for (var i = 0; i < names.length; i++) {
+          var value = source[names[i]];
+          if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+        }
+        return "";
+      },
+
+      getParticipantName: function (participant) {
+        return App.getField(participant, ["name", "fullName", "studentName", "Student Name"]) ||
+          [App.getField(participant, ["firstName", "studentFirstName", "Student First Name"]), App.getField(participant, ["lastName", "studentLastName", "Student Last Name"])].filter(Boolean).join(" ");
+      },
+
+      getParticipantSchool: function (participant) {
+        return App.getField(participant, ["school", "currentSchool", "schoolName", "Current School"]);
+      },
+
+      getSchoolName: function (school) {
+        return App.getField(school, ["schoolName", "school", "currentSchool", "School Name", "Current School"]);
+      },
+
+      getParticipantYear: function (participant) {
+        return App.getField(participant, ["year", "studentYear", "Student Year"]);
+      },
+
+      getParticipantItem: function (participant) {
+        return App.getField(participant, ["item", "Item"]);
+      },
+
+      getParticipantDiscipline: function (participant) {
+        return App.getField(participant, ["discipline", "Discipline"]);
+      },
+
+      getParticipantSubDiscipline: function (participant) {
+        return App.getField(participant, ["subDiscipline", "subDisciplineName", "Sub-Discipline"]);
+      },
+
+      getParticipantCategory: function (participant) {
+        return App.getField(participant, ["category", "Category"]) || App.getParticipantDiscipline(participant);
+      },
+
+      getParticipantCategoryDetail: function (participant) {
+        return App.getField(participant, ["categoryDetail", "Category Detail"]) || App.getParticipantSubDiscipline(participant);
+      },
+
+      getParticipantTeacherName: function (participant) {
+        return App.getField(participant, ["teacherName", "Teacher Name"]);
+      },
+
+      getParticipantTeacherEmail: function (participant) {
+        return App.getField(participant, ["teacherEmail", "Teacher Email"]);
+      },
+
+      getParticipantStudentEmail: function (participant) {
+        return App.getField(participant, ["studentEmail", "Student Email"]);
+      },
+
+      getParticipantStudentMobile: function (participant) {
+        return App.formatPhoneNumber(App.getField(participant, ["studentMobile", "Student Mobile"]));
+      },
+
+      getParticipantParentName: function (participant) {
+        return App.getField(participant, ["parentName", "Parent Name"]);
+      },
+
+      getParticipantParentEmail: function (participant) {
+        return App.getField(participant, ["parentEmail", "Parent Email"]);
+      },
+
+      getParticipantParentPhone: function (participant) {
+        return App.formatPhoneNumber(App.getField(participant, ["parentPhone", "Parent Phone"]));
+      },
+
+      getParticipantAdditionalParentName: function (participant) {
+        return App.getField(participant, ["additionalParentName", "Additional Parent Name"]);
+      },
+
+      getParticipantAdditionalParentEmail: function (participant) {
+        return App.getField(participant, ["additionalParentEmail", "Additional Parent Email"]);
+      },
+
+      getParticipantAdditionalParentPhone: function (participant) {
+        return App.formatPhoneNumber(App.getField(participant, ["additionalParentPhone", "Additional Parent Phone"]));
+      },
+
+      getParticipantStudentId: function (participant) {
+        return App.getField(participant, ["studentId", "Student ID"]);
+      },
+
+      getParticipantSrn: function (participant) {
+        return App.getField(participant, ["srn", "SRN"]);
+      },
+
+      normaliseItemTitle: function (value) {
+        return String(value || "")
+          .trim()
+          .replace(/^[\s"'(]*\d+\s*[a-z]\s+/i, "")
+          .replace(/^[\s"'(]*(?:item\s*)?(?:\d+\s*)?[a-z]\s*[\).:\-–—]\s*/i, "")
+          .replace(/^[\s"'(]*\d+\s*[\).:\-–—]\s*/i, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      },
+
+      getItemKey: function (value) {
+        return App.normaliseItemTitle(value).toLowerCase();
+      },
+
+      getGroupStudentCount: function (group) {
+        var accepted = String((group && group.acceptedCount) || "").trim();
+        var allocated = String((group && (group.allocatedCount || group.count)) || "").trim();
+        return accepted || allocated;
+      },
+
+      parseParticipantCount: function (value) {
+        var number = Number(String(value || "").replace(/,/g, "").trim());
+        return Number.isFinite(number) ? number : 0;
+      },
+
+      getTotalGroupStudentCount: function () {
+        return (App.state.groups || []).reduce(function (total, group) {
+          return total + App.parseParticipantCount(App.getGroupStudentCount(group));
+        }, 0);
+      },
+
+      hasNotAcceptedAllocationCounts: function () {
+        return (App.state.groups || []).some(function (group) {
+          var accepted = String((group && group.acceptedCount) || "").trim();
+          var allocated = String((group && (group.allocatedCount || group.count)) || "").trim();
+          return !accepted && App.parseParticipantCount(allocated) > 0;
+        });
+      },
+
+      getTotalParticipantCount: function () {
+        return (App.state.participants || []).length + App.getTotalGroupStudentCount();
+      },
+
+      getParticipantTotalNote: function () {
+        return App.hasNotAcceptedAllocationCounts() ? "Includes not accepted yet allocations" : "";
+      },
+
+      getGroupStudentCountLabel: function (group) {
+        var accepted = String((group && group.acceptedCount) || "").trim();
+        var allocated = String((group && (group.allocatedCount || group.count)) || "").trim();
+        var count = accepted || allocated || "0";
+        var suffix = Number(count) === 1 ? "student" : "students";
+        return accepted ? count + " " + suffix : count + " " + suffix + " · Not accepted yet";
+      },
+
+      formatPhoneNumber: function (value) {
+        var original = String(value || "").trim();
+        if (!original) return "";
+        var digits = original.replace(/\D/g, "");
+        if (!digits) return original;
+        if (digits.indexOf("610") === 0) digits = "61" + digits.slice(3);
+        if (digits.indexOf("61") === 0 && digits.length === 11) {
+          var local = "0" + digits.slice(2);
+          if (/^04\d{8}$/.test(local)) return "+61 " + local.slice(1, 4) + " " + local.slice(4, 7) + " " + local.slice(7);
+          if (/^0[2378]\d{8}$/.test(local)) return "+61 " + local.slice(1, 2) + " " + local.slice(2, 6) + " " + local.slice(6);
+          return "+61 " + digits.slice(2);
+        }
+        if (digits.length === 9 && /^[23478]/.test(digits)) digits = "0" + digits;
+        if (/^04\d{8}$/.test(digits)) return digits.slice(0, 4) + " " + digits.slice(4, 7) + " " + digits.slice(7);
+        if (/^0[2378]\d{8}$/.test(digits)) return digits.slice(0, 2) + " " + digits.slice(2, 6) + " " + digits.slice(6);
+        return original;
+      },
+
+      getPhotoKey: function (participant) {
+        return App.getParticipantName(participant)
+          .replace(/\.[^.]+$/, "")
+          .replace(/\s*-\s*Headshot$/i, "")
+          .replace(/[\-_]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+      },
+
+      getParticipantPhotoUrl: function (participant, forceCache, size) {
+        if (!participant) return "";
+        var explicitId = App.getField(participant, ["photoId", "PhotoID", "Photo ID", "Photo Id", "Drive Photo ID", "headshotId", "Headshot ID"]);
+        if (explicitId) return App.normalisePhotoUrl(explicitId, size || 360);
+        var explicitUrl = App.getField(participant, ["photoUrl", "Photo URL", "PhotoURL", "Headshot URL", "HeadshotURL", "imageUrl", "Image URL"]);
+        if (!forceCache && explicitUrl) return App.normalisePhotoUrl(explicitUrl, size || 360);
+        var photo = App.state.photos[App.getPhotoKey(participant)] || {};
+        if (typeof photo === "string") return App.normalisePhotoUrl(photo, size || 360);
+        if (photo.fileId) return App.buildDriveThumbnailUrl(photo.fileId, size || 360);
+        return App.normalisePhotoUrl(photo.url || photo.thumbnailUrl || "", size || 360);
+      },
+
+      normalisePhotoUrl: function (value, size) {
+        var text = String(value || "").trim();
+        var fileId = App.extractDriveFileId(text);
+        if (fileId) return App.buildDriveThumbnailUrl(fileId, size || 360);
+        return text;
+      },
+
+      extractDriveFileId: function (value) {
+        var text = String(value || "").trim();
+        if (!text) return "";
+        var fileMatch = text.match(/\/file\/d\/([^/]+)/);
+        if (fileMatch) return fileMatch[1];
+        var idMatch = text.match(/[?&]id=([^&]+)/);
+        if (idMatch) return decodeURIComponent(idMatch[1]);
+        return /^[a-zA-Z0-9_-]{20,}$/.test(text) ? text : "";
+      },
+
+      buildDriveThumbnailUrl: function (fileId, size) {
+        return "https://drive.google.com/thumbnail?id=" + encodeURIComponent(fileId) + "&sz=w" + (size || 360);
+      },
+
+      showAvatarFallback: function (image) {
+        if (!image) return;
+        image.style.display = "none";
+        if (image.nextElementSibling) image.nextElementSibling.style.display = "grid";
+      },
+
+      getInitials: function (name) {
+        var parts = String(name || "").split(/\s+/).filter(Boolean);
+        var first = parts[0] ? parts[0].charAt(0) : "?";
+        var second = parts[1] ? parts[1].charAt(0) : "";
+        return first + second;
+      },
+
+      escapeHtml: function (value) {
+        return String(value === undefined || value === null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      },
+
+      escapeJs: function (value) {
+        return String(value === undefined || value === null ? "" : value)
+          .replace(/\\/g, "\\\\")
+          .replace(/'/g, "\\'")
+          .replace(/"/g, "&quot;")
+          .replace(/\n/g, " ")
+          .replace(/\r/g, " ");
+      },
+
+      getErrorMessage: function (error) {
+        return error && error.message ? error.message : String(error || "Unknown error");
+      }
+    });
+  </script>

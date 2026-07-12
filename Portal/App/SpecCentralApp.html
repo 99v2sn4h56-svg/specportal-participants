@@ -10,6 +10,8 @@
         staffTeam: [],
         announcements: [],
         notifications: [],
+        tasks: [],
+        recentActivity: [],
         rehearsals: [],
         todaysRehearsals: [],
         calendarData: null,
@@ -51,6 +53,7 @@
         systemStatus: {},
         dashboardStats: null,
         dashboardRenderTimer: null,
+        dashboardParticipantLoadAttempted: false,
         dashboardProfile: "operations",
         applicationVersion: "5",
         selectedParticipant: null,
@@ -101,7 +104,7 @@
         },
         staff: {
           title: "Staff",
-          description: "Staff context, roles and future permission sync.",
+          description: "Staff identity, role, team and effective platform access.",
           template: "page-staff"
         },
         operations: {
@@ -139,7 +142,6 @@
       init: function () {
         App.bootstrapState();
         App.restoreSidebarState();
-        App.bindGlobalSearch();
         App.loadConfig();
         App.navigate("dashboard");
       },
@@ -417,26 +419,6 @@
         App.navigate(App.state.navigationHistory[App.state.navigationIndex].page, { fromHistory: true });
       },
 
-      bindGlobalSearch: function () {
-        var search = document.getElementById("globalSearch");
-        if (!search) return;
-
-        search.addEventListener("input", function () {
-          App.navigate("participants");
-          var participantSearch = document.getElementById("participantSearch");
-          if (participantSearch) {
-            participantSearch.value = search.value;
-            App.ensurePortalDataLoaded()
-              .then(function () {
-                App.queueParticipantSearch();
-              })
-              .catch(function (error) {
-                App.notify("Participant search could not load: " + App.getErrorMessage(error));
-              });
-          }
-        });
-      },
-
       loadConfig: function () {
         App.services.request("config", "portalGetSpecCentralConfig", { timeoutMs: 30000 })
           .then(function (config) {
@@ -453,6 +435,8 @@
             App.state.attendanceSource = config.attendanceSource || "";
             App.state.announcements = config.announcements || [];
             App.state.notifications = config.notifications || [];
+            App.state.tasks = config.tasks || [];
+            App.state.recentActivity = config.recentActivity || [];
             App.state.rehearsals = config.rehearsals || [];
             App.state.todaysRehearsals = config.todaysRehearsals || [];
             App.state.attendanceEvents = config.attendanceEvents || [];
@@ -466,6 +450,7 @@
             App.renderStaffContext();
             App.renderStatusRibbon();
             App.renderNotifications();
+            App.renderNotificationCount();
             if (App.state.currentPage === "attendance") App.renderAttendancePage();
             if (App.state.currentPage === "dashboard") App.renderDashboardPage();
             if (App.state.currentPage === "calendar") App.renderCalendarPage();
@@ -698,6 +683,10 @@
       },
 
       renderDashboardPage: function () {
+        if (!App.state.ready && !App.state.loading.portalData && !App.state.dashboardParticipantLoadAttempted) {
+          App.state.dashboardParticipantLoadAttempted = true;
+          App.ensurePortalDataLoaded().catch(function () {});
+        }
         var greeting = document.getElementById("dashboardGreeting");
         var date = document.getElementById("dashboardDate");
         var staffName = document.getElementById("dashboardStaffName");
@@ -735,6 +724,8 @@
         App.renderUpcomingRehearsals();
         App.renderRecentActivity();
         App.renderAttendanceActionSummary();
+        App.renderDashboardTasks();
+        if (App.state.ready) App.renderDashboardRelationships();
       },
 
       renderAnnouncements: function () {
@@ -749,7 +740,7 @@
                 '<div class="moduleMeta">' + App.escapeHtml(item.body) + '</div>' +
               '</div>';
             }).join("")
-          : '<div class="empty">No announcements yet.</div>';
+          : App.emptyState("No active briefings", "There are no current announcements for your team.");
       },
 
       renderUpcomingRehearsals: function () {
@@ -759,16 +750,20 @@
         var rehearsals = (App.state.rehearsals || []).slice(0, 5);
         el.innerHTML = rehearsals.length
           ? rehearsals.map(App.renderRehearsalItem).join("")
-          : '<div class="empty">No upcoming rehearsals loaded yet.</div>';
+          : App.emptyState("Schedule clear", "No upcoming rehearsals are assigned or available.");
       },
 
       renderRecentActivity: function () {
         var el = document.getElementById("recentActivityFull");
         if (!el) return;
 
-        var searches = App.safeLoadJson("specPortalRecentSearches", []).slice(0, 4);
-        var viewed = App.safeLoadJson("specPortalRecentlyViewed", []).slice(0, 4);
+        var searches = App.safeLoadJson("specPortalRecentSearches", []).slice(0, 3);
+        var viewed = App.safeLoadJson("specPortalRecentlyViewed", []).slice(0, 3);
         var activity = [];
+
+        (App.state.recentActivity || []).slice(0, 6).forEach(function (item) {
+          activity.push((item.actor || "SpecCentral") + " · " + (item.action || "Platform activity") + (item.occurredAt ? " · " + App.formatAdministrationTimestamp(item.occurredAt) : ""));
+        });
 
         searches.forEach(function (term) {
           activity.push("Recent search: " + term);
@@ -780,16 +775,26 @@
 
         el.innerHTML = activity.length
           ? activity.map(function (line) { return '<div class="activityItem">' + App.escapeHtml(line) + '</div>'; }).join("")
-          : '<div class="empty">Recent searches and opened profiles will appear here.</div>';
+          : App.emptyState("No recent activity", "Platform events, opened profiles and searches will appear here.");
+      },
+
+      renderDashboardTasks: function () {
+        var el = document.getElementById("dashboardTasks");
+        if (!el) return;
+        var tasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).slice(0, 7);
+        el.innerHTML = tasks.length ? tasks.map(function (item) {
+          return '<button class="activityItem activityButton" type="button" onclick="App.navigate(\'operations\')"><strong>' + App.escapeHtml(item.title || item.task || "Task") + '</strong><span>' + App.escapeHtml([item.status, item.priority, item.dueDate].filter(Boolean).join(" · ")) + '</span></button>';
+        }).join("") : App.emptyState("No open tasks", "Your task queue has no pending work.");
       },
 
       renderAttendanceActionSummary: function () {
         var el = document.getElementById("attendanceActionSummary");
         if (!el) return;
 
-        el.innerHTML = App.state.attendanceUrl
-          ? 'Attendance app connected. Live action summaries will appear here next.'
-          : 'Configure the Attendance web app URL to show attendance actions here.';
+        if (!App.state.attendanceUrl) { el.innerHTML = App.errorState("Attendance unavailable", "The Attendance source is not configured for this environment."); return; }
+        var events = App.state.attendanceEvents || [];
+        var needsAction = events.filter(function (item) { var counts = item.attendanceCounts || item.counts || {}; return Number(counts["Not Marked"] || counts.Unmarked || counts.unmarked || 0) > 0; });
+        el.innerHTML = needsAction.length ? needsAction.slice(0, 5).map(function (item) { return '<button class="relationshipRow" type="button" onclick="App.openAttendanceEvent(\'' + App.escapeJs(item.sessionId || item.id) + '\',\'' + App.escapeJs(item.eventName || "Event") + '\')"><strong>' + App.escapeHtml(item.eventName || "Attendance roll") + '</strong><span>Review</span></button>'; }).join("") : App.emptyState("Attendance is current", "No connected rolls are reporting outstanding marks.");
       },
 
       getOutstandingActionCount: function () {
@@ -1030,7 +1035,12 @@
           (event.isRehearsal ? App.profileLine("Attendance", event.attendanceStatus || "Not connected") : "") +
           App.profileLine("Notes", event.notes) +
           App.profileLine("Source", event.sourceRow ? "Timeline row " + event.sourceRow : event.source || "Timeline") +
-          (event.attendanceSession ? '<button class="quickLink compact" type="button" onclick="App.openAttendanceEvent(\'' + App.escapeJs(event.attendanceSession.sessionId) + '\',\'' + App.escapeJs(event.title || event.event || "Event") + '\')">Open attendance roll →</button>' : '');
+          '<div class="profileActions">' +
+            (event.venue ? '<button class="quickLink compact" type="button" onclick="App.openVenueFromEvent(\'' + App.escapeJs(event.venue) + '\')">Venue</button>' : '') +
+            ((event.categories || []).length ? '<button class="quickLink compact" type="button" onclick="App.searchEventAssignments(\'' + App.escapeJs((event.categories || [])[0]) + '\')">Participants</button>' : '') +
+            (event.attendanceSession ? '<button class="quickLink compact" type="button" onclick="App.openAttendanceEvent(\'' + App.escapeJs(event.attendanceSession.sessionId) + '\',\'' + App.escapeJs(event.title || event.event || "Event") + '\')">Attendance roll →</button>' : '') +
+          '</div><div id="calendarEventRelationships" class="relationshipList">' + App.loadingState("Resolving affected participants") + '</div>';
+        App.loadCalendarEventRelationships(event.id);
       },
 
       goCalendarToday: function () {
@@ -1445,11 +1455,13 @@
           event.allocatedStaffCount ? event.allocatedStaffCount + " staff" : "",
           event.attendanceStatus || ""
         ].filter(Boolean).join(" · ");
+        var participantCount = event.attendanceSession && event.attendanceSession.studentCount || event.participantCount || "";
+        var attendanceLabel = event.attendanceSession ? "Attendance linked" : (event.isRehearsal ? "No attendance roll" : "Operational");
 
         return '<button class="dateItem" type="button" onclick="App.showCalendarEventDetail(\'' + App.escapeJs(event.id || title) + '\')">' +
           '<div class="dateBadge" style="background:' + App.escapeHtml(event.colour || "#fbcc39") + '">' + App.escapeHtml(date) + '</div>' +
           '<div><strong>' + App.escapeHtml(title) + '</strong><br>' +
-          '<span class="moduleMeta">' + App.escapeHtml(meta || "Timeline event") + '</span></div>' +
+          '<span class="moduleMeta">' + App.escapeHtml(meta || "Timeline event") + '</span><div class="eventIndicators"><span>' + App.escapeHtml(attendanceLabel) + '</span>' + (participantCount ? '<span>' + App.escapeHtml(participantCount) + ' participants</span>' : '') + '<span>' + App.escapeHtml(event.venue || "Venue TBC") + '</span></div></div>' +
         '</button>';
       },
 
@@ -1504,13 +1516,13 @@
         } else if (view === "users") {
           el.innerHTML = App.renderOperationsUsers(App.state.projectData.users || []);
         } else if (view === "data") {
-          el.innerHTML = '<div class="empty">Import Centre, acceptance syncing and reconciliation tools will appear here.</div>';
+          el.innerHTML = '<div class="adminModeBanner">Connected sources are read-only from this view.</div>' + App.renderDataTable((App.state.projectData.modules || []).map(function (item) { return { name: item.id, source: item.source, direction: item.direction, identity: item.identityField, status: item.canEdit ? "Capability available" : "Read only" }; }), ["name", "source", "direction", "identity", "status"]);
         } else if (view === "announcements") {
-          el.innerHTML = '<div class="empty">Announcement authoring will appear here once the source is connected.</div>';
+          el.innerHTML = (App.state.announcements || []).length ? (App.state.announcements || []).map(function (item) { return '<article class="announcementCard"><strong>' + App.escapeHtml(item.title) + '</strong><p>' + App.escapeHtml(item.body) + '</p></article>'; }).join("") : App.emptyState("No active announcements", "The announcement service has no current messages.");
         } else if (view === "integrations") {
           el.innerHTML = App.renderOperationsIntegrations();
         } else if (view === "diagnostics") {
-          el.innerHTML = '<div class="empty">Diagnostics and audit logs will appear here after backend instrumentation is connected.</div>';
+          el.innerHTML = App.renderDataTable(Object.keys(App.state.systemStatus || {}).map(function (key) { var item = App.state.systemStatus[key] || {}; return { service: item.label || key, status: item.status, lastRefresh: item.lastRefresh || "This session" }; }), ["service", "status", "lastRefresh"]);
         } else if (view === "table") {
           el.innerHTML = App.renderProjectTable(tasks);
         } else if (view === "milestones" || view === "projects") {
@@ -1536,7 +1548,7 @@
       },
 
       renderOperationsUsers: function (users) {
-        if (!users.length) return '<div class="empty">No users were returned by Staff Production Team.</div>';
+        if (!users.length) return App.emptyState("No staff records", "The Staff Production Team source returned no visible users.");
         return '<div class="adminModeBanner">Capability-based access · ' + users.length + ' known users</div>' +
           App.renderDataTable(users.map(function (user) {
             return {
@@ -1551,12 +1563,9 @@
       },
 
       renderOperationsEvents: function (events) {
-        var controls = App.state.adminMode
-          ? '<div class="adminActions"><button class="quickLink compact" type="button" disabled title="Editor foundation only">Add operational event</button></div>'
-          : '';
-        return controls + (events.length
+        return (events.length
           ? events.map(App.renderTimelineEventCard).join("")
-          : '<div class="empty">No operational events are currently in Timeline.</div>');
+          : App.emptyState("No operational events", "The authoritative Timeline has no operational events in this view."));
       },
 
       renderOperationsIntegrations: function () {
@@ -1815,7 +1824,7 @@
       },
 
       renderAdministrationModules: function () {
-        return App.renderAdministrationTable(App.filterAdministrationRows(App.state.administrationData.modules || []), ["id", "entityType", "source", "cache", "editable", "direction", "health", "readCapability", "editCapability", "actions", "futureEditor"], "module");
+        return App.renderAdministrationTable(App.filterAdministrationRows(App.state.administrationData.modules || []), ["id", "entityType", "source", "cache", "editable", "direction", "health", "readCapability", "editCapability", "actions", "interaction"], "module");
       },
 
       renderAdministrationSources: function () {
@@ -1847,7 +1856,7 @@
 
       renderAdministrationAudit: function () {
         var rows = (App.state.administrationData.audit || []).map(function (item) { return { id: item.id, name: item.action, entity: item.entity && (item.entity.type || item.entity.id) || "", user: item.actor, timestamp: item.occurredAt, action: item.action, workflow: item.details && item.details.workflowId || "", source: "AuditService", status: "Recorded", details: item.details }; });
-        return '<div class="adminActions"><button class="quickLink compact" type="button" disabled>Export audit</button></div>' + App.renderAdministrationTable(App.filterAdministrationRows(rows), ["name", "entity", "user", "timestamp", "workflow", "source", "status"], "audit");
+        return App.renderAdministrationTable(App.filterAdministrationRows(rows), ["name", "entity", "user", "timestamp", "workflow", "source", "status"], "audit");
       },
 
       renderAdministrationHealth: function () {
@@ -1895,7 +1904,7 @@
         drawer.hidden = false;
         drawer.innerHTML = '<div class="drawerHeader"><div><div class="scProfileKicker">' + App.escapeHtml(type || "record") + '</div><h3>' + App.escapeHtml(item.name || item.title || item.id || "Detail") + '</h3></div><button type="button" aria-label="Close detail" onclick="App.closeAdministrationDetail()">×</button></div>' +
           '<div class="drawerBody">' + Object.keys(item).filter(function (key) { return key !== "rawPermissions" && key !== "rawAccess"; }).map(function (key) { return '<div class="drawerField"><strong>' + App.escapeHtml(App.toTitle(key)) + '</strong><div>' + App.formatAdministrationValue(item[key]) + '</div></div>'; }).join("") + '</div>' +
-          '<div class="drawerActions"><button class="quickLink compact" type="button" disabled>Edit ' + App.escapeHtml(type || "record") + '</button><button class="quickLink compact" type="button" disabled>Manage permissions</button></div>';
+          '<div class="drawerActions"><span class="statusChip">Read-only platform record</span></div>';
       },
 
       closeAdministrationDetail: function () {

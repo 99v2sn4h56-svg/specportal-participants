@@ -1675,4 +1675,60 @@
         grid-template-columns: 1fr;
       }
     }
+    /* SC-UX-001 shared experience primitives */
+    :root { --focus-ring: 0 0 0 4px rgba(18,86,207,.16); --surface-hover:#f7f9fd; }
+    button, .panel, .moduleCard, .dateItem, .resultCard { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .navItem { display:flex; align-items:center; gap:10px; }
+    .navItem::before { content:attr(data-icon); width:25px; height:25px; display:grid; place-items:center; border-radius:8px; background:rgba(255,255,255,.12); font-size:10px; font-weight:900; }
+    .topBarActions { display:flex; align-items:center; gap:10px; width:min(520px,100%); justify-content:flex-end; }
+    .commandTrigger { width:min(430px,100%); display:flex; align-items:center; justify-content:space-between; border:1px solid var(--border); border-radius:14px; padding:11px 14px; color:var(--muted); background:#fff; box-shadow:var(--softShadow); text-align:left; }
+    .commandTrigger:hover { border-color:#9ab5e8; transform:translateY(-1px); }
+    kbd { border:1px solid var(--border); border-bottom-width:2px; border-radius:7px; padding:2px 7px; color:var(--muted); background:#f8fafc; font:600 11px Poppins,sans-serif; }
+    .notificationTrigger { position:relative; width:44px; height:44px; border:1px solid var(--border); border-radius:14px; color:var(--blue); background:#fff; }
+    .notificationTrigger span { position:absolute; right:-5px; top:-6px; min-width:20px; height:20px; display:grid; place-items:center; border-radius:10px; color:#fff; background:var(--red); font-size:10px; }
+    .commandCentre { position:fixed; inset:0; z-index:1000; display:grid; place-items:start center; padding:8vh 18px 18px; background:rgba(6,29,61,.48); backdrop-filter:blur(8px); }
+    .commandCentre[hidden], .experienceDrawer[hidden] { display:none; }
+    .commandPanel { width:min(760px,100%); max-height:82vh; display:flex; flex-direction:column; border:1px solid rgba(255,255,255,.5); border-radius:24px; padding:18px; background:#fff; box-shadow:0 32px 90px rgba(6,29,61,.3); animation:commandIn .18s ease-out; }
+    @keyframes commandIn { from { opacity:0; transform:translateY(-12px) scale(.98); } }
+    .commandHeader { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .commandHeader h3 { margin:2px 0 0; font-size:22px; }
+    .commandHeader > button { width:36px; height:36px; border:0; border-radius:10px; background:#f1f4f9; font-size:20px; }
+    .commandSearch { width:100%; margin:16px 0 12px; border:1px solid var(--border); border-radius:16px; padding:15px 17px; font:500 15px Poppins,sans-serif; box-shadow:var(--focus-ring); }
+    .commandQuickActions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+    .commandQuickActions button, .commandGroup button { border:1px solid var(--border); border-radius:13px; padding:11px; background:#fff; text-align:left; }
+    .commandQuickActions button:hover, .commandGroup button:hover { border-color:#9ab5e8; background:#f5f8ff; transform:translateY(-1px); }
+    .commandQuickActions strong, .commandQuickActions span, .commandGroup strong, .commandGroup button span { display:block; }
+    .commandQuickActions span, .commandGroup button span { margin-top:3px; color:var(--muted); font-size:10px; }
+    .commandResults { overflow:auto; padding-right:4px; }
+    .commandGroup { margin-top:12px; }
+    .commandGroup h4 { display:flex; justify-content:space-between; margin:0 0 7px; color:var(--muted); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+    .commandGroup button { width:100%; margin-bottom:6px; }
+    .experienceDrawer { position:fixed; z-index:1001; right:0; top:0; width:min(440px,100%); height:100vh; overflow:auto; padding:22px; border-left:1px solid var(--border); background:#fff; box-shadow:-20px 0 60px rgba(6,29,61,.2); animation:drawerIn .2s ease-out; }
+    @keyframes drawerIn { from { transform:translateX(30px); opacity:0; } }
+    .notificationFilters { display:flex; gap:7px; margin:18px 0; }
+    .notificationFilters button, .notificationCard button { border:1px solid var(--border); border-radius:999px; padding:7px 10px; background:#fff; font-size:11px; }
+    .notificationCard { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; margin-bottom:9px; padding:14px; border:1px solid var(--border); border-radius:16px; background:#fff; }
+    .notificationCard.unread { border-left:4px solid var(--blue); background:#f7faff; }
+    .notificationCard p { margin:7px 0; color:var(--muted); font-size:12px; }
+    .notificationCard > div:last-child { display:flex; flex-direction:column; gap:5px; }
+    .statePanel { min-height:128px; display:grid; place-items:center; align-content:center; gap:5px; padding:24px; border:1px dashed #cbd6e7; border-radius:18px; color:var(--muted); background:linear-gradient(145deg,#fbfcff,#f5f8fd); text-align:center; }
+    .statePanel strong { color:var(--navy); }
+    .statePanel small { max-width:440px; }
+    .stateIcon { width:34px; height:34px; display:grid; place-items:center; border-radius:12px; color:var(--blue); background:#eaf1ff; font-weight:900; }
+    .errorState { border-color:#f3c1c1; background:#fff8f8; }
+    .skeletonPulse { width:110px; height:10px; border-radius:8px; background:linear-gradient(90deg,#e8edf5,#f8faff,#e8edf5); background-size:200% 100%; animation:skeleton 1.2s linear infinite; }
+    @keyframes skeleton { to { background-position:-200% 0; } }
+    .relationshipList { display:grid; gap:7px; }
+    .relationshipRow { width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--border); border-radius:13px; padding:10px 12px; color:var(--text); background:#fff; text-align:left; }
+    .relationshipRow:hover { border-color:#9ab5e8; background:#f6f9ff; transform:translateX(2px); }
+    .relationshipRow span { color:var(--muted); font-size:11px; }
+    .activityButton { width:100%; border:0; display:flex; align-items:center; justify-content:space-between; gap:10px; text-align:left; }
+    .activityButton span { color:var(--muted); font-size:10px; }
+    .calendarDay:hover { border-color:#b7c9e8; box-shadow:0 8px 22px rgba(6,29,61,.08); }
+    .eventIndicators { display:flex; flex-wrap:wrap; gap:5px; margin-top:7px; }
+    .eventIndicators span { border-radius:999px; padding:3px 7px; color:#31517e; background:#edf3fc; font-size:9px; font-weight:700; }
+    .dateItem:hover, .resultCard:hover { transform:translateY(-2px); box-shadow:0 12px 28px rgba(6,29,61,.11); }
+    @media (max-width:760px) { .commandQuickActions { grid-template-columns:1fr 1fr; } .topBarActions { width:100%; } .commandTrigger { flex:1; } }
+    @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto!important; animation-duration:.01ms!important; transition-duration:.01ms!important; } }
   </style>

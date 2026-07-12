@@ -1,0 +1,163 @@
+<script>
+  Object.assign(App, {
+    commandSearchTimer: null,
+    notificationFilter: "all",
+
+    initExperience: function () {
+      document.addEventListener("keydown", function (event) {
+        if ((event.metaKey || event.ctrlKey) && String(event.key).toLowerCase() === "k") {
+          event.preventDefault();
+          App.openCommandCentre("search");
+        }
+        if (event.key === "Escape") {
+          App.closeCommandCentre();
+          App.closeNotificationCentre();
+        }
+      });
+      App.renderNotificationCount();
+    },
+
+    openCommandCentre: function () {
+      var centre = document.getElementById("commandCentre");
+      var input = document.getElementById("commandSearch");
+      if (!centre || !input) return;
+      centre.hidden = false;
+      document.body.classList.add("overlayOpen");
+      input.value = "";
+      App.renderCommandQuickActions();
+      App.renderCommandWelcome();
+      setTimeout(function () { input.focus(); }, 0);
+    },
+
+    closeCommandCentre: function (event) {
+      if (event && event.target && event.target.id !== "commandCentre") return;
+      var centre = document.getElementById("commandCentre");
+      if (centre) centre.hidden = true;
+      document.body.classList.remove("overlayOpen");
+    },
+
+    renderCommandQuickActions: function () {
+      var el = document.getElementById("commandQuickActions");
+      if (!el) return;
+      var actions = [
+        ["Calendar", "Review today and upcoming events", "calendar"],
+        ["Attendance", "Open live attendance operations", "attendance"],
+        ["Participants", "Find a participant or passport", "participants"],
+        ["Schools", "Browse school passports", "participants", "schools"],
+        ["Rehearsals", "Open the Timeline rehearsal view", "rehearsals"],
+        ["Operations", "Tasks, events and platform operations", "operations"]
+      ].filter(function (item) { return !App.pages[item[2]].permission || App.hasPermission(App.pages[item[2]].permission); });
+      el.innerHTML = actions.map(function (item) {
+        return '<button type="button" onclick="App.runCommandAction(\'' + App.escapeJs(item[2]) + '\',\'' + App.escapeJs(item[3] || "") + '\')"><strong>' + App.escapeHtml(item[0]) + '</strong><span>' + App.escapeHtml(item[1]) + '</span></button>';
+      }).join("");
+    },
+
+    runCommandAction: function (page, browse) {
+      App.closeCommandCentre();
+      App.navigate(page);
+      if (browse) setTimeout(function () { App.browseGlobal(browse); }, 0);
+    },
+
+    renderCommandWelcome: function () {
+      var el = document.getElementById("commandResults");
+      if (!el) return;
+      var recent = (App.state.recentlyViewed || []).slice(0, 5);
+      el.innerHTML = recent.length ? '<div class="commandGroup"><h4>Recently viewed</h4>' + recent.map(function (item) {
+        return '<button type="button" onclick="App.runCommandRecent(\'' + App.escapeJs(item.type) + '\',\'' + App.escapeJs(item.label) + '\')"><strong>' + App.escapeHtml(item.label) + '</strong><span>' + App.escapeHtml(App.toTitle(item.type)) + '</span></button>';
+      }).join("") + '</div>' : App.emptyState("Search the whole platform", "Try a participant, school, teacher, staff member, event, rehearsal, venue or attendance roll.");
+    },
+
+    runCommandRecent: function (type, label) {
+      var input = document.getElementById("commandSearch");
+      if (input) { input.value = label; App.runCommandSearch(); }
+    },
+
+    queueCommandSearch: function () {
+      clearTimeout(App.commandSearchTimer);
+      App.commandSearchTimer = setTimeout(App.runCommandSearch, 180);
+    },
+
+    runCommandSearch: function () {
+      var input = document.getElementById("commandSearch");
+      var el = document.getElementById("commandResults");
+      var query = String(input && input.value || "").trim();
+      if (!el) return;
+      if (query.length < 2) { App.renderCommandWelcome(); return; }
+      el.innerHTML = App.loadingState("Searching every connected source");
+      App.recordSearch(query);
+      App.services.request("platformSearch:" + query.toLowerCase(), "portalPlatformSearch", { args: [query, { limit: 60 }], cacheMs: 30000, timeoutMs: 45000 })
+        .then(function (results) { App.renderCommandResults(results || []); })
+        .catch(function (error) { el.innerHTML = App.errorState("Search could not be completed", App.getErrorMessage(error)); });
+    },
+
+    renderCommandResults: function (results) {
+      var el = document.getElementById("commandResults");
+      if (!el) return;
+      if (!results.length) { el.innerHTML = App.emptyState("No matching records", "Try a broader name, venue, school, staff member or event."); return; }
+      var groups = {};
+      results.forEach(function (item) { groups[item.entityType] = groups[item.entityType] || []; groups[item.entityType].push(item); });
+      el.innerHTML = Object.keys(groups).map(function (type) {
+        return '<div class="commandGroup"><h4>' + App.escapeHtml(App.toTitle(type)) + '<span>' + groups[type].length + '</span></h4>' + groups[type].map(function (item) {
+          return '<button type="button" onclick="App.openCommandResult(\'' + App.escapeJs(item.entityType) + '\',\'' + App.escapeJs(item.id) + '\',\'' + App.escapeJs(item.title) + '\')"><strong>' + App.escapeHtml(item.title) + '</strong><span>' + App.escapeHtml(item.meta || "") + '</span></button>';
+        }).join("") + '</div>';
+      }).join("");
+    },
+
+    openCommandResult: function (type, id, title) {
+      App.closeCommandCentre();
+      if (type === "attendance") { App.navigate("attendance"); setTimeout(function () { App.openAttendanceEvent(id, title); }, 0); return; }
+      if (type === "event" || type === "rehearsal") {
+        App.navigate("calendar"); App.loadCalendarData();
+        setTimeout(function waitForEvent() { if (!App.state.calendarData) { setTimeout(waitForEvent, 100); return; } App.showCalendarEventDetail(id); var detail = document.getElementById("calendarEventDetail"); if (detail) detail.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); return;
+      }
+      if (type === "venue") { App.navigate("calendar"); setTimeout(function () { var search = document.getElementById("calendarSearch"); if (search) { search.value = title; App.setCalendarView("agenda"); } }, 0); return; }
+      if (type === "staff") { App.navigate("staff"); return; }
+      App.navigate("participants");
+      App.ensurePortalDataLoaded().then(function () {
+        if (type === "school") App.renderSchoolProfile(App.buildSchoolProfile(title));
+        else if (type === "teacher") App.renderTeacherProfile(App.buildTeacherProfile(title));
+        else if (type === "group") { var group = App.state.groups.find(function (item) { return String(item.id) === String(id); }); if (group) App.renderGroupProfile(group); }
+        else { var participant = App.state.participants.find(function (item) { return String(item.id || item.studentKey) === String(id); }); if (participant) App.renderParticipantProfile(participant); }
+      });
+    },
+
+    openVenueFromEvent: function (venue) { App.navigate("calendar"); setTimeout(function () { var search = document.getElementById("calendarSearch"); if (search) search.value = venue; App.setCalendarView("agenda"); }, 0); },
+    searchEventAssignments: function (selection) { App.navigate("participants"); App.ensurePortalDataLoaded().then(function () { var search = document.getElementById("participantSearch"); if (search) { search.value = selection; App.runParticipantSearch(); } }); },
+    loadCalendarEventRelationships: function (eventId) {
+      var el = document.getElementById("calendarEventRelationships"); if (!el) return;
+      App.services.request("eventParticipants:" + eventId, "portalGetRelationship", { args: [{ action: "event-participants", eventId: eventId }], cacheMs: 60000, timeoutMs: 45000 })
+        .then(function (response) { var rows = response && response.data || []; if (!document.getElementById("calendarEventRelationships")) return; el.innerHTML = rows.length ? '<h4 class="sectionTitle">Affected participants</h4>' + rows.slice(0, 20).map(function (item) { return '<button class="relationshipRow" type="button" onclick="App.openCommandResult(\'participant\',\'' + App.escapeJs(item.id || item.studentKey) + '\',\'' + App.escapeJs(item.name) + '\')"><strong>' + App.escapeHtml(item.name) + '</strong><span>' + App.escapeHtml([item.school, item.item || item.category].filter(Boolean).join(" · ")) + '</span></button>'; }).join("") + (rows.length > 20 ? '<div class="moduleMeta">+' + (rows.length - 20) + ' more affected participants</div>' : '') : App.emptyState("No participant assignments", "This event is operational or its selections resolve to no participants."); })
+        .catch(function (error) { el.innerHTML = App.errorState("Relationships unavailable", App.getErrorMessage(error)); });
+    },
+
+    openNotificationCentre: function () { var drawer = document.getElementById("notificationCentre"); if (!drawer) return; drawer.hidden = false; App.renderNotificationCentre(); },
+    closeNotificationCentre: function () { var drawer = document.getElementById("notificationCentre"); if (drawer) drawer.hidden = true; },
+    setNotificationFilter: function (filter) { App.notificationFilter = filter; App.renderNotificationCentre(); },
+    getNotificationPrefs: function () { return App.safeLoadJson("specCentralNotificationPrefs", {}); },
+    toggleNotificationPref: function (id, key) { var prefs = App.getNotificationPrefs(); prefs[id] = prefs[id] || {}; prefs[id][key] = !prefs[id][key]; App.safeSaveJson("specCentralNotificationPrefs", prefs); App.renderNotificationCentre(); App.renderNotificationCount(); },
+    renderNotificationCount: function () { var prefs = App.getNotificationPrefs(); var count = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length; var el = document.getElementById("notificationCount"); if (el) el.textContent = count; },
+    renderNotificationCentre: function () {
+      var el = document.getElementById("notificationCentreList"); if (!el) return;
+      var prefs = App.getNotificationPrefs();
+      var rows = (App.state.notifications || []).filter(function (item) { var state = prefs[item.id] || {}; return App.notificationFilter === "unread" ? !state.read : App.notificationFilter === "pinned" ? state.pinned : true; });
+      el.innerHTML = rows.length ? rows.map(function (item) { var state = prefs[item.id] || {}; return '<article class="notificationCard ' + (state.read ? "read" : "unread") + '"><div><span class="statusChip">' + App.escapeHtml(item.severity || "Info") + '</span><strong>' + App.escapeHtml(item.title) + '</strong><p>' + App.escapeHtml(item.body) + '</p><small>' + App.escapeHtml(item.createdAt || "") + '</small></div><div><button type="button" onclick="App.toggleNotificationPref(\'' + App.escapeJs(item.id) + '\',\'pinned\')">' + (state.pinned ? "Unpin" : "Pin") + '</button><button type="button" onclick="App.toggleNotificationPref(\'' + App.escapeJs(item.id) + '\',\'read\')">' + (state.read ? "Unread" : "Read") + '</button></div></article>'; }).join("") : App.emptyState("You are caught up", "No notifications match this filter.");
+    },
+
+    loadingState: function (label) { return '<div class="statePanel loadingState"><span class="skeletonPulse"></span><strong>' + App.escapeHtml(label || "Loading") + '</strong><small>Fetching the latest connected data…</small></div>'; },
+    emptyState: function (title, detail) { return '<div class="statePanel"><span class="stateIcon">◇</span><strong>' + App.escapeHtml(title) + '</strong><small>' + App.escapeHtml(detail || "") + '</small></div>'; },
+    errorState: function (title, detail) { return '<div class="statePanel errorState"><span class="stateIcon">!</span><strong>' + App.escapeHtml(title) + '</strong><small>' + App.escapeHtml(detail || "") + '</small></div>'; },
+
+    renderDashboardRelationships: function () {
+      var department = String(App.state.staff.department || App.state.staff.team || "").toLowerCase();
+      var participants = App.state.participants || [];
+      var schools = {}, items = {};
+      participants.forEach(function (item) { var haystack = [item.category, item.discipline, item.subDiscipline, item.item].join(" ").toLowerCase(); if (department && haystack.indexOf(department) < 0) return; if (item.school) schools[item.school] = (schools[item.school] || 0) + 1; if (item.item) items[item.item] = (items[item.item] || 0) + 1; });
+      App.renderRelationshipList("dashboardMySchools", schools, "school");
+      App.renderRelationshipList("dashboardMyItems", items, "item");
+    },
+    renderRelationshipList: function (id, values, type) { var el = document.getElementById(id); if (!el) return; var rows = Object.keys(values).sort(function (a,b) { return values[b] - values[a]; }).slice(0,6); el.innerHTML = rows.length ? rows.map(function (name) { return '<button class="relationshipRow" type="button" onclick="App.openDashboardRelationship(\'' + type + '\',\'' + App.escapeJs(name) + '\')"><strong>' + App.escapeHtml(name) + '</strong><span>' + values[name] + '</span></button>'; }).join("") : App.emptyState("No scoped records", "Your current department has no directly matched participant records."); },
+    openDashboardRelationship: function (type, name) { App.navigate("participants"); App.ensurePortalDataLoaded().then(function () { if (type === "school") App.renderSchoolProfile(App.buildSchoolProfile(name)); else App.renderItemProfile(App.buildItemProfile(name)); }); }
+  });
+
+  App.initExperience();
+</script>

@@ -8,6 +8,8 @@ const DashboardService = (() => {
     const announcements = safeCall_("AnnouncementService.getActive", () => AnnouncementService.getActive(), []);
     const notifications = safeCall_("NotificationService.getForCurrentUser", () => NotificationService.getForCurrentUser(), []);
     const workflowSummary = safeCall_("Workflow platform summary", () => ({ queue: OperationsQueueService.summary(), tasks: TaskService.summary(staff.email || "") }), {});
+    const tasks = safeCall_("TaskService.list", () => TaskService.list().filter(task => !task.assignedUser || task.assignedUser === staff.email).slice(0, 12), []);
+    const audit = safeCall_("AuditService.list", () => AuditService.list(12), []);
 
     return {
       staff,
@@ -21,6 +23,8 @@ const DashboardService = (() => {
       announcements,
       notifications,
       workflowSummary,
+      tasks,
+      recentActivity: audit,
       dashboardProfile: getDashboardProfile_(staff),
       rehearsals: timeline.upcomingRehearsals || [],
       todaysRehearsals: timeline.todaysRehearsals || [],

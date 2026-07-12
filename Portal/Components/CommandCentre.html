@@ -1,0 +1,14 @@
+<div id="commandCentre" class="commandCentre" hidden onclick="App.closeCommandCentre(event)">
+  <section class="commandPanel" role="dialog" aria-modal="true" aria-labelledby="commandCentreTitle" onclick="event.stopPropagation()">
+    <div class="commandHeader"><div><div class="scProfileKicker">Navigate · search · act</div><h3 id="commandCentreTitle">Command Centre</h3></div><button type="button" onclick="App.closeCommandCentre()" aria-label="Close">×</button></div>
+    <input id="commandSearch" class="commandSearch" type="search" placeholder="Search people, schools, staff, events, venues or attendance..." autocomplete="off" oninput="App.queueCommandSearch()">
+    <div id="commandQuickActions" class="commandQuickActions"></div>
+    <div id="commandResults" class="commandResults" aria-live="polite"></div>
+  </section>
+</div>
+
+<aside id="notificationCentre" class="experienceDrawer" hidden aria-live="polite">
+  <div class="commandHeader"><div><div class="scProfileKicker">Live platform feed</div><h3>Notifications</h3></div><button type="button" onclick="App.closeNotificationCentre()" aria-label="Close">×</button></div>
+  <div class="notificationFilters"><button type="button" onclick="App.setNotificationFilter('all')">All</button><button type="button" onclick="App.setNotificationFilter('unread')">Unread</button><button type="button" onclick="App.setNotificationFilter('pinned')">Pinned</button></div>
+  <div id="notificationCentreList"></div>
+</aside>

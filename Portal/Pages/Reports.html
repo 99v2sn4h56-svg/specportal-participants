@@ -1,6 +1,7 @@
 <template id="page-reports">
   <section class="panel">
-    <h3 class="sectionTitle">Reports</h3>
-    <div class="empty">Reports, exports and operational data checks are placeholders for now.</div>
+    <h3 class="sectionTitle">Operational Reporting</h3>
+    <div class="moduleNote">Use the live source views below for current operational reporting. No separate reporting dataset is maintained.</div>
+    <div class="quickLinks"><button class="quickLink" type="button" onclick="App.navigate('attendance')">Attendance metrics</button><button class="quickLink" type="button" onclick="App.navigate('calendar')">Timeline schedule</button><button class="quickLink" type="button" data-permission="Administration.View" onclick="App.navigate('administration')">Platform health</button></div>
   </section>
 </template>
