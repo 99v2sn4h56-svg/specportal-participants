@@ -23,7 +23,7 @@ const StaffService = (() => {
       const indexes = {
         name: findHeaderIndex_(headers, ["name", "staff name", "full name", "preferred name"]),
         firstName: findHeaderIndex_(headers, ["first name", "given name"]),
-        lastName: findHeaderIndex_(headers, ["last name", "surname", "family name"]),
+        lastName: findHeaderIndex_(headers, ["last name", "second name", "surname", "family name"]),
         email: findPreferredHeaderIndex_(headers, ["speccentral email", "email", "email address", "det email", "work email"]),
         primaryEmail: findPreferredHeaderIndex_(headers, ["speccentral email", "primary det email", "primary email", "det email", "work email", "email", "email address"]),
         secondaryEmail: findHeaderIndex_(headers, ["secondary email", "alternate email", "alternative email", "email 2"]),
@@ -231,11 +231,22 @@ const StaffService = (() => {
 
   function findStaffSource_(sheets) {
     let best = { values: [], headerRowIndex: 0, score: -1 };
+    const dedicated = (sheets || []).find(sheet => ["speccentral", "seccentral"].includes(normaliseHeading_(sheet.getName())));
+    if (dedicated) {
+      const values = dedicated.getDataRange().getValues();
+      if (values.length) {
+        const headerRowIndex = findHeaderRow_(values);
+        const row = values[headerRowIndex].map(value => normaliseHeading_(value));
+        if (row.includes("speccentral email") && row.includes("speccentral role")) {
+          return { values, headerRowIndex, score: Number.MAX_SAFE_INTEGER };
+        }
+      }
+    }
     (sheets || []).forEach(sheet => {
       const values = sheet.getDataRange().getValues();
       if (!values.length) return;
       const headerRowIndex = findHeaderRow_(values);
-      const row = values[headerRowIndex].map(value => String(value || "").trim().toLowerCase());
+      const row = values[headerRowIndex].map(value => normaliseHeading_(value));
       const score = scoreHeaderRow_(row);
       if (score > best.score) best = { values, headerRowIndex, score };
     });
@@ -246,6 +257,10 @@ const StaffService = (() => {
     const headings = ["speccentral email", "email", "email address", "name", "staff name", "speccentral role", "role", "team", "position"];
     const matches = (row || []).filter(value => headings.includes(value)).length;
     return matches + ((row || []).includes("speccentral email") ? 10 : 0) + ((row || []).includes("speccentral role") ? 5 : 0);
+  }
+
+  function normaliseHeading_(value) {
+    return String(value || "").trim().toLowerCase();
   }
 
   function findHeaderIndex_(headers, aliases) {
