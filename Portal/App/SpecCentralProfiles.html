@@ -56,6 +56,7 @@
       renderParticipantProfile: function (participant) {
         var panel = document.getElementById("participantProfilePanel");
         if (!panel) return;
+        panel.hidden = false;
 
         var photo = App.getParticipantPhotoUrl(participant, false, 480);
         var name = App.getParticipantName(participant) || "Unnamed participant";
@@ -70,6 +71,7 @@
         App.setWorkspaceBreadcrumb(["Participants", name]);
 
         panel.innerHTML =
+          '<button class="participantProfileClose" type="button" onclick="App.closeParticipantProfile()" aria-label="Close Participant Passport">×</button>' +
           '<div class="scProfileCard">' +
             '<div class="scProfileHero student">' +
               '<div class="scProfileKicker">Participant Passport</div>' +
@@ -115,6 +117,12 @@
           '</div>';
         App.loadParticipantAttendanceHistory(participant);
         App.loadParticipantRehearsalSchedule(participant);
+      },
+
+      closeParticipantProfile: function () {
+        var panel = document.getElementById("participantProfilePanel");
+        if (panel) { panel.hidden = true; panel.innerHTML = ""; }
+        App.state.selectedParticipant = null;
       },
 
       loadParticipantRehearsalSchedule: function (participant) {
