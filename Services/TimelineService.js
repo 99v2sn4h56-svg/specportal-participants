@@ -23,7 +23,7 @@ const TimelineService = (() => {
       throw new Error("Timeline data is unavailable.");
     }
 
-    let events = rehearsals.map(normaliseTimelineEvent_);
+    let events = rehearsals.map(normaliseTimelineEvent_).filter(event => event.status !== "Archived");
     if (opts.rehearsalsOnly) events = events.filter(event => event.eventType === "Rehearsal");
     if (opts.upcomingOnly) {
       const todayKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
@@ -91,6 +91,7 @@ const TimelineService = (() => {
       status: rehearsal.status || "Upcoming",
       colour: rehearsal.colour || "#2d67b2",
       sourceRow: rehearsal.sourceRow || "",
+      fingerprint: rehearsal.fingerprint || "",
       notes: rehearsal.notes || "",
       source: "Timeline",
       raw: rehearsal.raw || {}
@@ -98,8 +99,7 @@ const TimelineService = (() => {
   }
 
   function canViewOperationalEvents_() {
-    return UserContextService.hasCapability("Calendar.Operational.View") ||
-      UserContextService.hasCapability("Operations.Admin");
+    return UserContextService.hasCapability("Calendar.View");
   }
 
   return {

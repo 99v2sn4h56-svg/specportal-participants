@@ -4,7 +4,7 @@ const SourceRegistryService = (() => {
     timeline: { spreadsheetId: "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog", sheetName: "Operation Schedule" }
   };
   const REGISTRY = [
-    entry("timeline", "TimelineEvent", "Timeline spreadsheet / Operation Schedule", "read-now-write-later", "eventId", true, 300, "Timeline.Edit", ["add", "edit", "duplicate", "delete", "move", "cancel", "assign-students", "assign-groups", "assign-staff"]),
+    entry("timeline", "TimelineEvent", "Timeline spreadsheet / Operation Schedule", "read-write-admin", "eventId", true, 300, "Timeline.Edit", ["add", "edit", "duplicate", "move", "cancel", "archive", "assign-students", "assign-groups", "assign-staff"]),
     entry("calendar", "CalendarEvent", "Timeline projection", "derived-read", "eventId", false, 120, "Calendar.Edit", []),
     entry("participants", "Participant", "Participants spreadsheet / INDIVIDUALS(YES)", "read-now-write-later", "studentKey", true, 120, "Participants.Edit", ["edit", "change-school", "change-item", "merge", "accept", "reject"]),
     entry("schools", "School", "Participants spreadsheet / Schools Master Dataset", "read-now-write-later", "schoolId", true, 300, "Participants.Edit", ["add", "edit", "merge"]),
@@ -32,6 +32,6 @@ const SourceRegistryService = (() => {
   function get(id) { return REGISTRY.find(item => item.id === id) || null; }
   function getSourceConfig(id) { return Object.assign({}, SOURCE_CONFIGS[id] || {}); }
   function getAll() { return REGISTRY.map(item => Object.assign({}, item, { actions: item.actions.slice() })); }
-  function getForUser(user) { return getAll().map(item => Object.assign(item, { canEdit: item.editable && AuthorizationService.hasCapability(user, item.editCapability) })); }
+  function getForUser(user) { return getAll().map(item => Object.assign(item, { canEdit: item.editable && AuthorizationService.hasCapability(user, item.editCapability) && (item.id !== "timeline" || (!!(user && user.isAdmin) && AuthorizationService.hasCapability(user, "Administration.View"))) })); }
   return { get, getAll, getForUser, getSourceConfig };
 })();

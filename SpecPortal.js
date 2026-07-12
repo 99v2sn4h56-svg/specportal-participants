@@ -219,6 +219,18 @@ function portalGetCalendarData() {
   return TimelineService.getCalendarData();
 }
 
+function portalSaveTimelineEvent(command) {
+  return TimelineWriteService.save(command || {});
+}
+
+function portalDuplicateTimelineEvent(command) {
+  return TimelineWriteService.duplicate(command || {});
+}
+
+function portalSetTimelineEventStatus(command) {
+  return TimelineWriteService.setStatus(command || {});
+}
+
 function portalGetAttendanceConfig() {
   requirePortalCapability_("Attendance.View");
   return AttendanceService.getConfig();

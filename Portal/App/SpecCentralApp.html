@@ -18,6 +18,8 @@
         calendarDate: new Date(),
         calendarView: "month",
         selectedCalendarEvent: null,
+        timelineEditorEvent: null,
+        timelineMutationPending: false,
         projectData: null,
         projectView: "board",
         mediaData: null,
@@ -986,13 +988,13 @@
           (App.getParticipantTotalNote() ? " - " + App.getParticipantTotalNote() : "");
       },
 
-      loadCalendarData: function () {
+      loadCalendarData: function (forceRefresh) {
         if (App.state.calendarData) return;
 
         var source = document.getElementById("calendarSource");
         if (source) source.textContent = "Loading Timeline events...";
 
-        App.services.request("calendar", "portalGetCalendarData", { cacheMs: 120000, timeoutMs: 30000 })
+        return App.services.request("calendar", "portalGetCalendarData", { cacheMs: 120000, timeoutMs: 30000, forceRefresh: !!forceRefresh })
           .then(function (data) {
             App.state.calendarData = data || { events: [] };
             App.state.rehearsals = App.state.calendarData.events || App.state.rehearsals || [];
@@ -1143,6 +1145,7 @@
           App.profileLine("Venue", event.venue) +
           App.profileLine("Area", event.area) +
           App.profileLine("Event classification", event.eventType) +
+          App.profileLine("Status", event.status) +
           App.profileLine("Type", event.type || event.rehearsalType) +
           App.profileLine("Categories", (event.categories || []).join(", ")) +
           App.profileLine("School groups", (event.schoolGroups || []).join(", ")) +
@@ -1158,6 +1161,7 @@
             (event.venue ? '<button class="quickLink compact" type="button" onclick="App.openVenueFromEvent(\'' + App.escapeJs(event.venue) + '\')">Venue</button>' : '') +
             ((event.categories || []).length ? '<button class="quickLink compact" type="button" onclick="App.searchEventAssignments(\'' + App.escapeJs((event.categories || [])[0]) + '\')">Participants</button>' : '') +
             (event.attendanceSession ? '<button class="quickLink compact" type="button" onclick="App.openAttendanceEvent(\'' + App.escapeJs(event.attendanceSession.sessionId) + '\',\'' + App.escapeJs(event.title || event.event || "Event") + '\')">Attendance roll →</button>' : '') +
+            (App.canEditTimeline() ? '<button class="quickLink compact" type="button" onclick="App.openTimelineEditor(\'' + App.escapeJs(event.id || event.eventId) + '\')">Edit Timeline event</button>' : '') +
           '</div><div id="calendarEventRelationships" class="relationshipList">' + App.loadingState("Resolving affected participants") + '</div>';
         App.loadCalendarEventRelationships(event.id);
       },
@@ -1728,7 +1732,100 @@
       },
 
       renderOperationsTimeline: function (events) {
-        return '<div class="operationsWorkspaceHeader"><div><h4>Authoritative Timeline</h4><span>' + events.length + ' scheduled records</span></div><button class="quickLink compact" type="button" onclick="App.navigate(\'calendar\')">Open calendar view</button></div><div class="operationsFilterBar"><input id="operationsTimelineSearch" class="participantSearch" type="search" placeholder="Search event, venue, area, staff or assignment..." oninput="App.filterOperationsTimeline(this.value)"><select id="operationsTimelineType" class="filterSelect" onchange="App.filterOperationsTimeline()"><option value="">All classifications</option><option>Rehearsal</option><option>Operational Event</option></select></div><div id="operationsTimelineList" class="operationsEventGrid">' + (events.length ? events.slice().sort(App.sortEvents).map(App.renderOperationsEventCard).join("") : App.emptyState("Timeline is empty", "No Timeline events are currently visible.")) + '</div>';
+        var canEdit = App.canEditTimeline();
+        var actions = '<button class="quickLink compact" type="button" onclick="App.navigate(\'calendar\')">Open calendar view</button>' + (canEdit ? '<button class="quickLink compact primaryAction" type="button" onclick="App.openTimelineEditor()">New event</button>' : "");
+        return '<div class="operationsWorkspaceHeader"><div><h4>Authoritative Timeline</h4><span>' + events.length + ' scheduled records · ' + (canEdit ? "Administrator editing enabled" : "Read only") + '</span></div><div class="toolbarActions">' + actions + '</div></div><div class="operationsFilterBar"><input id="operationsTimelineSearch" class="participantSearch" type="search" placeholder="Search event, venue, area, staff or assignment..." oninput="App.filterOperationsTimeline(this.value)"><select id="operationsTimelineType" class="filterSelect" onchange="App.filterOperationsTimeline()"><option value="">All classifications</option><option>Rehearsal</option><option>Operational Event</option></select></div><div id="operationsTimelineList" class="operationsEventGrid timelineManagementGrid">' + (events.length ? events.slice().sort(App.sortEvents).map(App.renderTimelineManagementCard).join("") : App.emptyState("Timeline is empty", "No Timeline events are currently visible.")) + '</div>';
+      },
+
+      renderTimelineManagementCard: function (event) {
+        var canEdit = App.canEditTimeline();
+        return '<article class="timelineManagementCard ' + (event.status === "Cancelled" ? "cancelled" : "") + '"><button class="timelineCardMain" type="button" onclick="App.openOperationsEvent(\'' + App.escapeJs(event.id || event.eventId) + '\')"><span class="dateBadge" style="background:' + App.escapeHtml(event.colour || "#2d67b2") + '">' + App.escapeHtml(event.start || event.date || "TBC") + '</span><span><strong>' + App.escapeHtml(event.title || event.event || "Event") + '</strong><small>' + App.escapeHtml([event.date, event.venue, event.area, event.status, (event.staff || []).join(", ")].filter(Boolean).join(" · ")) + '</small></span></button>' + (canEdit ? '<button class="timelineEditButton" type="button" onclick="App.openTimelineEditor(\'' + App.escapeJs(event.id || event.eventId) + '\')" aria-label="Edit ' + App.escapeHtml(event.title || event.event || "event") + '">Edit</button>' : "") + '</article>';
+      },
+
+      openTimelineEditor: function (id) {
+        if (!App.canEditTimeline()) { App.notify("Administrator Timeline access is required."); return; }
+        var events = ((App.state.projectData || {}).timelineEvents || []).concat((App.state.calendarData && App.state.calendarData.events) || []);
+        var event = id ? events.find(function (item) { return String(item.id || item.eventId) === String(id); }) : null;
+        App.state.timelineEditorEvent = event || { categories: [], schoolGroups: [], studentGroups: [], individualStudents: [], staff: [], status: "Active" };
+        App.renderTimelineEditor();
+      },
+
+      canEditTimeline: function () {
+        return !!App.state.staff.isAdmin && App.hasActualPermission("Administration.View") && App.hasActualPermission("Timeline.Edit") && App.hasPermission("Administration.View") && App.hasPermission("Timeline.Edit");
+      },
+
+      renderTimelineEditor: function () {
+        var drawer = document.getElementById("timelineEditorDrawer");
+        if (!drawer) return;
+        var event = App.state.timelineEditorEvent || {};
+        var editing = !!event.sourceRow;
+        var value = function (input) { return App.escapeHtml(input || ""); };
+        var list = function (input) { return value((input || []).join("\n")); };
+        var statusActions = editing ? '<button class="quickLink" type="button" onclick="App.duplicateTimelineEvent()">Duplicate</button>' + (event.status === "Cancelled" || event.status === "Draft" ? '<button class="quickLink" type="button" onclick="App.setTimelineEventStatus(\'Active\')">Set active</button>' : '<button class="quickLink dangerAction" type="button" onclick="App.setTimelineEventStatus(\'Cancelled\')">Cancel event</button>') + '<button class="quickLink" type="button" onclick="App.setTimelineEventStatus(\'Archived\')">Archive</button>' : "";
+        drawer.hidden = false;
+        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">Authoritative Timeline</span><h3>' + (editing ? "Edit event" : "Create event") + '</h3></div><button type="button" onclick="App.closeTimelineEditor()" aria-label="Close Timeline editor">×</button></div><div class="drawerBody timelineEditorForm">' +
+          '<input id="timelineEditEventId" type="hidden" value="' + value(event.eventId || "") + '"><input id="timelineEditSourceRow" type="hidden" value="' + value(event.sourceRow || "") + '"><input id="timelineEditFingerprint" type="hidden" value="' + value(event.fingerprint || "") + '">' +
+          '<label class="span2"><span>Event name</span><input id="timelineEditTitle" required maxlength="250" value="' + value(event.title || event.event) + '"></label>' +
+          '<label><span>Date</span><input id="timelineEditDate" type="date" required value="' + value(event.dateKey || "") + '"></label><label><span>Area / department</span><input id="timelineEditArea" value="' + value(event.area) + '"></label>' +
+          '<label><span>Start time</span><input id="timelineEditStart" value="' + value(event.start) + '"></label><label><span>Finish time</span><input id="timelineEditFinish" value="' + value(event.finish) + '"></label>' +
+          '<label class="span2"><span>Location / venue</span><input id="timelineEditVenue" value="' + value(event.venue) + '"></label>' +
+          '<label><span>Categories</span><textarea id="timelineEditCategories" rows="4" placeholder="One selection per line">' + list(event.categories) + '</textarea></label><label><span>School groups</span><textarea id="timelineEditSchoolGroups" rows="4" placeholder="One selection per line">' + list(event.schoolGroups) + '</textarea></label>' +
+          '<label><span>Individual student groups</span><textarea id="timelineEditStudentGroups" rows="4" placeholder="One selection per line">' + list(event.studentGroups) + '</textarea></label><label><span>Individual students</span><textarea id="timelineEditStudents" rows="4" placeholder="One selection per line">' + list(event.individualStudents) + '</textarea></label>' +
+          '<label class="span2"><span>Staff</span><textarea id="timelineEditStaff" rows="3" placeholder="One staff member per line">' + list(event.staff) + '</textarea></label><label class="span2"><span>Notes</span><textarea id="timelineEditNotes" rows="4" maxlength="2000">' + value(event.notes) + '</textarea></label>' +
+          '</div><div class="drawerActions timelineEditorActions"><button class="quickLink" type="button" onclick="App.saveTimelineEditor()">' + (editing ? "Save changes" : "Create event") + '</button>' + statusActions + '</div>';
+      },
+
+      closeTimelineEditor: function () {
+        var drawer = document.getElementById("timelineEditorDrawer");
+        if (drawer) { drawer.hidden = true; drawer.innerHTML = ""; }
+        App.state.timelineEditorEvent = null;
+      },
+
+      collectTimelineEditor: function () {
+        var read = function (id) { return String((document.getElementById(id) || {}).value || "").trim(); };
+        var lines = function (id) { return read(id).split(/[,;\n]+/).map(function (item) { return item.trim(); }).filter(Boolean); };
+        return { eventId: read("timelineEditEventId"), sourceRow: Number(read("timelineEditSourceRow")) || 0, fingerprint: read("timelineEditFingerprint"), title: read("timelineEditTitle"), date: read("timelineEditDate"), area: read("timelineEditArea"), start: read("timelineEditStart"), finish: read("timelineEditFinish"), venue: read("timelineEditVenue"), categories: lines("timelineEditCategories"), schoolGroups: lines("timelineEditSchoolGroups"), studentGroups: lines("timelineEditStudentGroups"), individualStudents: lines("timelineEditStudents"), staff: lines("timelineEditStaff"), notes: read("timelineEditNotes"), status: (App.state.timelineEditorEvent || {}).status || "Active" };
+      },
+
+      saveTimelineEditor: function () {
+        var command = App.collectTimelineEditor();
+        if (!command.title || !command.date) { App.notify("Event name and date are required."); return; }
+        App.runTimelineMutation("portalSaveTimelineEvent", command, command.sourceRow ? "Timeline event updated." : "Timeline event created.");
+      },
+
+      duplicateTimelineEvent: function () {
+        var command = App.collectTimelineEditor();
+        if (!command.sourceRow || !window.confirm("Create a draft copy of this event?")) return;
+        App.runTimelineMutation("portalDuplicateTimelineEvent", command, "Timeline event duplicated as a draft.");
+      },
+
+      setTimelineEventStatus: function (status) {
+        var command = App.collectTimelineEditor();
+        var prompt = status === "Cancelled" ? "Cancel this event? Existing Attendance history will be preserved." : status === "Archived" ? "Archive this event and hide it from Calendar views?" : "Set this event back to active?";
+        if (!command.sourceRow || !window.confirm(prompt)) return;
+        command.status = status;
+        App.runTimelineMutation("portalSetTimelineEventStatus", command, "Timeline event marked " + status.toLowerCase() + ".");
+      },
+
+      runTimelineMutation: function (serverFunction, command, message) {
+        if (App.state.timelineMutationPending) return;
+        App.state.timelineMutationPending = true;
+        App.services.request("timelineMutation", serverFunction, { args: [command], forceRefresh: true, timeoutMs: 45000 })
+          .then(function () {
+            App.closeTimelineEditor();
+            App.state.calendarData = null;
+            App.notify(message);
+            App.loadCalendarData(true).then(function (data) {
+              var events = data && data.events;
+              if (App.state.projectData && Array.isArray(events)) {
+                App.state.projectData.timelineEvents = events;
+                App.state.projectData.events = events.filter(function (event) { return event.eventType === "Operational Event"; });
+              }
+              if (App.state.currentPage === "operations") App.renderOperationsPage();
+            });
+          })
+          .catch(function (error) { App.notify("Timeline change failed: " + App.getErrorMessage(error)); })
+          .finally(function () { App.state.timelineMutationPending = false; });
       },
 
       filterOperationsTimeline: function (query) {
@@ -1741,7 +1838,7 @@
           var haystack = [item.title, item.event, item.venue, item.area, item.eventType, (item.staff || []).join(" "), (item.items || []).join(" ")].join(" ").toLowerCase();
           return (!text || haystack.indexOf(text) >= 0) && (!type || item.eventType === type);
         }).sort(App.sortEvents);
-        el.innerHTML = events.length ? events.map(App.renderOperationsEventCard).join("") : App.emptyState("No matching events", "Adjust the Timeline search or classification filter.");
+        el.innerHTML = events.length ? events.map(App.renderTimelineManagementCard).join("") : App.emptyState("No matching events", "Adjust the Timeline search or classification filter.");
       },
 
       renderOperationsUsers: function (users) {
@@ -1771,8 +1868,8 @@
         }).join("") + '</div>';
       },
 
-      loadOperationsData: function () {
-        App.services.request("operations", "portalGetOperationsData", { cacheMs: 120000, timeoutMs: 30000 })
+      loadOperationsData: function (forceRefresh) {
+        App.services.request("operations", "portalGetOperationsData", { cacheMs: 120000, timeoutMs: 30000, forceRefresh: !!forceRefresh })
           .then(function (data) {
             App.state.projectData = data || { tasks: [] };
             if (App.state.currentPage === "operations") App.renderOperationsPage();

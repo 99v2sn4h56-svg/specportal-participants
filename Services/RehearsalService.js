@@ -199,6 +199,7 @@ const RehearsalService = (() => {
       "Comments",
       "Comment"
     ]);
+    const status = getFirstValue_(raw, ["Status", "Event Status", "Timeline Status"]) || "Active";
 
     const categories = parseItems_(getFirstValue_(raw, [
       "Categories", "Category", "Individual", "Event Categories", "Category Selection"
@@ -222,6 +223,7 @@ const RehearsalService = (() => {
       eventId,
       legacyIds: [`TIMELINE-${rowNumber}`, `REH-${rowNumber}`],
       sourceRow: rowNumber,
+      fingerprint: fingerprint_(row),
       dateDisplay,
       dateKey,
       day: inferDay_(dateDisplay),
@@ -235,6 +237,7 @@ const RehearsalService = (() => {
       eventType,
       isRehearsal,
       isOperational: !isRehearsal,
+      status,
       notes,
       colour: colourForType_(type),
       categories,
@@ -360,6 +363,12 @@ const RehearsalService = (() => {
     if (value.includes("circus")) return "#ef4343";
 
     return "#667085";
+  }
+
+  function fingerprint_(row) {
+    return Utilities.base64EncodeWebSafe(
+      Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(row || []))
+    ).replace(/=+$/, "").slice(0, 24);
   }
 
   return {
