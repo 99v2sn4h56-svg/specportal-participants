@@ -149,14 +149,17 @@
 
     renderDashboardRelationships: function () {
       var department = String(App.state.staff.department || App.state.staff.team || "").toLowerCase();
+      var assignedItems = (App.state.staff.assignedItems || []).map(function (item) { return String(item).toLowerCase(); });
       var participants = App.state.participants || [];
       var schools = {}, items = {};
-      participants.forEach(function (item) { var haystack = [item.category, item.discipline, item.subDiscipline, item.item].join(" ").toLowerCase(); if (department && haystack.indexOf(department) < 0) return; if (item.school) schools[item.school] = (schools[item.school] || 0) + 1; if (item.item) items[item.item] = (items[item.item] || 0) + 1; });
+      participants.forEach(function (item) { var haystack = [item.category, item.discipline, item.subDiscipline, item.item].join(" ").toLowerCase(); var relevant = assignedItems.length ? assignedItems.some(function (assigned) { return haystack.indexOf(assigned) >= 0; }) : !department || haystack.indexOf(department) >= 0; if (!relevant) return; if (item.school) schools[item.school] = (schools[item.school] || 0) + 1; if (item.item) items[item.item] = (items[item.item] || 0) + 1; });
       App.renderRelationshipList("dashboardMySchools", schools, "school");
       App.renderRelationshipList("dashboardMyItems", items, "item");
+      App.renderMyTeam();
     },
     renderRelationshipList: function (id, values, type) { var el = document.getElementById(id); if (!el) return; var rows = Object.keys(values).sort(function (a,b) { return values[b] - values[a]; }).slice(0,6); el.innerHTML = rows.length ? rows.map(function (name) { return '<button class="relationshipRow" type="button" onclick="App.openDashboardRelationship(\'' + type + '\',\'' + App.escapeJs(name) + '\')"><strong>' + App.escapeHtml(name) + '</strong><span>' + values[name] + '</span></button>'; }).join("") : App.emptyState("No scoped records", "Your current department has no directly matched participant records."); },
-    openDashboardRelationship: function (type, name) { App.navigate("participants"); App.ensurePortalDataLoaded().then(function () { if (type === "school") App.renderSchoolProfile(App.buildSchoolProfile(name)); else App.renderItemProfile(App.buildItemProfile(name)); }); }
+    openDashboardRelationship: function (type, name) { App.navigate("participants"); App.ensurePortalDataLoaded().then(function () { if (type === "school") App.renderSchoolProfile(App.buildSchoolProfile(name)); else App.renderItemProfile(App.buildItemProfile(name)); }); },
+    renderMyTeam: function () { var el = document.getElementById("dashboardMyTeam"); if (!el) return; var user = App.state.staff || {}; var values = (user.departments || []).concat(user.assignedGroups || []); if (!values.length && user.department) values = [user.department]; el.innerHTML = values.length ? values.slice(0, 8).map(function (value) { return '<div class="relationshipRow"><strong>' + App.escapeHtml(value) + '</strong><span>Assigned</span></div>'; }).join("") : App.emptyState("No team assignment", "Your Staff profile has no department or group assignment."); }
   });
 
   App.initExperience();

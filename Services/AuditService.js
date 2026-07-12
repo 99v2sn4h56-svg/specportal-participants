@@ -6,7 +6,7 @@ const AuditService = (() => {
       entityType: "AuditRecord",
       action: String(action || "Unknown"),
       entity: entity || null,
-      actor: Session.getActiveUser().getEmail() || "system",
+      actor: UserContextService.getEmail() || "system",
       occurredAt: new Date().toISOString(),
       details: PlatformStoreService.safeData(details || {})
     }, 120);

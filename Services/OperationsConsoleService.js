@@ -1,8 +1,8 @@
 /** Read-only aggregate for future Operations Console server consumers. */
 const OperationsConsoleService = (() => {
   function getData() {
-    const email = Session.getActiveUser().getEmail();
-    if (!StaffService.hasPermission(email, "Operations.View")) throw new Error("Operations.View is required.");
+    const email = UserContextService.getEmail();
+    if (!UserContextService.hasCapability("Operations.View")) throw new Error("Operations.View is required.");
     return {
       generatedAt: new Date().toISOString(),
       workflowRegistry: WorkflowRegistryService.getAll(),

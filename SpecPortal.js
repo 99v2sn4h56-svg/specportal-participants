@@ -36,11 +36,12 @@ function openSpecPortalOnOpen_() {
 }
 
 function getCurrentStaffContext() {
-  return StaffService.getCurrent();
+  return UserContextService.getCurrent();
 }
 
 function portalGetAuthorizationModel() {
-  const user = StaffService.getCurrentUser();
+  requirePortalCapability_("Administration.View");
+  const user = UserContextService.getCurrent();
   return {
     grants: AuthorizationService.resolveGrants(user),
     model: AuthorizationService.getModel(),
@@ -51,7 +52,8 @@ function portalGetAuthorizationModel() {
 }
 
 function portalGetPlatformRegistry() {
-  const user = StaffService.getCurrentUser();
+  requirePortalCapability_("Administration.View");
+  const user = UserContextService.getCurrent();
   return {
     entities: Object.keys(EntityModelService.TYPES).map(key => EntityModelService.TYPES[key]),
     relationships: RelationshipService.getModel(),
@@ -62,6 +64,7 @@ function portalGetPlatformRegistry() {
 }
 
 function portalGetStableIdMigrationReport() {
+  requirePortalCapability_("Operations.Admin");
   return StableIdMigrationService.dryRun();
 }
 
@@ -86,6 +89,14 @@ function portalGetAdministrationData() {
   return AdministrationService.getData();
 }
 
+function portalGetUserContextDiagnostics() {
+  return UserContextService.getDiagnostics();
+}
+
+function portalRefreshUserContext() {
+  return UserContextService.refresh();
+}
+
 function portalPublishPlatformEvent(eventType, payload) {
   requirePortalCapability_("Workflow.Admin");
   return WorkflowService.publishEvent(eventType, payload || {}, { source: "SpecPortal gateway" });
@@ -102,8 +113,7 @@ function portalRunNextJob() {
 }
 
 function requirePortalCapability_(capability) {
-  const email = Session.getActiveUser().getEmail();
-  if (!email || !StaffService.hasPermission(email, capability)) throw new Error(`${capability} is required.`);
+  return UserContextService.requireCapability(capability);
 }
 
 function portalApplyStableIdMigration(request) {
@@ -111,14 +121,13 @@ function portalApplyStableIdMigration(request) {
 }
 
 function portalPlatformSearch(query, options) {
-  const email = Session.getActiveUser().getEmail();
-  if (!email) throw new Error("Authentication is required.");
+  const context = UserContextService.getCurrent();
+  if (!context.email) throw new Error("Authentication is required.");
   return PlatformSearchService.search(query, options);
 }
 
 function portalGetRelationship(request) {
-  const email = Session.getActiveUser().getEmail();
-  if (!email || !StaffService.hasPermission(email, "Participants.View")) {
+  if (!UserContextService.hasCapability("Participants.View")) {
     throw new Error("Participants.View is required.");
   }
   const input = request || {};
@@ -146,74 +155,92 @@ function portalGetSpecCentralConfig() {
 }
 
 function portalSearchParticipants(query) {
+  requirePortalCapability_("Participants.View");
   return ParticipantService.search(query);
 }
 
 function portalGetAllParticipants() {
+  requirePortalCapability_("Participants.View");
   return ParticipantService.getAll();
 }
 
 function portalGetAllGroups() {
+  requirePortalCapability_("Participants.View");
   return ParticipantService.getGroups();
 }
 
 function portalGetSchoolsMasterData() {
+  requirePortalCapability_("Participants.View");
   return ParticipantService.getSchoolsMasterData();
 }
 
 function portalGetSchoolProfile(schoolName) {
+  requirePortalCapability_("Participants.View");
   return ParticipantService.getSchoolProfile(schoolName);
 }
 
 function portalGetStudentPhotos() {
+  requirePortalCapability_("Participants.View");
   return ProfilePhotoService.getStudentPhotos();
 }
 
 function portalGetPhotoDiagnostics() {
+  requirePortalCapability_("Participants.View");
   return ProfilePhotoService.getPhotoDiagnostics();
 }
 
 function portalRefreshPhotoCache() {
+  requirePortalCapability_("Participants.View");
   return ProfilePhotoService.refreshStudentPhotos();
 }
 
 function portalGetPortalData() {
+  requirePortalCapability_("Participants.View");
   return ParticipantService.getPortalData();
 }
 
 function portalGetStaffProductionTeam() {
-  return StaffService.getAll();
+  requirePortalCapability_("Operations.View");
+  return StaffService.getAll().map(staff => ({ id: staff.id || "", staffId: staff.staffId || "", name: staff.name || staff.displayName || "Staff member", displayName: staff.displayName || staff.name || "Staff member", role: staff.role || "", department: staff.department || staff.team || "", status: staff.status || "Active" }));
 }
 
 function portalGetRehearsals() {
+  requirePortalCapability_("Calendar.View");
   return RehearsalService.getAll();
 }
 
 function portalRefreshRehearsals() {
+  requirePortalCapability_("Calendar.View");
   return RehearsalService.refresh();
 }
 
 function portalGetCalendarData() {
+  requirePortalCapability_("Calendar.View");
   return TimelineService.getCalendarData();
 }
 
 function portalGetAttendanceConfig() {
+  requirePortalCapability_("Attendance.View");
   return AttendanceService.getConfig();
 }
 
 function portalGetAttendanceSummary() {
+  requirePortalCapability_("Attendance.View");
   return AttendanceService.getSummary();
 }
 
 function portalGetAttendanceEvents() {
+  requirePortalCapability_("Attendance.View");
   return AttendanceService.getEvents();
 }
 
 function portalGetAttendanceEvent(identifier) {
+  requirePortalCapability_("Attendance.View");
   return AttendanceService.getEvent(identifier);
 }
 
 function portalGetAttendanceHealth() {
+  requirePortalCapability_("Attendance.View");
   return AttendanceService.getHealth();
 }
 
@@ -229,8 +256,7 @@ function portalGetParticipantAttendanceHistory(studentKey) {
     };
   }
 
-  const email = Session.getActiveUser().getEmail();
-  if (!email || !StaffService.hasPermission(email, "participants.view")) {
+  if (!UserContextService.hasCapability("Participants.View")) {
     return {
       ok: false,
       action: "participant-history",
@@ -255,8 +281,7 @@ function portalGetParticipantAttendanceHistory(studentKey) {
 
 function portalGetParticipantSchedule(studentKey) {
   const key = String(studentKey || "").trim();
-  const email = Session.getActiveUser().getEmail();
-  if (!key || !email || !StaffService.hasPermission(email, "Participants.View")) {
+  if (!key || !UserContextService.hasCapability("Participants.View")) {
     return { ok: false, error: "Participant schedule access denied.", data: [] };
   }
   const participant = ParticipantService.getByStudentKey(key);

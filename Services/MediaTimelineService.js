@@ -36,8 +36,7 @@ const MediaTimelineService = (() => {
   }
 
   function requirePermission_(permission) {
-    const email = Session.getActiveUser().getEmail();
-    if (!StaffService.hasPermission(email, permission)) {
+    if (!UserContextService.hasCapability(permission)) {
       throw new Error(`Permission required: ${permission}`);
     }
   }

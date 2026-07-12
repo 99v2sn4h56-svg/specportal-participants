@@ -20,15 +20,13 @@ const ProjectManagementService = (() => {
       notes: task.notes || "",
       lastUpdated: task.updatedAt || task.createdAt || ""
     }));
-    const user = StaffService.getCurrentUser();
+    const user = UserContextService.getCurrent();
     const users = StaffService.getAll().map(staff => ({
       name: staff.name || staff.displayName || "",
       email: staff.email || "",
       department: staff.department || staff.team || "",
       role: staff.role || "Production Team Member",
-      status: staff.status || "Active",
-      capabilities: AuthorizationService.resolveGrants(staff).map(grant => grant.capability),
-      scope: staff.scope || { type: "production", values: [] }
+      status: staff.status || "Active"
     }));
     const timelineEvents = TimelineService.getTimelineEvents();
     const events = timelineEvents.filter(event => event.isOperational);
@@ -64,8 +62,7 @@ const ProjectManagementService = (() => {
   }
 
   function requirePermission_(permission) {
-    const email = Session.getActiveUser().getEmail();
-    if (!StaffService.hasPermission(email, permission)) {
+    if (!UserContextService.hasCapability(permission)) {
       throw new Error(`Permission required: ${permission}`);
     }
   }

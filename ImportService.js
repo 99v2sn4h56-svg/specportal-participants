@@ -941,7 +941,7 @@ const ImportService = (() => {
 
     sheet.appendRow([
       new Date(),
-      Session.getActiveUser().getEmail(),
+      UserContextService.getEmail(),
       result.importType,
       result.sourceFilename,
       result.recordsProcessed,

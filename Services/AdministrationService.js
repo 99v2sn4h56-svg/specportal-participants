@@ -1,7 +1,7 @@
 /** Read-only Administration Centre aggregate built from existing platform services. */
 const AdministrationService = (() => {
   function getData() {
-    const currentUser = StaffService.getCurrentUser();
+    const currentUser = UserContextService.getCurrent();
     if (!AuthorizationService.hasCapability(currentUser, "Administration.View")) {
       throw new Error("Administration.View is required.");
     }
@@ -35,6 +35,7 @@ const AdministrationService = (() => {
       notificationChannels: consoleData.notificationChannels || [],
       audit: consoleData.audit || [],
       health: buildHealth_(users, sources, workflows, consoleData),
+      authentication: buildAuthentication_(currentUser),
       registry: {
         entities: Object.keys(EntityModelService.TYPES).map(key => EntityModelService.TYPES[key]),
         relationships: RelationshipService.getModel(),
@@ -52,7 +53,7 @@ const AdministrationService = (() => {
     const effective = AuthorizationService.resolveGrants(user).map(grant => grant.capability);
     return {
       id: user.id || EntityModelService.stableId("STF", user.email || user.name),
-      name: user.name || user.displayName || "Unknown user",
+      name: user.name || user.displayName || "Authenticated user",
       email: user.email || "",
       role: user.role || "Production Team Member",
       capabilities: effective,
@@ -96,6 +97,28 @@ const AdministrationService = (() => {
       staticHealth_("AI", "Adapter Only", `${(consoleData.aiExtensions || []).filter(item => item.connected).length} hooks`),
       staticHealth_("Registry", "Registered", `${sources.length} sources`)
     ];
+  }
+
+  function buildAuthentication_(currentUser) {
+    const diagnostics = UserContextService.getDiagnostics();
+    return {
+      currentUser: {
+        displayName: currentUser.displayName,
+        googleAccount: currentUser.email,
+        matchedStaffRecord: currentUser.isMatched,
+        role: currentUser.role,
+        department: currentUser.department,
+        departments: currentUser.departments || [],
+        capabilities: currentUser.capabilities || [],
+        scope: currentUser.scope,
+        status: currentUser.status
+      },
+      resolution: currentUser.identity || {},
+      cache: currentUser.performance || {},
+      lookupTimeMs: diagnostics.lookupTimeMs,
+      checks: diagnostics.checks,
+      conflicts: StaffService.getIdentityConflicts()
+    };
   }
 
   function health_(name, callback, isHealthy, count, countLabel) {

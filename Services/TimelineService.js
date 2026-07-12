@@ -98,9 +98,8 @@ const TimelineService = (() => {
   }
 
   function canViewOperationalEvents_() {
-    const email = Session.getActiveUser().getEmail();
-    return StaffService.hasPermission(email, "Calendar.Operational.View") ||
-      StaffService.hasPermission(email, "Operations.Admin");
+    return UserContextService.hasCapability("Calendar.Operational.View") ||
+      UserContextService.hasCapability("Operations.Admin");
   }
 
   return {

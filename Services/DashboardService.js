@@ -1,22 +1,25 @@
 const DashboardService = (() => {
   function getContext() {
-    const staff = safeCall_("StaffService.getCurrent", () => StaffService.getCurrent(), {});
-    const staffTeam = safeCall_("StaffService.getAll", () => StaffService.getAll(), []);
-    const timeline = safeCall_("TimelineService.getDashboardSummary", () => TimelineService.getDashboardSummary(), {});
-    const attendance = safeCall_("AttendanceService.getConfig", () => AttendanceService.getConfig(), {});
-    const attendanceEvents = safeCall_("AttendanceService.getEvents", () => AttendanceService.getEvents(), { data: [] });
+    const started = Date.now();
+    const staff = safeCall_("UserContextService.getCurrent", () => UserContextService.getCurrent(), {});
+    const staffTeam = staff.isMatched ? safeCall_("StaffService.getAll", () => StaffService.getAll()
+      .filter(item => staff.isOperations || !staff.department || String(item.department || item.team || "").toLowerCase() === String(staff.department).toLowerCase())
+      .map(toSafeStaff_), []) : [];
+    const timeline = UserContextService.hasCapability("Calendar.View") ? safeCall_("TimelineService.getDashboardSummary", () => TimelineService.getDashboardSummary(), {}) : {};
+    const attendance = UserContextService.hasCapability("Attendance.View") ? safeCall_("AttendanceService.getConfig", () => AttendanceService.getConfig(), {}) : {};
+    const attendanceEvents = UserContextService.hasCapability("Attendance.View") ? safeCall_("AttendanceService.getEvents", () => AttendanceService.getEvents(), { data: [] }) : { data: [] };
     const announcements = safeCall_("AnnouncementService.getActive", () => AnnouncementService.getActive(), []);
     const notifications = safeCall_("NotificationService.getForCurrentUser", () => NotificationService.getForCurrentUser(), []);
-    const workflowSummary = safeCall_("Workflow platform summary", () => ({ queue: OperationsQueueService.summary(), tasks: TaskService.summary(staff.email || "") }), {});
-    const tasks = safeCall_("TaskService.list", () => TaskService.list().filter(task => !task.assignedUser || task.assignedUser === staff.email).slice(0, 12), []);
-    const audit = safeCall_("AuditService.list", () => AuditService.list(12), []);
+    const tasks = staff.isMatched ? safeCall_("TaskService.list", () => TaskService.list().filter(task => String(task.assignedUser || "").toLowerCase() === String(staff.email || "").toLowerCase()).slice(0, 12), []) : [];
+    const workflowSummary = staff.isMatched ? safeCall_("Workflow platform summary", () => ({ queue: staff.isOperations ? OperationsQueueService.summary() : {}, tasks: { myTasks: tasks.filter(task => !["Completed", "Cancelled"].includes(task.status)).length } }), {}) : {};
+    const audit = safeCall_("AuditService.list", () => AuditService.list(50).filter(item => item.actor === staff.email).slice(0, 12).map(toSafeActivity_), []);
 
-    return {
+    const response = {
       staff,
       staffTeam,
       timelineStatus: timeline.status || "",
       timelineLastRefreshed: timeline.lastRefreshed || "",
-      staffStatus: staffTeam.length ? "Connected" : "Fallback / unavailable",
+      staffStatus: staff.isMatched ? (staffTeam.length ? "Connected" : "Profile matched") : staff.status || "No Staff Profile Found",
       attendanceUrl: attendance.url || "",
       attendanceStatus: attendance.status || "Waiting",
       attendanceSource: attendance.source || "",
@@ -34,7 +37,7 @@ const DashboardService = (() => {
       services: {
         dashboard: "Connected",
         participants: "Loaded separately through ParticipantService",
-        staff: staff && staff.email ? "Connected" : "Fallback",
+        staff: staff && staff.isMatched ? "Connected" : staff.status || "No Staff Profile Found",
         staffTeam: staffTeam.length ? "Connected" : "Unavailable or empty",
         timeline: timeline.status || "Waiting",
         attendance: attendance.status || "Waiting",
@@ -44,7 +47,13 @@ const DashboardService = (() => {
         mediaTimeline: "Lazy loaded"
       }
     };
+    response.performance = { dashboardLoadMs: Date.now() - started, identity: staff.performance || {} };
+    if (staff.email) UserContextService.recordMetric("dashboardLoadMs", response.performance.dashboardLoadMs);
+    return response;
   }
+
+  function toSafeStaff_(staff) { return { id: staff.id || "", name: staff.name || staff.displayName || "Staff member", displayName: staff.displayName || staff.name || "Staff member", role: staff.role || "", department: staff.department || staff.team || "", status: staff.status || "Active" }; }
+  function toSafeActivity_(item) { return { id: item.id || "", action: item.action || "Platform activity", actor: item.actor || "", occurredAt: item.occurredAt || "", entity: item.entity ? { type: item.entity.type || "", id: item.entity.id || "" } : null }; }
 
   function getDashboardProfile_(staff) {
     const text = [

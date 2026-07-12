@@ -51,7 +51,6 @@
         serviceRegistry: {},
         loading: {},
         systemStatus: {},
-        dashboardStats: null,
         dashboardRenderTimer: null,
         dashboardParticipantLoadAttempted: false,
         operationsNavExpanded: true,
@@ -85,7 +84,8 @@
         participants: {
           title: "Participants",
           description: "Search participants, schools, items, groups and teachers.",
-          template: "page-participants"
+          template: "page-participants",
+          permission: "Participants.View"
         },
         calendar: {
           title: "Calendar",
@@ -96,12 +96,14 @@
         attendance: {
           title: "Attendance",
           description: "Open attendance rolls and check-in workflows.",
-          template: "page-attendance"
+          template: "page-attendance",
+          permission: "Attendance.View"
         },
         rehearsals: {
           title: "Rehearsals",
           description: "Schedules, venues and upcoming rehearsal dates.",
-          template: "page-rehearsals"
+          template: "page-rehearsals",
+          permission: "Calendar.View"
         },
         staff: {
           title: "Staff",
@@ -361,7 +363,6 @@
           App.renderStatusRibbon();
         });
         App.events.on("dashboard:refresh", function () {
-          App.state.dashboardStats = App.buildDashboardStats();
           App.scheduleDashboardRender();
         });
       },
@@ -483,7 +484,6 @@
             App.state.timelineLastRefreshed = config.timelineLastRefreshed || "";
             App.state.staffStatus = config.staffStatus || "";
             App.applyServerServiceStatuses(config.services || {});
-            App.state.dashboardStats = App.buildDashboardStats();
             App.renderNavigation();
             App.renderStaffContext();
             App.renderStatusRibbon();
@@ -512,7 +512,6 @@
             App.state.photos = data.photos || {};
             App.state.ready = true;
             App.rebuildSearchProviders();
-            App.state.dashboardStats = App.buildDashboardStats();
             App.events.emit("dashboard:refresh");
             App.renderStaffContext();
             App.renderStatusRibbon();
@@ -584,8 +583,28 @@
 
       renderStaffContext: function () {
         var el = document.getElementById("staffEmail");
-        if (!el) return;
-        el.textContent = App.state.staff.email || "Unknown user";
+        var name = document.getElementById("sidebarUserName");
+        var avatar = document.querySelector(".userAvatar");
+        if (el) el.textContent = App.state.staff.email || "Authentication required";
+        if (name) name.textContent = App.state.staff.displayName || App.state.staff.name || "Authenticated user";
+        if (avatar) avatar.innerHTML = App.state.staff.photo ? '<img src="' + App.escapeHtml(App.state.staff.photo) + '" alt="">' : App.escapeHtml(((App.state.staff.firstName || "S").charAt(0) + (App.state.staff.surname || "C").charAt(0)).toUpperCase());
+        App.renderWhoAmI();
+      },
+
+      toggleWhoAmI: function () {
+        var panel = document.getElementById("whoAmIPanel");
+        var button = document.querySelector(".whoAmIToggle");
+        if (!panel) return;
+        panel.hidden = !panel.hidden;
+        if (button) button.setAttribute("aria-expanded", String(!panel.hidden));
+      },
+
+      renderWhoAmI: function () {
+        var panel = document.getElementById("whoAmIPanel");
+        if (!panel) return;
+        var user = App.state.staff || {};
+        var level = user.permissionLevel || "Authenticated only";
+        panel.innerHTML = '<div><span>Role</span><strong>' + App.escapeHtml(user.role || "No staff role") + '</strong></div><div><span>Department</span><strong>' + App.escapeHtml(user.department || "Not assigned") + '</strong></div><div><span>Permission level</span><strong>' + App.escapeHtml(level) + '</strong></div><div><span>Capabilities</span><strong>' + App.escapeHtml((user.capabilities || []).length) + '</strong></div>';
       },
 
       hasPermission: function (permission) {
@@ -721,7 +740,7 @@
       },
 
       renderDashboardPage: function () {
-        if (!App.state.ready && !App.state.loading.portalData && !App.state.dashboardParticipantLoadAttempted) {
+        if (App.hasPermission("Participants.View") && !App.state.ready && !App.state.loading.portalData && !App.state.dashboardParticipantLoadAttempted) {
           App.state.dashboardParticipantLoadAttempted = true;
           App.ensurePortalDataLoaded().catch(function () {});
         }
@@ -737,12 +756,12 @@
         var outstandingActions = document.getElementById("heroOutstandingActions");
         var attendanceAlerts = document.getElementById("heroAttendanceAlerts");
 
-        if (greeting) greeting.textContent = App.getGreeting() + ", " + (App.state.staff.displayName || App.state.staff.name || "Spec Central user");
-        if (homeWelcome) homeWelcome.textContent = App.getGreeting() + " " + String(App.state.staff.displayName || App.state.staff.name || "").split(" ")[0];
+        if (greeting) greeting.textContent = App.getGreeting() + ", " + (App.state.staff.displayName || App.state.staff.name || "Authenticated user");
+        if (homeWelcome) homeWelcome.textContent = App.getGreeting() + " " + (App.state.staff.firstName || App.state.staff.displayName || "");
         if (date) date.textContent = App.state.currentDate || App.formatShortDate(new Date());
-        if (staffName) staffName.textContent = App.state.staff.displayName || App.state.staff.name || App.state.staff.email || "Spec Central user";
+        if (staffName) staffName.textContent = App.state.staff.displayName || App.state.staff.name || App.state.staff.email || "Authenticated user";
         if (staffRole) staffRole.textContent = App.state.staff.role || "Staff";
-        if (staffDepartment) staffDepartment.textContent = App.state.staff.department || "Department not connected";
+        if (staffDepartment) staffDepartment.textContent = App.state.staff.department || "No department assigned";
         if (nextRehearsal) {
           var next = App.getRelevantHomeEvents(false)[0] || {};
           nextRehearsal.textContent = next.event || next.title || "Your schedule is clear";
@@ -752,20 +771,12 @@
         if (outstandingActions) outstandingActions.textContent = App.getOutstandingActionCount();
         if (attendanceAlerts) { var prefs = App.getNotificationPrefs(); attendanceAlerts.textContent = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length; }
 
-        var stats = document.getElementById("dashboardStatsFull");
-        if (stats) {
-          var dashboardStats = App.buildPersonalDashboardCards();
-          stats.innerHTML = dashboardStats.map(function (stat) {
-            return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div>' + (stat.note ? '<div class="moduleNote">' + App.escapeHtml(stat.note) + '</div>' : '') + '</div>';
-          }).join("");
-        }
-
         App.renderAnnouncements();
         App.renderUpcomingRehearsals();
         App.renderRecentActivity();
-        App.renderAttendanceActionSummary();
         App.renderDashboardTasks();
         App.renderDashboardAttention();
+        App.renderUnmatchedUserState();
         if (App.state.ready) App.renderDashboardRelationships();
       },
 
@@ -818,13 +829,38 @@
         var unread = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length;
         var openTasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
         var attendance = (App.state.attendanceEvents || []).length;
+        var approvals = Number((((App.state.dashboardContext || {}).workflowSummary || {}).queue || {}).pending || 0);
+        var today = App.toDateKey(new Date());
+        var deadlines = (App.state.tasks || []).filter(function (item) { return item.dueDate && item.dueDate >= today && ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
         var rows = [
           { label: "Unread notifications", value: unread, action: "App.openNotificationCentre()" },
           { label: "Open tasks", value: openTasks, action: "App.openOperationsView('projects')", permission: "operations.view" },
           { label: "Attendance sessions", value: attendance, action: "App.navigate('attendance')" },
+          { label: "Approvals waiting", value: approvals, action: "App.openOperationsView('overview')", permission: "operations.view" },
+          { label: "Upcoming deadlines", value: deadlines, action: "App.openOperationsView('projects')", permission: "operations.view" },
           { label: "Upcoming relevant events", value: App.getRelevantHomeEvents(false).length, action: "App.navigate('rehearsals')" }
         ].filter(function (item) { return !item.permission || App.hasPermission(item.permission); });
         el.innerHTML = rows.map(function (item) { return '<button class="attentionRow" type="button" onclick="' + item.action + '"><span>' + App.escapeHtml(item.label) + '</span><strong>' + App.escapeHtml(item.value) + '</strong></button>'; }).join("");
+      },
+
+      renderUnmatchedUserState: function () {
+        var el = document.getElementById("unmatchedUserPanel");
+        if (!el) return;
+        var user = App.state.staff || {};
+        var unmatched = user.isMatched === false;
+        el.hidden = !unmatched;
+        Array.prototype.forEach.call((el.parentElement || document).querySelectorAll(":scope > section:not(.heroPanel):not(.unmatchedUserPanel)"), function (section) { section.hidden = unmatched; });
+        if (el.hidden) { el.innerHTML = ""; return; }
+        el.innerHTML = '<div class="unmatchedIdentity"><div class="stateIcon">!</div><div><div class="scProfileKicker">Signed in as ' + App.escapeHtml(user.email || "Google user") + '</div><h3>' + App.escapeHtml(user.displayName || "Authenticated user") + '</h3><strong>' + App.escapeHtml(user.status || "No Staff Profile Found") + '</strong><p>You are authenticated, but no unique Staff Production Team record could be matched.</p><div class="profileActions"><a class="quickLink compact" href="mailto:?subject=SpecCentral access request&body=' + encodeURIComponent('Please add or repair my SpecCentral Staff Production Team profile for ' + (user.email || 'my Google account') + '.') + '">Request Access</a><button class="quickLink compact" type="button" onclick="App.retryUserContext()">Retry</button><button class="quickLink compact" type="button" onclick="App.openIdentityDiagnostics()">Diagnostics</button></div></div></div>';
+      },
+
+      retryUserContext: function () {
+        App.services.request("userContextRefresh", "portalRefreshUserContext", { forceRefresh: true, timeoutMs: 45000 }).then(function (user) { App.state.staff = user || {}; App.state.currentUser = App.state.staff; App.state.permissions = App.state.staff.permissions || []; App.renderNavigation(); App.renderStaffContext(); App.renderDashboardPage(); App.notify("Identity context refreshed."); }).catch(function (error) { App.notify("Identity refresh failed: " + App.getErrorMessage(error)); });
+      },
+
+      openIdentityDiagnostics: function () {
+        if (App.hasPermission("Administration.View")) { App.state.administrationView = "authentication"; App.navigate("administration"); return; }
+        App.services.request("identityDiagnostics", "portalGetUserContextDiagnostics", { forceRefresh: true, timeoutMs: 45000 }).then(function (data) { App.notify((data.checks || []).map(function (item) { return item.name + ": " + item.status; }).join(" · ")); }).catch(function (error) { App.notify("Diagnostics unavailable: " + App.getErrorMessage(error)); });
       },
 
       renderRecentActivity: function () {
@@ -861,73 +897,12 @@
         }).join("") : App.emptyState("No open tasks", "Your task queue has no pending work.");
       },
 
-      renderAttendanceActionSummary: function () {
-        var el = document.getElementById("attendanceActionSummary");
-        if (!el) return;
-
-        if (!App.state.attendanceUrl) { el.innerHTML = App.errorState("Attendance unavailable", "The Attendance source is not configured for this environment."); return; }
-        var events = App.state.attendanceEvents || [];
-        var needsAction = events.filter(function (item) { var counts = item.attendanceCounts || item.counts || {}; return Number(counts["Not Marked"] || counts.Unmarked || counts.unmarked || 0) > 0; });
-        el.innerHTML = needsAction.length ? needsAction.slice(0, 5).map(function (item) { return '<button class="relationshipRow" type="button" onclick="App.openAttendanceEvent(\'' + App.escapeJs(item.sessionId || item.id) + '\',\'' + App.escapeJs(item.eventName || "Event") + '\')"><strong>' + App.escapeHtml(item.eventName || "Attendance roll") + '</strong><span>Review</span></button>'; }).join("") : App.emptyState("Attendance is current", "No connected rolls are reporting outstanding marks.");
-      },
-
       getOutstandingActionCount: function () {
-        var count = 0;
-        if (!App.state.attendanceUrl) count++;
-        if (!(App.state.staffTeam || []).length) count++;
-        if (!(App.state.rehearsals || []).length) count++;
-        return count;
-      },
-
-      buildPersonalDashboardCards: function () {
-        var cards = [
-          { label: "Role", value: App.state.staff.role || "Staff" },
-          { label: "Department", value: App.state.staff.department || "Not connected" },
-          { label: "Events Today", value: App.state.todaysRehearsals.length },
-          { label: "Upcoming Rehearsals", value: App.state.rehearsals.length },
-          { label: "Attendance Rolls", value: App.state.attendanceUrl ? "Available" : "Not connected" }
-        ];
-
-        if (App.hasPermission("operations.view")) {
-          cards.push({
-            label: "Operations",
-            value: "Available",
-            note: "Open Operations for management controls"
-          });
-        }
-
-        return cards;
-      },
-
-      buildDashboardStats: function () {
-        var teachers = {};
-        var items = {};
-
-        App.state.participants.forEach(function (participant) {
-          var teacher = String(participant.teacherEmail || participant.teacherName || "").trim().toLowerCase();
-          var item = String(participant.item || "").trim().toLowerCase();
-          if (teacher) teachers[teacher] = true;
-          if (item) items[item] = true;
-        });
-
-        App.state.groups.forEach(function (group) {
-          var teacher = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
-          var item = String(group.item || "").trim().toLowerCase();
-          if (teacher) teachers[teacher] = true;
-          if (item) items[item] = true;
-        });
-
-        return [
-          { label: "Participants", value: App.getTotalParticipantCount(), note: App.getParticipantTotalNote() },
-          { label: "Schools", value: App.state.schools.length },
-          { label: "Groups", value: App.state.groups.length },
-          { label: "Items", value: Object.keys(items).length },
-          { label: "Teachers", value: Object.keys(teachers).length },
-          { label: "Staff Production Team", value: App.state.staffTeam.length },
-          { label: "Upcoming Rehearsals", value: App.state.rehearsals.length },
-          { label: "Today's Rehearsals", value: App.state.todaysRehearsals.length },
-          { label: "Attendance Events", value: App.state.attendanceEvents.length || (App.state.attendanceUrl ? 1 : 0) }
-        ];
+        var prefs = App.getNotificationPrefs();
+        var unread = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length;
+        var tasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
+        var attendance = (App.state.attendanceEvents || []).filter(function (item) { var counts = item.attendanceCounts || item.counts || {}; return Number(counts["Not Marked"] || counts.Unmarked || counts.unmarked || 0) > 0; }).length;
+        return unread + tasks + attendance;
       },
 
       renderParticipantStatus: function () {
@@ -1706,10 +1681,9 @@
               email: user.email,
               department: user.department,
               role: user.role,
-              status: user.status,
-              scope: user.scope && user.scope.type || "production"
+              status: user.status
             };
-          }), ["name", "email", "department", "role", "status", "scope"]);
+          }), ["name", "email", "department", "role", "status"]);
       },
 
       renderOperationsEvents: function (events) {
@@ -1891,12 +1865,13 @@
         var source = document.getElementById("administrationSource");
         if (source) source.textContent = "Read-only platform view · " + App.formatAdministrationTimestamp(data.generatedAt);
         App.renderAdministrationSummary();
-        var views = ["users", "permissions", "modules", "sources", "workflows", "jobs", "rules", "notifications", "audit", "health", "registry"];
+        var views = ["users", "authentication", "permissions", "modules", "sources", "workflows", "jobs", "rules", "notifications", "audit", "health", "registry"];
         Array.prototype.forEach.call(document.querySelectorAll(".administrationTabs button"), function (button, index) {
           button.classList.toggle("active", views[index] === App.state.administrationView);
         });
         var renderers = {
           users: App.renderAdministrationUsers,
+          authentication: App.renderAdministrationAuthentication,
           permissions: App.renderAdministrationPermissions,
           modules: App.renderAdministrationModules,
           sources: App.renderAdministrationSources,
@@ -1962,6 +1937,24 @@
         return App.renderAdministrationTable(App.filterAdministrationRows((App.state.administrationData.users || []).map(function (user) {
           return Object.assign({}, user, { capabilities: (user.capabilities || []).join(", "), administrator: user.administrator ? "Administrator" : "Standard", scope: user.scope && user.scope.type || "production" });
         })), ["name", "email", "role", "capabilities", "productionArea", "department", "administrator", "status", "lastSeen", "authenticationSource", "source"], "user");
+      },
+
+      renderAdministrationAuthentication: function () {
+        var auth = App.state.administrationData.authentication || {};
+        var user = auth.currentUser || {};
+        var resolution = auth.resolution || {};
+        var cache = auth.cache || {};
+        var cards = [
+          ["Current user", user.displayName || "Authenticated user", user.googleAccount || "No Google account"],
+          ["Staff match", user.matchedStaffRecord ? "Matched" : user.status || "Not matched", resolution.matchedUsing || "No match method"],
+          ["Role & department", user.role || "No role", (user.departments || []).join(", ") || user.department || "No department"],
+          ["Capabilities", (user.capabilities || []).length, user.scope && user.scope.type || "No scope"],
+          ["Identity cache", cache.cache || "Unknown", cache.cacheHit ? "Cache hit" : "Cache miss"],
+          ["Lookup performance", (auth.lookupTimeMs || 0) + "ms", "Permission build " + (cache.permissionBuildMs || 0) + "ms"]
+        ];
+        var checks = auth.checks || [];
+        var conflicts = auth.conflicts || [];
+        return '<div class="identitySummaryGrid">' + cards.map(function (item) { return '<article class="identitySummaryCard"><span>' + App.escapeHtml(item[0]) + '</span><strong>' + App.escapeHtml(item[1]) + '</strong><small>' + App.escapeHtml(item[2]) + '</small></article>'; }).join("") + '</div><h4 class="sectionTitle">Authentication diagnostics</h4>' + App.renderAdministrationTable(checks.map(function (item) { return { name: item.name, status: item.status, detail: item.detail }; }), ["name", "status", "detail"], "authentication-check") + '<h4 class="sectionTitle adminSubheading">Identity conflicts</h4>' + (conflicts.length ? App.renderAdministrationTable(conflicts.map(function (item) { return { name: item.identity, status: "Duplicate", records: item.count, staff: (item.records || []).map(function (record) { return record.name; }).join(", ") }; }), ["name", "status", "records", "staff"], "identity-conflict") : App.emptyState("No duplicate identities", "Every indexed staff email resolves to at most one record."));
       },
 
       renderAdministrationPermissions: function () {
@@ -2092,8 +2085,8 @@
 
         var staff = App.state.staff || {};
         el.innerHTML =
-          '<div class="profileLine"><strong>Email</strong><br>' + App.escapeHtml(staff.email || "Unknown user") + '</div>' +
-          '<div class="profileLine"><strong>Display name</strong><br>' + App.escapeHtml(staff.displayName || "Spec Central user") + '</div>' +
+          '<div class="profileLine"><strong>Email</strong><br>' + App.escapeHtml(staff.email || "Authentication required") + '</div>' +
+          '<div class="profileLine"><strong>Display name</strong><br>' + App.escapeHtml(staff.displayName || "Authenticated user") + '</div>' +
           '<div class="profileLine"><strong>Role</strong><br>' + App.escapeHtml(staff.role || "Staff") + '</div>' +
           '<div class="profileLine"><strong>Staff team records</strong><br>' + App.escapeHtml((App.state.staffTeam || []).length) + '</div>' +
           '<div class="profileLine"><strong>Source</strong><br>' + App.escapeHtml(staff.source || "Source unavailable") + '</div>';

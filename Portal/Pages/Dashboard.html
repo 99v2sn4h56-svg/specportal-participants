@@ -28,7 +28,7 @@
         </div>
         <div class="staffSummary">
           <div class="moduleMeta">Current user</div>
-          <strong id="dashboardStaffName">Spec Central user</strong>
+          <strong id="dashboardStaffName">Authenticated user</strong>
           <span id="dashboardStaffRole">Staff</span>
           <span id="dashboardStaffDepartment">Department pending</span>
           <div class="moduleMeta" style="margin-top:12px;">Next relevant event</div>
@@ -37,14 +37,16 @@
       </div>
     </section>
 
+    <section id="unmatchedUserPanel" class="panel span12 unmatchedUserPanel" hidden></section>
+
     <section class="panel span12 homeQuickActionsPanel">
       <h3 class="sectionTitle">Quick Actions</h3>
       <div class="homeActionGrid">
-        <button type="button" onclick="App.focusParticipantsSearch()"><b>P</b><strong>Find Participant</strong><span>Search passports and relationships</span></button>
-        <button type="button" onclick="App.openAttendance()"><b>A</b><strong>Open Attendance</strong><span>Launch live attendance operations</span></button>
-        <button type="button" onclick="App.navigate('calendar')"><b>C</b><strong>Today’s Calendar</strong><span>See today’s full schedule</span></button>
-        <button type="button" onclick="App.navigate('rehearsals')"><b>R</b><strong>My Rehearsals</strong><span>Review rehearsal detail</span></button>
-        <button type="button" onclick="App.browseGlobal('schools')"><b>S</b><strong>Search School</strong><span>Open a School Passport</span></button>
+        <button type="button" data-permission="Participants.View" onclick="App.focusParticipantsSearch()"><b>P</b><strong>Find Participant</strong><span>Search passports and relationships</span></button>
+        <button type="button" data-permission="Attendance.View" onclick="App.openAttendance()"><b>A</b><strong>Open Attendance</strong><span>Launch live attendance operations</span></button>
+        <button type="button" data-permission="Calendar.View" onclick="App.navigate('calendar')"><b>C</b><strong>Today’s Calendar</strong><span>See today’s full schedule</span></button>
+        <button type="button" data-permission="Calendar.View" onclick="App.navigate('rehearsals')"><b>R</b><strong>My Rehearsals</strong><span>Review rehearsal detail</span></button>
+        <button type="button" data-permission="Participants.View" onclick="App.browseGlobal('schools')"><b>S</b><strong>Search School</strong><span>Open a School Passport</span></button>
         <button type="button" data-permission="operations.view" onclick="App.openOperationsView('timeline')"><b>T</b><strong>Open Timeline</strong><span>Operational Timeline workspace</span></button>
         <button type="button" data-permission="operations.view" onclick="App.openOperationsView('projects')"><b>✓</b><strong>My Tasks</strong><span>Open assigned work</span></button>
       </div>
@@ -81,13 +83,13 @@
     </section>
 
     <section class="panel span4">
-      <h3 class="sectionTitle">My Items</h3>
+      <h3 class="sectionTitle">My Productions</h3>
       <div id="dashboardMyItems" class="relationshipList"></div>
     </section>
 
     <section class="panel span4">
-      <h3 class="sectionTitle">Attendance Requiring Action</h3>
-      <div id="attendanceActionSummary"></div>
+      <h3 class="sectionTitle">My Team</h3>
+      <div id="dashboardMyTeam" class="relationshipList"></div>
     </section>
   </div>
 </template>

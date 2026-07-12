@@ -7,16 +7,17 @@
   </div>
   <div class="sidebarSection staffCard">
     <div class="userAvatar" aria-hidden="true">SC</div>
-    <div class="userCardText"><strong>Signed in</strong><div id="staffEmail">Loading staff context...</div></div>
+    <div class="userCardText"><strong id="sidebarUserName">Signed in</strong><div id="staffEmail">Loading staff context...</div><button class="whoAmIToggle" type="button" onclick="App.toggleWhoAmI()" aria-expanded="false">Who am I? ⌄</button></div>
   </div>
+  <div id="whoAmIPanel" class="whoAmIPanel" hidden></div>
 
   <nav class="sidebarNav" aria-label="Spec Central navigation">
     <div class="navSectionLabel">Workspace</div>
     <button class="navItem active" type="button" title="Home" data-icon="H" data-nav-page="dashboard" onclick="App.navigate('dashboard')"><span>Home</span></button>
-    <button class="navItem" type="button" title="Participants" data-icon="P" data-nav-page="participants" onclick="App.navigate('participants')"><span>Participants</span></button>
-    <button class="navItem" type="button" title="Calendar" data-icon="C" data-nav-page="calendar" onclick="App.navigate('calendar')"><span>Calendar</span></button>
-    <button class="navItem" type="button" title="Rehearsals" data-icon="R" data-nav-page="rehearsals" onclick="App.navigate('rehearsals')"><span>Rehearsals</span></button>
-    <button class="navItem" type="button" title="Attendance" data-icon="A" data-nav-page="attendance" onclick="App.navigate('attendance')"><span>Attendance</span></button>
+    <button class="navItem" type="button" title="Participants" data-icon="P" data-nav-page="participants" data-permission="Participants.View" onclick="App.navigate('participants')"><span>Participants</span></button>
+    <button class="navItem" type="button" title="Calendar" data-icon="C" data-nav-page="calendar" data-permission="Calendar.View" onclick="App.navigate('calendar')"><span>Calendar</span></button>
+    <button class="navItem" type="button" title="Rehearsals" data-icon="R" data-nav-page="rehearsals" data-permission="Calendar.View" onclick="App.navigate('rehearsals')"><span>Rehearsals</span></button>
+    <button class="navItem" type="button" title="Attendance" data-icon="A" data-nav-page="attendance" data-permission="Attendance.View" onclick="App.navigate('attendance')"><span>Attendance</span></button>
 
     <div class="navSectionLabel" data-permission="operations.view">Management</div>
     <div class="navGroup" data-permission="operations.view">

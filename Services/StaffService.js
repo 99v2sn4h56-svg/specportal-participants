@@ -3,51 +3,11 @@ const StaffService = (() => {
   let staffCache_ = null;
 
   function getCurrent() {
-    return getCurrentUser();
+    return UserContextService.getCurrent();
   }
 
   function getCurrentUser() {
-    const email = Session.getActiveUser().getEmail();
-    const staff = findByEmail_(email);
-
-    if (staff) {
-      const permissions = getPermissions(email, staff);
-      return EntityModelService.staff({
-        ...staff,
-        email: staff.email || email,
-        name: staff.name || staff.displayName || getDisplayName_(email),
-        displayName: staff.displayName || staff.name || getDisplayName_(email),
-        role: staff.role || "Staff",
-        department: staff.department || staff.team || "",
-        permissions,
-        capabilities: AuthorizationService.resolveGrants(Object.assign({}, staff, { permissions }))
-          .map(grant => grant.capability),
-        isAdmin: AuthorizationService.hasCapability(Object.assign({}, staff, { permissions }), "Operations.Admin") ||
-          AuthorizationService.hasCapability(Object.assign({}, staff, { permissions }), "Settings.Admin"),
-        access: staff.access && staff.access.length ? staff.access : getVisibleModules_(permissions),
-        visibleModules: getVisibleModules_(permissions),
-        allocatedEvents: getAllocatedEvents(email, staff),
-        source: "Staff Production Team spreadsheet"
-      });
-    }
-
-    const permissions = ["dashboard.view", "participants.view", "calendar.view", "rehearsals.view", "attendance.view"];
-
-    return EntityModelService.staff({
-      email,
-      name: getDisplayName_(email),
-      displayName: getDisplayName_(email),
-      role: "Staff",
-      department: "",
-      permissions,
-      capabilities: AuthorizationService.resolveGrants({ role: "Production Team Member", permissions })
-        .map(grant => grant.capability),
-      isAdmin: false,
-      access: getVisibleModules_(permissions),
-      visibleModules: getVisibleModules_(permissions),
-      allocatedEvents: [],
-      source: "Fallback until user is matched in Staff Production Team spreadsheet"
-    });
+    return UserContextService.getCurrent();
   }
 
   function getAll() {
@@ -65,13 +25,24 @@ const StaffService = (() => {
         firstName: findHeaderIndex_(headers, ["first name", "given name"]),
         lastName: findHeaderIndex_(headers, ["last name", "surname", "family name"]),
         email: findHeaderIndex_(headers, ["email", "email address", "det email", "work email"]),
+        primaryEmail: findHeaderIndex_(headers, ["primary det email", "primary email", "det email", "work email", "email", "email address"]),
+        secondaryEmail: findHeaderIndex_(headers, ["secondary email", "alternate email", "alternative email", "email 2"]),
+        personalEmail: findHeaderIndex_(headers, ["personal email", "private email"]),
+        aliasEmails: findHeaderIndex_(headers, ["alias email", "alias emails", "email aliases", "aliases"]),
+        legacyEmails: findHeaderIndex_(headers, ["legacy email", "legacy emails", "previous email", "old email"]),
+        staffId: findHeaderIndex_(headers, ["staff id", "employee id", "personnel id", "det user id"]),
         role: findHeaderIndex_(headers, ["role", "position", "production role", "team role"]),
         team: findHeaderIndex_(headers, ["team", "department", "area"]),
         department: findHeaderIndex_(headers, ["department", "team", "area"]),
+        departments: findHeaderIndex_(headers, ["departments", "production areas", "areas"]),
+        school: findHeaderIndex_(headers, ["school", "home school", "base school"]),
+        assignedItems: findHeaderIndex_(headers, ["assigned items", "items", "allocated items"]),
+        assignedGroups: findHeaderIndex_(headers, ["assigned groups", "groups", "allocated groups"]),
         mobile: findHeaderIndex_(headers, ["mobile", "phone", "contact number"]),
         access: findHeaderIndex_(headers, ["access", "modules", "permissions"]),
         permissions: findHeaderIndex_(headers, ["permissions", "permission", "access"]),
         allocatedEvents: findHeaderIndex_(headers, ["allocated events", "events", "event allocation", "allocated rehearsals"]),
+        photo: findHeaderIndex_(headers, ["photo", "photo url", "headshot", "profile photo"]),
         status: findHeaderIndex_(headers, ["status", "active", "active?"]),
         scopeType: findHeaderIndex_(headers, ["scope type", "scope"]),
         scopeValues: findHeaderIndex_(headers, ["scope values", "scope value", "scope items"])
@@ -87,11 +58,7 @@ const StaffService = (() => {
     }
   }
 
-  function findByEmail_(email) {
-    const target = String(email || "").trim().toLowerCase();
-    if (!target) return null;
-    return getAll().find(staff => String(staff.email || "").trim().toLowerCase() === target) || null;
-  }
+  function refresh() { staffCache_ = null; return getAll(); }
 
   function mapStaffRow_(row, indexes) {
     const firstName = getCell_(row, indexes.firstName);
@@ -111,19 +78,32 @@ const StaffService = (() => {
       .map(value => value.trim())
       .filter(Boolean);
 
+    const primaryEmail = getCell_(row, indexes.primaryEmail) || getCell_(row, indexes.email);
     return EntityModelService.staff({
+      staffId: getCell_(row, indexes.staffId),
       name,
       displayName: name,
       firstName,
       lastName,
-      email: getCell_(row, indexes.email),
+      email: primaryEmail,
+      primaryEmail,
+      secondaryEmail: getCell_(row, indexes.secondaryEmail),
+      personalEmail: getCell_(row, indexes.personalEmail),
+      aliasEmails: splitList_(getCell_(row, indexes.aliasEmails)),
+      legacyEmails: splitList_(getCell_(row, indexes.legacyEmails)),
       role: getCell_(row, indexes.role),
       team: getCell_(row, indexes.team),
       department: getCell_(row, indexes.department) || getCell_(row, indexes.team),
+      departments: splitList_(getCell_(row, indexes.departments) || getCell_(row, indexes.department) || getCell_(row, indexes.team)),
+      school: getCell_(row, indexes.school),
+      assignedItems: splitList_(getCell_(row, indexes.assignedItems)),
+      assignedGroups: splitList_(getCell_(row, indexes.assignedGroups)),
+      assignedEvents: allocatedEvents,
       mobile: getCell_(row, indexes.mobile),
       access,
       permissions,
       allocatedEvents,
+      photo: getCell_(row, indexes.photo),
       status: getCell_(row, indexes.status) || "Active",
       scope: {
         type: getCell_(row, indexes.scopeType) || "production",
@@ -134,7 +114,7 @@ const StaffService = (() => {
   }
 
   function getPermissions(email, staffRecord) {
-    const staff = staffRecord || findByEmail_(email) || {};
+    const staff = staffRecord || {};
     const raw = []
       .concat(staff.permissions || [])
       .concat(staff.access || []);
@@ -155,46 +135,6 @@ const StaffService = (() => {
     ])).sort();
   }
 
-  function hasPermission(email, permission) {
-    const target = String(permission || "").trim();
-    if (!target) return false;
-    const staff = findByEmail_(email) || { role: "Production Team Member", permissions: getPermissions(email) };
-    return getPermissions(email).includes(target) || AuthorizationService.hasCapability(staff, target);
-  }
-
-  function getRole(email) {
-    const staff = findByEmail_(email);
-    return staff ? staff.role || "Staff" : "Staff";
-  }
-
-  function getDepartment(email) {
-    const staff = findByEmail_(email);
-    return staff ? staff.department || staff.team || "" : "";
-  }
-
-  function getAllocatedEvents(email, staffRecord) {
-    const staff = staffRecord || findByEmail_(email) || {};
-    return staff.allocatedEvents || [];
-  }
-
-  function getUserDashboardContext(email) {
-    const user = email
-      ? { ...getCurrentUser(), email }
-      : getCurrentUser();
-
-    return {
-      email: user.email,
-      name: user.name || user.displayName,
-      role: user.role,
-      department: user.department,
-      permissions: user.permissions || [],
-      capabilities: user.capabilities || [],
-      isAdmin: !!user.isAdmin,
-      allocatedEvents: user.allocatedEvents || [],
-      visibleModules: user.visibleModules || []
-    };
-  }
-
   function getVisibleModules_(permissions) {
     const permissionSet = new Set(permissions || []);
     const modules = [
@@ -212,6 +152,18 @@ const StaffService = (() => {
     return modules
       .filter(([module, permission]) => permissionSet.has(permission) || permissionSet.has(module))
       .map(([module]) => module);
+  }
+
+  function getVisibleModules(permissions) { return getVisibleModules_(permissions); }
+
+  function getIdentityConflicts() {
+    const byIdentity = {};
+    getAll().forEach(staff => {
+      Array.from(new Set([staff.primaryEmail, staff.email, staff.secondaryEmail, staff.personalEmail].concat(staff.aliasEmails || [], staff.legacyEmails || [])
+        .map(value => String(value || "").trim().toLowerCase()).filter(Boolean)))
+        .forEach(value => { byIdentity[value] = byIdentity[value] || []; byIdentity[value].push({ staffId: staff.staffId || "", name: staff.name || staff.displayName || "", role: staff.role || "" }); });
+    });
+    return Object.keys(byIdentity).filter(key => byIdentity[key].length > 1).map(identity => ({ identity, count: byIdentity[identity].length, records: byIdentity[identity] }));
   }
 
   function toPermission_(value) {
@@ -288,26 +240,15 @@ const StaffService = (() => {
     return String(row[index] || "").trim();
   }
 
-  function getDisplayName_(email) {
-    if (!email) return "Spec Central user";
-
-    const local = String(email).split("@")[0] || "";
-    return local
-      .split(/[._-]+/)
-      .filter(Boolean)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(" ") || email;
-  }
+  function splitList_(value) { return String(value || "").split(/[,;\n]+/).map(item => item.trim()).filter(Boolean); }
 
   return {
     getCurrent,
     getCurrentUser,
     getPermissions,
-    hasPermission,
-    getRole,
-    getDepartment,
-    getAllocatedEvents,
-    getUserDashboardContext,
-    getAll
+    getAll,
+    getVisibleModules,
+    getIdentityConflicts,
+    refresh
   };
 })();

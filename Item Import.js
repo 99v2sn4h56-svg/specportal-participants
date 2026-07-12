@@ -247,7 +247,7 @@ function importRecords() {
   if (logSheet) {
     logSheet.appendRow([
       new Date(),
-      Session.getActiveUser().getEmail(),
+      UserContextService.getEmail(),
       importedGroups,
       importedIndividuals,
       warnings.join(" | ")

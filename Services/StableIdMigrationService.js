@@ -189,8 +189,8 @@ const StableIdMigrationService = (() => {
   }
 
   function requireAdmin_() {
-    const email = Session.getActiveUser().getEmail();
-    if (!email || (!StaffService.hasPermission(email, "Operations.Admin") && !StaffService.hasPermission(email, "Settings.Admin"))) {
+    const email = UserContextService.getEmail();
+    if (!email || (!UserContextService.hasCapability("Operations.Admin") && !UserContextService.hasCapability("Settings.Admin"))) {
       throw new Error("Operations.Admin or Settings.Admin is required for stable ID migration.");
     }
   }

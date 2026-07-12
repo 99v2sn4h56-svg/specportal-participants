@@ -5,20 +5,24 @@ const PlatformSearchService = (() => {
     const limit = Math.min(Number(options && options.limit) || 50, 100);
     if (text.length < 2) return [];
     const results = [];
-    const participants = ParticipantService.getAll();
-    const groups = ParticipantService.getGroups();
-    const timeline = TimelineService.getCalendarData().events;
+    const canViewParticipants = UserContextService.hasCapability("Participants.View");
+    const canViewCalendar = UserContextService.hasCapability("Calendar.View");
+    const canViewAttendance = UserContextService.hasCapability("Attendance.View");
+    const canViewStaff = UserContextService.hasCapability("Operations.View");
+    const participants = canViewParticipants ? ParticipantService.getAll() : [];
+    const groups = canViewParticipants ? ParticipantService.getGroups() : [];
+    const timeline = canViewCalendar ? TimelineService.getCalendarData().events : [];
     participants.forEach(item => add_(results, text, "participant", item.id, item.name, [item.school, item.item, item.category, item.teacherName]));
     ParticipantService.getActiveSchoolsData(participants, groups)
       .forEach(item => add_(results, text, "school", item.id, item.schoolName, [item.directorate]));
     groups.forEach(item => add_(results, text, "group", item.id, item.groupName || item.item, [item.school, item.category, item.teacherName]));
-    StaffService.getAll().forEach(item => add_(results, text, "staff", item.id, item.name || item.email, [item.department, item.role]));
+    if (canViewStaff) StaffService.getAll().forEach(item => add_(results, text, "staff", item.id, item.name || item.email, [item.department, item.role]));
     timeline.forEach(item => add_(results, text, item.eventType === "Rehearsal" ? "rehearsal" : "event", item.id, item.title, [item.date, item.venue, item.area, item.eventType, (item.staff || []).join(" ")]));
     uniqueBy_(participants.map(item => ({ id: EntityModelService.stableId("TCH", item.teacherEmail || item.teacherName), title: item.teacherName || item.teacherEmail, meta: [item.teacherEmail, item.school].filter(Boolean) })), "id")
       .forEach(item => add_(results, text, "teacher", item.id, item.title, item.meta));
     uniqueBy_(timeline.map(item => ({ id: item.venueId || EntityModelService.stableId("VEN", item.venue), title: item.venue, meta: [item.area] })), "id")
       .forEach(item => add_(results, text, "venue", item.id, item.title, item.meta));
-    try {
+    if (canViewAttendance) try {
       const response = AttendanceService.getEvents();
       const sessions = response && response.ok && Array.isArray(response.data) ? response.data : [];
       sessions.forEach(item => add_(results, text, "attendance", item.sessionId || item.id, item.eventName, [item.date, item.time, item.location, item.studentCount + " students"]));
