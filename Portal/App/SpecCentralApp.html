@@ -925,12 +925,18 @@
         }
         var categories = {};
         (App.state.participants || []).forEach(function (participant) {
-          var name = String(App.getParticipantCategoryDetail(participant) || App.getParticipantCategory(participant) || "").trim();
-          if (!name) return;
-          categories[name] = categories[name] || { name: name, participants: 0, schools: {}, items: {} };
-          categories[name].participants++;
-          var school = App.getParticipantSchool(participant); if (school) categories[name].schools[school] = true;
-          var item = App.getParticipantItem(participant); if (item) categories[name].items[item] = true;
+          var discipline = App.getParticipantDiscipline(participant) || App.getParticipantCategory(participant) || "";
+          var names = (App.participantArray ? App.participantArray(discipline) : String(discipline).split(/[,;\n|]+/)).map(function (value) { return String(value || "").trim(); }).filter(Boolean);
+          var seen = {};
+          names.forEach(function (name) {
+            var key = name.toLowerCase();
+            if (seen[key]) return;
+            seen[key] = true;
+            categories[key] = categories[key] || { name: name, participants: 0, schools: {}, items: {} };
+            categories[key].participants++;
+            var school = App.getParticipantSchool(participant); if (school) categories[key].schools[school] = true;
+            var item = App.getParticipantItem(participant); if (item) categories[key].items[item] = true;
+          });
         });
         var priority = ["Aboriginal Dance Ensemble", "Boys Hip Hop", "Featured Dance", "Featured Drama", "Featured Vocalists", "Backing Vocalists", "Signing Choir", "Combined Choir", "Orchestra", "Stage Band", "Circus Arts", "D'Arts", "Public Speaking", "Student Hosts", "Student Production Team"];
         var rows = Object.keys(categories).map(function (key) {
