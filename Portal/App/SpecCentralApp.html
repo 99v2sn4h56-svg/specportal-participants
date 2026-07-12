@@ -61,6 +61,12 @@
         selectedEvent: null,
         selectedStaff: null,
         adminMode: false,
+        administrationData: null,
+        administrationView: "users",
+        administrationSearch: "",
+        administrationStatus: "",
+        administrationSort: "name",
+        administrationDetailItems: [],
         navigationHistory: [],
         navigationIndex: -1,
         ready: false
@@ -103,6 +109,12 @@
           description: "Protected management area for Schools Spectacular operations.",
           template: "page-operations",
           permission: "operations.view"
+        },
+        administration: {
+          title: "Administration",
+          description: "Users, permissions, workflows, data sources and platform health.",
+          template: "page-administration",
+          permission: "Administration.View"
         },
         projectManagement: {
           title: "Operations",
@@ -370,6 +382,7 @@
         if (page === "attendance") App.renderAttendancePage();
         if (page === "rehearsals") App.renderRehearsalsPage();
         if (page === "operations") App.renderOperationsPage();
+        if (page === "administration") App.renderAdministrationPage();
         if (page === "mediaTimeline") App.renderMediaTimelinePage();
         if (page === "staff") App.renderStaffPage();
       },
@@ -1687,6 +1700,214 @@
           '</tbody></table>';
       },
 
+      loadAdministrationData: function () {
+        if (App.state.loading.administration) return;
+        App.state.loading.administration = true;
+        App.services.request("administration", "portalGetAdministrationData", { cacheMs: 60000, timeoutMs: 60000 })
+          .then(function (data) {
+            App.state.administrationData = data || {};
+            App.state.loading.administration = false;
+            if (App.state.currentPage === "administration") App.renderAdministrationPage();
+          })
+          .catch(function (error) {
+            App.state.loading.administration = false;
+            var el = document.getElementById("administrationContent");
+            if (el) el.innerHTML = '<div class="empty">Administration data could not be loaded: ' + App.escapeHtml(App.getErrorMessage(error)) + '</div>';
+          });
+      },
+
+      renderAdministrationPage: function () {
+        var content = document.getElementById("administrationContent");
+        if (!content) return;
+        if (!App.state.administrationData) {
+          content.innerHTML = '<div class="empty">Loading platform services...</div>';
+          App.loadAdministrationData();
+          return;
+        }
+        var data = App.state.administrationData;
+        var source = document.getElementById("administrationSource");
+        if (source) source.textContent = "Read-only platform view · " + App.formatAdministrationTimestamp(data.generatedAt);
+        App.renderAdministrationSummary();
+        var views = ["users", "permissions", "modules", "sources", "workflows", "jobs", "rules", "notifications", "audit", "health", "registry"];
+        Array.prototype.forEach.call(document.querySelectorAll(".administrationTabs button"), function (button, index) {
+          button.classList.toggle("active", views[index] === App.state.administrationView);
+        });
+        var renderers = {
+          users: App.renderAdministrationUsers,
+          permissions: App.renderAdministrationPermissions,
+          modules: App.renderAdministrationModules,
+          sources: App.renderAdministrationSources,
+          workflows: App.renderAdministrationWorkflows,
+          jobs: App.renderAdministrationJobs,
+          rules: App.renderAdministrationRules,
+          notifications: App.renderAdministrationNotifications,
+          audit: App.renderAdministrationAudit,
+          health: App.renderAdministrationHealth,
+          registry: App.renderAdministrationRegistry
+        };
+        content.innerHTML = (renderers[App.state.administrationView] || App.renderAdministrationUsers)();
+      },
+
+      setAdministrationView: function (view) {
+        App.state.administrationView = view;
+        App.closeAdministrationDetail();
+        App.renderAdministrationPage();
+      },
+
+      updateAdministrationFilters: function () {
+        App.state.administrationSearch = String((document.getElementById("administrationSearch") || {}).value || "").trim().toLowerCase();
+        App.state.administrationStatus = String((document.getElementById("administrationStatusFilter") || {}).value || "").toLowerCase();
+        App.state.administrationSort = String((document.getElementById("administrationSort") || {}).value || "name");
+        App.renderAdministrationPage();
+        var search = document.getElementById("administrationSearch");
+        if (search) {
+          search.value = App.state.administrationSearch;
+          search.focus();
+        }
+      },
+
+      filterAdministrationRows: function (rows) {
+        var search = App.state.administrationSearch || "";
+        var status = App.state.administrationStatus || "";
+        var sort = App.state.administrationSort || "name";
+        return (rows || []).filter(function (row) {
+          var text = JSON.stringify(row || {}).toLowerCase();
+          return (!search || text.indexOf(search) >= 0) && (!status || text.indexOf(status) >= 0);
+        }).sort(function (a, b) {
+          var aValue = sort === "status" ? (a.status || a.health || a.enabled) : sort === "type" ? (a.entityType || a.trigger || a.channel) : (a.name || a.title || a.id || "");
+          var bValue = sort === "status" ? (b.status || b.health || b.enabled) : sort === "type" ? (b.entityType || b.trigger || b.channel) : (b.name || b.title || b.id || "");
+          return String(aValue).localeCompare(String(bValue));
+        });
+      },
+
+      renderAdministrationSummary: function () {
+        var el = document.getElementById("administrationSummary");
+        if (!el) return;
+        var data = App.state.administrationData || {};
+        var stats = [
+          { label: "Users", value: (data.users || []).length },
+          { label: "Capabilities", value: ((data.permissions || {}).capabilities || []).length },
+          { label: "Sources", value: (data.sources || []).length },
+          { label: "Workflows", value: (data.workflows || []).length },
+          { label: "Jobs", value: (data.jobs || []).length },
+          { label: "Health checks", value: (data.health || []).length }
+        ];
+        el.innerHTML = stats.map(function (stat) { return '<div><strong>' + App.escapeHtml(stat.value) + '</strong><span>' + App.escapeHtml(stat.label) + '</span></div>'; }).join("");
+      },
+
+      renderAdministrationUsers: function () {
+        return App.renderAdministrationTable(App.filterAdministrationRows((App.state.administrationData.users || []).map(function (user) {
+          return Object.assign({}, user, { capabilities: (user.capabilities || []).join(", "), administrator: user.administrator ? "Administrator" : "Standard", scope: user.scope && user.scope.type || "production" });
+        })), ["name", "email", "role", "capabilities", "productionArea", "department", "administrator", "status", "lastSeen", "authenticationSource", "source"], "user");
+      },
+
+      renderAdministrationPermissions: function () {
+        var permissions = App.state.administrationData.permissions || { capabilities: [], matrix: [] };
+        var rows = App.filterAdministrationRows(permissions.matrix || []);
+        App.state.administrationDetailItems = rows;
+        if (!rows.length) return '<div class="empty">No permission records match.</div>';
+        return '<div class="permissionLegend"><span>✓ Granted</span><span>○ Inherited</span><span>— Unavailable</span></div><div class="adminTableWrap"><table class="adminTable permissionMatrix"><thead><tr><th>User</th><th>Role</th><th>Scope</th>' +
+          permissions.capabilities.map(function (capability) { return '<th title="' + App.escapeHtml(capability) + '">' + App.escapeHtml(capability) + '</th>'; }).join("") +
+          '</tr></thead><tbody>' + rows.map(function (row, index) {
+            return '<tr><td><button type="button" onclick="App.openAdministrationDetail(' + index + ',\'permission\')">' + App.escapeHtml(row.name) + '</button></td><td>' + App.escapeHtml(row.role) + '</td><td>' + App.escapeHtml(row.scope && row.scope.type || "production") + '</td>' +
+              permissions.capabilities.map(function (capability) { var value = row.grants[capability]; return '<td class="permissionCell ' + App.escapeHtml(String(value).toLowerCase()) + '" title="' + App.escapeHtml(value) + '">' + (value === "Granted" ? "✓" : value === "Inherited" ? "○" : "—") + '</td>'; }).join("") + '</tr>';
+          }).join("") + '</tbody></table></div>';
+      },
+
+      renderAdministrationModules: function () {
+        return App.renderAdministrationTable(App.filterAdministrationRows(App.state.administrationData.modules || []), ["id", "entityType", "source", "cache", "editable", "direction", "health", "readCapability", "editCapability", "actions", "futureEditor"], "module");
+      },
+
+      renderAdministrationSources: function () {
+        return App.renderAdministrationTable(App.filterAdministrationRows(App.state.administrationData.sources || []), ["id", "spreadsheet", "sheetNames", "lastSync", "cache", "cacheAge", "identityField", "stableId", "health", "direction", "editable"], "source");
+      },
+
+      renderAdministrationWorkflows: function () {
+        var rows = (App.state.administrationData.workflows || []).map(function (item) { return Object.assign({}, item, { trigger: item.trigger && item.trigger.type, dependencies: (item.dependencies || []).join(", "), actions: (item.actions || []).join(", "), capabilitiesRequired: (item.capabilitiesRequired || []).join(", "), approvalRequired: item.approval && item.approval.required ? "Required" : "Not required", enabled: item.enabled ? "Enabled" : "Disabled" }); });
+        return App.renderAdministrationTable(App.filterAdministrationRows(rows), ["name", "id", "status", "enabled", "owner", "trigger", "dependencies", "actions", "version", "approvalRequired"], "workflow");
+      },
+
+      renderAdministrationJobs: function () {
+        var data = App.state.administrationData;
+        var registry = (data.jobRegistry || []).map(function (item) { return { name: item.jobType, status: item.adapterConnected ? "Connected" : "Waiting for Adapter", adapter: item.adapterConnected ? "Registered" : "None", schedule: "Not scheduled" }; });
+        var jobs = (data.jobs || []).map(function (item) { return Object.assign({ name: item.jobType }, item); });
+        return '<h4 class="sectionTitle">Registered job adapters</h4>' + App.renderAdministrationTable(App.filterAdministrationRows(registry), ["name", "status", "adapter", "schedule"], "job-adapter") +
+          '<h4 class="sectionTitle adminSubheading">Operations queue</h4>' + App.renderAdministrationTable(App.filterAdministrationRows(jobs), ["name", "status", "priority", "requestedBy", "createdAt", "attempts", "error"], "job");
+      },
+
+      renderAdministrationRules: function () {
+        var rows = (App.state.administrationData.automationRules || []).map(function (rule) { return Object.assign({}, rule, { status: rule.enabled ? "Enabled" : "Disabled", trigger: rule.eventType, actions: rule.workflowId, owner: String(rule.workflowId || "").split(".")[0], dependencies: "Workflow registry" }); });
+        return App.renderAdministrationTable(App.filterAdministrationRows(rows), ["name", "status", "trigger", "condition", "actions", "owner", "dependencies"], "rule");
+      },
+
+      renderAdministrationNotifications: function () {
+        var channels = (App.state.administrationData.notificationChannels || []).map(function (channel) { return { name: channel.channel, channel: channel.channel, status: channel.connected ? "Connected" : "Adapter Only", adapter: channel.connected ? "Registered" : "None", queueCount: (App.state.administrationData.notifications || []).filter(function (item) { return item.channel === channel.channel; }).length }; });
+        return App.renderAdministrationTable(App.filterAdministrationRows(channels), ["name", "status", "adapter", "queueCount"], "notification");
+      },
+
+      renderAdministrationAudit: function () {
+        var rows = (App.state.administrationData.audit || []).map(function (item) { return { id: item.id, name: item.action, entity: item.entity && (item.entity.type || item.entity.id) || "", user: item.actor, timestamp: item.occurredAt, action: item.action, workflow: item.details && item.details.workflowId || "", source: "AuditService", status: "Recorded", details: item.details }; });
+        return '<div class="adminActions"><button class="quickLink compact" type="button" disabled>Export audit</button></div>' + App.renderAdministrationTable(App.filterAdministrationRows(rows), ["name", "entity", "user", "timestamp", "workflow", "source", "status"], "audit");
+      },
+
+      renderAdministrationHealth: function () {
+        var rows = App.filterAdministrationRows(App.state.administrationData.health || []);
+        App.state.administrationDetailItems = rows;
+        return rows.length ? '<div class="healthGrid">' + rows.map(function (item, index) { return '<button class="healthCard" type="button" onclick="App.openAdministrationDetail(' + index + ',\'health\')"><span class="statusChip ' + App.escapeHtml(String(item.status).toLowerCase().replace(/[^a-z]+/g, "-")) + '">' + App.escapeHtml(item.status) + '</span><strong>' + App.escapeHtml(item.name) + '</strong><span>' + App.escapeHtml(item.entityCount + " " + item.entityLabel) + '</span><small>' + App.escapeHtml(item.responseMs + "ms · " + item.dependencies) + '</small>' + (item.errors ? '<em>' + App.escapeHtml(item.errors) + '</em>' : '') + '</button>'; }).join("") + '</div>' : '<div class="empty">No health checks match.</div>';
+      },
+
+      renderAdministrationRegistry: function () {
+        var registry = App.state.administrationData.registry || {};
+        var search = App.state.administrationSearch || "";
+        function matches(value) { return !search || JSON.stringify(value).toLowerCase().indexOf(search) >= 0; }
+        function sorted(rows) { return (rows || []).filter(matches).sort(function (a, b) { return JSON.stringify(a).localeCompare(JSON.stringify(b)); }); }
+        return '<div class="registryGrid">' +
+          App.renderRegistrySection("Entities", sorted(registry.entities).map(function (name) { return { name: name, type: "Entity" }; }), ["name", "type"]) +
+          App.renderRegistrySection("Relationships", sorted(registry.relationships), ["from", "relation", "to", "via", "resolver"]) +
+          App.renderRegistrySection("Actions", sorted(registry.actions), ["module", "action"]) +
+          App.renderRegistrySection("AI hooks", sorted(registry.aiExtensions), ["hook", "connected"]) +
+        '</div>';
+      },
+
+      renderRegistrySection: function (title, rows, columns) {
+        return '<section class="registrySection"><h4>' + App.escapeHtml(title) + ' <span class="countBadge">' + rows.length + '</span></h4>' + App.renderDataTable(rows, columns) + '</section>';
+      },
+
+      renderAdministrationTable: function (rows, columns, detailType) {
+        App.state.administrationDetailItems = rows;
+        if (!rows.length) return '<div class="empty">No records match the current filters.</div>';
+        return '<div class="adminTableWrap"><table class="adminTable"><thead><tr>' + columns.map(function (column) { return '<th>' + App.escapeHtml(App.toTitle(column)) + '</th>'; }).join("") + '</tr></thead><tbody>' +
+          rows.map(function (row, index) { return '<tr>' + columns.map(function (column, columnIndex) { var value = App.formatAdministrationValue(row[column]); return '<td>' + (columnIndex === 0 ? '<button type="button" onclick="App.openAdministrationDetail(' + index + ',\'' + App.escapeJs(detailType) + '\')">' + value + '</button>' : value) + '</td>'; }).join("") + '</tr>'; }).join("") + '</tbody></table></div>';
+      },
+
+      formatAdministrationValue: function (value) {
+        if (Array.isArray(value)) return value.length ? '<span class="adminBadgeList">' + value.map(function (item) { return '<span class="adminBadge">' + App.escapeHtml(item) + '</span>'; }).join("") + '</span>' : "—";
+        if (value && typeof value === "object") return App.escapeHtml(JSON.stringify(value));
+        if (value === true || value === "Enabled" || value === "Connected" || value === "Active" || value === "Registered") return '<span class="statusChip connected">' + App.escapeHtml(String(value)) + '</span>';
+        if (value === false || value === "Disabled" || value === "Unavailable" || value === "Not Connected") return '<span class="statusChip disabled">' + App.escapeHtml(String(value)) + '</span>';
+        return App.escapeHtml(value === undefined || value === null || value === "" ? "—" : String(value));
+      },
+
+      openAdministrationDetail: function (index, type) {
+        var item = App.state.administrationDetailItems[index];
+        var drawer = document.getElementById("administrationDrawer");
+        if (!item || !drawer) return;
+        drawer.hidden = false;
+        drawer.innerHTML = '<div class="drawerHeader"><div><div class="scProfileKicker">' + App.escapeHtml(type || "record") + '</div><h3>' + App.escapeHtml(item.name || item.title || item.id || "Detail") + '</h3></div><button type="button" aria-label="Close detail" onclick="App.closeAdministrationDetail()">×</button></div>' +
+          '<div class="drawerBody">' + Object.keys(item).filter(function (key) { return key !== "rawPermissions" && key !== "rawAccess"; }).map(function (key) { return '<div class="drawerField"><strong>' + App.escapeHtml(App.toTitle(key)) + '</strong><div>' + App.formatAdministrationValue(item[key]) + '</div></div>'; }).join("") + '</div>' +
+          '<div class="drawerActions"><button class="quickLink compact" type="button" disabled>Edit ' + App.escapeHtml(type || "record") + '</button><button class="quickLink compact" type="button" disabled>Manage permissions</button></div>';
+      },
+
+      closeAdministrationDetail: function () {
+        var drawer = document.getElementById("administrationDrawer");
+        if (drawer) { drawer.hidden = true; drawer.innerHTML = ""; }
+      },
+
+      formatAdministrationTimestamp: function (value) {
+        var date = new Date(value);
+        return isNaN(date.getTime()) ? String(value || "") : date.toLocaleString("en-AU");
+      },
+
       filterMine: function (items, ownerField) {
         var email = String(App.state.staff.email || "").toLowerCase();
         var name = String(App.state.staff.name || App.state.staff.displayName || "").toLowerCase();
@@ -1712,7 +1933,11 @@
           '<div class="profileLine"><strong>Display name</strong><br>' + App.escapeHtml(staff.displayName || "Spec Central user") + '</div>' +
           '<div class="profileLine"><strong>Role</strong><br>' + App.escapeHtml(staff.role || "Staff") + '</div>' +
           '<div class="profileLine"><strong>Staff team records</strong><br>' + App.escapeHtml((App.state.staffTeam || []).length) + '</div>' +
-          '<div class="profileLine"><strong>Source</strong><br>' + App.escapeHtml(staff.source || "Placeholder") + '</div>';
+          '<div class="profileLine"><strong>Source</strong><br>' + App.escapeHtml(staff.source || "Source unavailable") + '</div>';
+        var capabilities = document.getElementById("staffCapabilities");
+        if (capabilities) capabilities.innerHTML = (staff.capabilities || []).length
+          ? staff.capabilities.map(function (capability) { return '<span class="adminBadge">' + App.escapeHtml(capability) + '</span>'; }).join("")
+          : '<span class="moduleMeta">No capabilities were returned.</span>';
       },
 
       openAttendance: function () {

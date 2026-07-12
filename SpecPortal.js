@@ -82,6 +82,10 @@ function portalGetOperationsConsole() {
   return OperationsConsoleService.getData();
 }
 
+function portalGetAdministrationData() {
+  return AdministrationService.getData();
+}
+
 function portalPublishPlatformEvent(eventType, payload) {
   requirePortalCapability_("Workflow.Admin");
   return WorkflowService.publishEvent(eventType, payload || {}, { source: "SpecPortal gateway" });

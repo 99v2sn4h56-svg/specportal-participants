@@ -16,3 +16,44 @@
     <div id="operationsContent" class="moduleWorkspace"></div>
   </section>
 </template>
+
+<template id="page-administration">
+  <section class="panel span12 administrationShell">
+    <div class="administrationHeader">
+      <div>
+        <div class="scProfileKicker">Platform administration</div>
+        <h3 class="sectionTitle">Administration Centre</h3>
+        <div id="administrationSource" class="moduleMeta">Loading platform registry and health...</div>
+      </div>
+      <div class="adminActions">
+        <button class="quickLink compact" type="button" disabled title="Editing is not enabled">Edit configuration</button>
+        <button class="quickLink compact" type="button" disabled title="Exports are not enabled">Export</button>
+      </div>
+    </div>
+    <div id="administrationSummary" class="administrationSummary"></div>
+    <div class="administrationTabs" role="tablist" aria-label="Administration sections">
+      <button type="button" onclick="App.setAdministrationView('users')">Users</button>
+      <button type="button" onclick="App.setAdministrationView('permissions')">Permissions</button>
+      <button type="button" onclick="App.setAdministrationView('modules')">Modules</button>
+      <button type="button" onclick="App.setAdministrationView('sources')">Data Sources</button>
+      <button type="button" onclick="App.setAdministrationView('workflows')">Workflows</button>
+      <button type="button" onclick="App.setAdministrationView('jobs')">Jobs</button>
+      <button type="button" onclick="App.setAdministrationView('rules')">Automation Rules</button>
+      <button type="button" onclick="App.setAdministrationView('notifications')">Notifications</button>
+      <button type="button" onclick="App.setAdministrationView('audit')">Audit</button>
+      <button type="button" onclick="App.setAdministrationView('health')">System Health</button>
+      <button type="button" onclick="App.setAdministrationView('registry')">Platform Registry</button>
+    </div>
+    <div class="administrationFilters">
+      <input id="administrationSearch" class="participantSearch" type="search" placeholder="Search this administration page..." oninput="App.updateAdministrationFilters()">
+      <select id="administrationStatusFilter" class="filterSelect" onchange="App.updateAdministrationFilters()">
+        <option value="">All statuses</option><option>Active</option><option>Connected</option><option>Registered</option><option>Enabled</option><option>Disabled</option><option>Failed</option><option>Unavailable</option>
+      </select>
+      <select id="administrationSort" class="filterSelect" onchange="App.updateAdministrationFilters()">
+        <option value="name">Sort by name</option><option value="status">Sort by status</option><option value="type">Sort by type</option>
+      </select>
+    </div>
+    <div id="administrationContent" class="administrationContent"><div class="empty">Loading Administration Centre...</div></div>
+  </section>
+  <aside id="administrationDrawer" class="administrationDrawer" hidden aria-live="polite"></aside>
+</template>

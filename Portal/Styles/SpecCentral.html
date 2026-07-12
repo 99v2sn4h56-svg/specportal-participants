@@ -993,6 +993,67 @@
       font-size: 12px;
     }
 
+    .administrationShell { position: relative; }
+    .administrationHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+    .administrationSummary { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 10px; margin: 20px 0; }
+    .administrationSummary > div { padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: #f8fafc; }
+    .administrationSummary strong, .administrationSummary span { display: block; }
+    .administrationSummary strong { color: #1256cf; font-size: 22px; }
+    .administrationSummary span { margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .administrationTabs { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 10px; border-bottom: 1px solid var(--border); }
+    .administrationTabs button { flex: 0 0 auto; border: 0; border-radius: 9px; padding: 8px 11px; background: transparent; color: #475569; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .administrationTabs button:hover, .administrationTabs button.active { background: #eaf1ff; color: #1256cf; }
+    .administrationFilters { display: grid; grid-template-columns: minmax(260px, 1fr) auto auto; gap: 10px; margin: 16px 0; }
+    .administrationContent { min-height: 360px; }
+    .adminTableWrap { max-width: 100%; overflow: auto; border: 1px solid var(--border); border-radius: 14px; background: #fff; }
+    .adminTable { width: 100%; min-width: 980px; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+    .adminTable th { position: sticky; top: 0; z-index: 1; padding: 10px 12px; border-bottom: 1px solid var(--border); background: #f3f6fb; color: #475569; text-align: left; white-space: nowrap; }
+    .adminTable td { max-width: 320px; padding: 10px 12px; border-bottom: 1px solid #edf1f6; vertical-align: top; overflow-wrap: anywhere; }
+    .adminTable tbody tr:hover { background: #f8fbff; }
+    .adminTable td button { border: 0; padding: 0; background: none; color: #1256cf; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+    .adminBadgeList { display: flex; flex-wrap: wrap; gap: 4px; }
+    .adminBadge, .countBadge, .statusChip { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 7px; background: #eef2f7; color: #475569; font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .statusChip.connected, .statusChip.active, .statusChip.registered { background: #dcfce7; color: #166534; }
+    .statusChip.disabled, .statusChip.unavailable, .statusChip.not-connected { background: #e2e8f0; color: #475569; }
+    .statusChip.degraded, .statusChip.adapter-only { background: #fef3c7; color: #92400e; }
+    .permissionLegend { display: flex; gap: 14px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
+    .permissionMatrix th { max-width: 130px; writing-mode: vertical-rl; transform: rotate(180deg); height: 150px; }
+    .permissionMatrix th:first-child, .permissionMatrix th:nth-child(2), .permissionMatrix th:nth-child(3) { writing-mode: initial; transform: none; height: auto; }
+    .permissionCell { text-align: center; font-size: 16px; }
+    .permissionCell.granted { color: #15803d; background: #f0fdf4; }
+    .permissionCell.inherited { color: #1256cf; background: #eff6ff; }
+    .permissionCell.unavailable { color: #94a3b8; }
+    .healthGrid { display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; }
+    .healthCard { display: grid; gap: 8px; min-height: 150px; padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: #fff; text-align: left; font: inherit; cursor: pointer; box-shadow: var(--softShadow); }
+    .healthCard .statusChip { justify-self: start; }
+    .healthCard strong { font-size: 15px; }
+    .healthCard span, .healthCard small { color: var(--muted); }
+    .healthCard em { color: #b42318; font-size: 11px; font-style: normal; }
+    .registryGrid { display: grid; gap: 18px; }
+    .registrySection { min-width: 0; }
+    .registrySection h4 { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .adminSubheading { margin-top: 24px; }
+    .administrationDrawer { position: fixed; z-index: 80; top: 0; right: 0; width: min(520px, 94vw); height: 100vh; overflow: auto; padding: 22px; border-left: 1px solid var(--border); background: #fff; box-shadow: -20px 0 50px rgba(15, 23, 42, .16); }
+    .drawerHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+    .drawerHeader h3 { margin: 4px 0 0; }
+    .drawerHeader > button { border: 0; background: none; font-size: 28px; cursor: pointer; }
+    .drawerBody { display: grid; gap: 12px; padding: 18px 0; }
+    .drawerField { padding-bottom: 10px; border-bottom: 1px solid #edf1f6; }
+    .drawerField strong { display: block; margin-bottom: 5px; color: #64748b; font-size: 10px; text-transform: uppercase; }
+    .drawerActions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    @media (max-width: 900px) {
+      .administrationSummary { grid-template-columns: repeat(3, minmax(100px, 1fr)); }
+      .healthGrid { grid-template-columns: repeat(2, minmax(200px, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .administrationHeader { flex-direction: column; }
+      .administrationSummary { grid-template-columns: repeat(2, minmax(100px, 1fr)); }
+      .administrationFilters { grid-template-columns: 1fr; }
+      .healthGrid { grid-template-columns: 1fr; }
+    }
+
     .ganttGrid {
       display: grid;
       gap: 10px;

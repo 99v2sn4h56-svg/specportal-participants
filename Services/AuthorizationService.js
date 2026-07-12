@@ -8,7 +8,7 @@ const AuthorizationService = (() => {
     "Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark",
     "Calendar.View", "Calendar.Operational.View", "Calendar.Edit", "Timeline.Edit",
     "Reports.Export", "Communications.Send", "Settings.Admin", "Operations.View",
-    "Operations.Admin", "Users.Manage", "Permissions.Manage", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View"
+    "Operations.Admin", "Administration.View", "Users.Manage", "Permissions.Manage", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View", "Audit.View", "AI.View"
   ];
 
   const ROLES = {
@@ -35,7 +35,8 @@ const AuthorizationService = (() => {
     "operations.users.manage": "Users.Manage",
     "operations.permissions.manage": "Permissions.Manage",
     "settings.view": "Settings.Admin",
-    "settings.admin": "Settings.Admin"
+    "settings.admin": "Settings.Admin",
+    "administration.view": "Administration.View"
   };
 
   function normaliseCapability(value) {
