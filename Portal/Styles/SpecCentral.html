@@ -874,6 +874,43 @@
       gap: 8px;
     }
 
+    .calendarRange {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    .calendarRange7 {
+      grid-template-columns: repeat(7, minmax(220px, 1fr));
+      overflow-x: auto;
+      align-items: start;
+    }
+
+    .calendarRangeDay {
+      min-height: 180px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #f8fafc;
+    }
+
+    .adminModeBanner {
+      margin: 12px 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(18, 86, 207, .25);
+      border-radius: 10px;
+      background: rgba(18, 86, 207, .07);
+      color: #1256cf;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .adminActions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+    }
+
     .calendarDay {
       min-height: 118px;
       border: 1px solid var(--border);

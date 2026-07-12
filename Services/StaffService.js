@@ -12,7 +12,7 @@ const StaffService = (() => {
 
     if (staff) {
       const permissions = getPermissions(email, staff);
-      return {
+      return EntityModelService.staff({
         ...staff,
         email: staff.email || email,
         name: staff.name || staff.displayName || getDisplayName_(email),
@@ -20,27 +20,34 @@ const StaffService = (() => {
         role: staff.role || "Staff",
         department: staff.department || staff.team || "",
         permissions,
+        capabilities: AuthorizationService.resolveGrants(Object.assign({}, staff, { permissions }))
+          .map(grant => grant.capability),
+        isAdmin: AuthorizationService.hasCapability(Object.assign({}, staff, { permissions }), "Operations.Admin") ||
+          AuthorizationService.hasCapability(Object.assign({}, staff, { permissions }), "Settings.Admin"),
         access: staff.access && staff.access.length ? staff.access : getVisibleModules_(permissions),
         visibleModules: getVisibleModules_(permissions),
         allocatedEvents: getAllocatedEvents(email, staff),
         source: "Staff Production Team spreadsheet"
-      };
+      });
     }
 
     const permissions = ["dashboard.view", "participants.view", "calendar.view", "rehearsals.view", "attendance.view"];
 
-    return {
+    return EntityModelService.staff({
       email,
       name: getDisplayName_(email),
       displayName: getDisplayName_(email),
       role: "Staff",
       department: "",
       permissions,
+      capabilities: AuthorizationService.resolveGrants({ role: "Production Team Member", permissions })
+        .map(grant => grant.capability),
+      isAdmin: false,
       access: getVisibleModules_(permissions),
       visibleModules: getVisibleModules_(permissions),
       allocatedEvents: [],
       source: "Fallback until user is matched in Staff Production Team spreadsheet"
-    };
+    });
   }
 
   function getAll() {
@@ -64,7 +71,10 @@ const StaffService = (() => {
         mobile: findHeaderIndex_(headers, ["mobile", "phone", "contact number"]),
         access: findHeaderIndex_(headers, ["access", "modules", "permissions"]),
         permissions: findHeaderIndex_(headers, ["permissions", "permission", "access"]),
-        allocatedEvents: findHeaderIndex_(headers, ["allocated events", "events", "event allocation", "allocated rehearsals"])
+        allocatedEvents: findHeaderIndex_(headers, ["allocated events", "events", "event allocation", "allocated rehearsals"]),
+        status: findHeaderIndex_(headers, ["status", "active", "active?"]),
+        scopeType: findHeaderIndex_(headers, ["scope type", "scope"]),
+        scopeValues: findHeaderIndex_(headers, ["scope values", "scope value", "scope items"])
       };
 
       staffCache_ = values.slice(headerRowIndex + 1)
@@ -101,7 +111,7 @@ const StaffService = (() => {
       .map(value => value.trim())
       .filter(Boolean);
 
-    return {
+    return EntityModelService.staff({
       name,
       displayName: name,
       firstName,
@@ -114,8 +124,13 @@ const StaffService = (() => {
       access,
       permissions,
       allocatedEvents,
+      status: getCell_(row, indexes.status) || "Active",
+      scope: {
+        type: getCell_(row, indexes.scopeType) || "production",
+        values: String(getCell_(row, indexes.scopeValues) || "").split(/[,;\n]+/).map(value => value.trim()).filter(Boolean)
+      },
       source: "Staff Production Team spreadsheet"
-    };
+    });
   }
 
   function getPermissions(email, staffRecord) {
@@ -143,7 +158,8 @@ const StaffService = (() => {
   function hasPermission(email, permission) {
     const target = String(permission || "").trim();
     if (!target) return false;
-    return getPermissions(email).includes(target);
+    const staff = findByEmail_(email) || { role: "Production Team Member", permissions: getPermissions(email) };
+    return getPermissions(email).includes(target) || AuthorizationService.hasCapability(staff, target);
   }
 
   function getRole(email) {
@@ -172,6 +188,8 @@ const StaffService = (() => {
       role: user.role,
       department: user.department,
       permissions: user.permissions || [],
+      capabilities: user.capabilities || [],
+      isAdmin: !!user.isAdmin,
       allocatedEvents: user.allocatedEvents || [],
       visibleModules: user.visibleModules || []
     };

@@ -60,6 +60,7 @@
         selectedTeacher: null,
         selectedEvent: null,
         selectedStaff: null,
+        adminMode: false,
         navigationHistory: [],
         navigationIndex: -1,
         ready: false
@@ -432,6 +433,7 @@
             App.state.staff = config.staff || {};
             App.state.currentUser = App.state.staff;
             App.state.permissions = App.state.staff.permissions || [];
+            App.state.adminMode = !!App.state.staff.isAdmin;
             App.state.staffTeam = config.staffTeam || [];
             App.state.attendanceUrl = config.attendanceUrl || "";
             App.state.attendanceStatus = config.attendanceStatus || "";
@@ -551,14 +553,23 @@
       },
 
       hasPermission: function (permission) {
-        var permissions = App.state.staff.permissions || [];
-        return permissions.indexOf(permission) >= 0;
+        var permissions = (App.state.staff.permissions || []).concat(App.state.staff.capabilities || []);
+        var aliases = {
+          "operations.view": "Operations.View",
+          "operations.users.manage": "Users.Manage",
+          "operations.permissions.manage": "Permissions.Manage",
+          "operations.events.manage": "Timeline.Edit"
+        };
+        return permissions.indexOf(permission) >= 0 || permissions.indexOf(aliases[permission]) >= 0;
       },
 
       renderNavigation: function () {
         Array.prototype.forEach.call(document.querySelectorAll("[data-permission]"), function (button) {
           var permission = button.getAttribute("data-permission");
           button.hidden = permission ? !App.hasPermission(permission) : false;
+        });
+        Array.prototype.forEach.call(document.querySelectorAll("[data-admin-control]"), function (control) {
+          control.hidden = !App.state.adminMode;
         });
       },
 
@@ -880,9 +891,7 @@
         App.populateEventFilters("calendarVenueFilter", "venue", App.getCalendarEvents());
 
         var heading = document.getElementById("calendarHeading");
-        if (heading) {
-          heading.textContent = new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric" }).format(App.state.calendarDate);
-        }
+        if (heading) heading.textContent = App.getCalendarHeading();
 
         var month = document.getElementById("calendarMonth");
         var agenda = document.getElementById("calendarAgenda");
@@ -897,7 +906,9 @@
 
         month.style.display = "grid";
         agenda.style.display = "none";
-        App.renderCalendarMonth(month);
+        if (App.state.calendarView === "day") App.renderCalendarRange(month, 1);
+        else if (App.state.calendarView === "week") App.renderCalendarRange(month, 7);
+        else App.renderCalendarMonth(month);
       },
 
       renderCalendarLoading: function () {
@@ -912,7 +923,10 @@
         var venue = String((document.getElementById("calendarVenueFilter") || {}).value || "");
 
         return events.filter(function (event) {
-          var text = [event.title, event.event, event.venue, event.type, event.rehearsalType, (event.items || []).join(" ")].join(" ").toLowerCase();
+          var text = [event.title, event.event, event.area, event.venue, event.type, event.eventType,
+            (event.staff || []).join(" "), (event.categories || []).join(" "),
+            (event.schoolGroups || []).join(" "), (event.studentGroups || []).join(" "),
+            (event.items || []).join(" ")].join(" ").toLowerCase();
           if (search && text.indexOf(search) < 0) return false;
           if (type && String(event.type || event.rehearsalType || "") !== type) return false;
           if (venue && String(event.venue || "") !== venue) return false;
@@ -921,6 +935,7 @@
       },
 
       renderCalendarMonth: function (el) {
+        el.className = "calendarMonth";
         var date = App.state.calendarDate;
         var first = new Date(date.getFullYear(), date.getMonth(), 1);
         var start = new Date(first);
@@ -948,6 +963,27 @@
         el.innerHTML = html;
       },
 
+      renderCalendarRange: function (el, days) {
+        var start = new Date(App.state.calendarDate);
+        if (days === 7) start.setDate(start.getDate() - start.getDay() + 1);
+        var events = App.getCalendarEvents();
+        var byDate = App.groupEventsByDate(events);
+        var html = "";
+
+        for (var i = 0; i < days; i++) {
+          var day = new Date(start);
+          day.setDate(start.getDate() + i);
+          var key = App.toDateKey(day);
+          var dayEvents = (byDate[key] || []).sort(App.sortEvents);
+          html += '<section class="calendarRangeDay">' +
+            '<h4>' + App.escapeHtml(App.formatShortDate(day)) + '</h4>' +
+            (dayEvents.length ? dayEvents.map(App.renderTimelineEventCard).join("") : '<div class="empty">No events</div>') +
+          '</section>';
+        }
+        el.className = "calendarRange calendarRange" + days;
+        el.innerHTML = html;
+      },
+
       renderCalendarAgenda: function (el) {
         var events = App.getCalendarEvents().sort(App.sortEvents);
         el.innerHTML = events.length
@@ -957,7 +993,9 @@
 
       showCalendarEventDetail: function (id) {
         var events = ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []);
-        var event = events.find(function (item) { return String(item.id) === String(id); });
+        var event = events.find(function (item) {
+          return String(item.id) === String(id) || (item.legacyIds || []).map(String).indexOf(String(id)) >= 0;
+        });
         var el = document.getElementById("calendarEventDetail");
         if (!event || !el) return;
 
@@ -967,11 +1005,19 @@
           '<h2 class="profileTitle">' + App.escapeHtml(event.title || event.event || "Event") + '</h2>' +
           App.profileLine("Date / time", [event.date, [event.start, event.finish].filter(Boolean).join(" - ")].filter(Boolean).join(" · ")) +
           App.profileLine("Venue", event.venue) +
+          App.profileLine("Area", event.area) +
+          App.profileLine("Event classification", event.eventType) +
           App.profileLine("Type", event.type || event.rehearsalType) +
+          App.profileLine("Categories", (event.categories || []).join(", ")) +
+          App.profileLine("School groups", (event.schoolGroups || []).join(", ")) +
+          App.profileLine("Individual student groups", (event.studentGroups || []).join(", ")) +
+          App.profileLine("Individual students", (event.individualStudents || []).join(", ")) +
           App.profileLine("Groups / items", (event.items || event.groups || []).join(", ")) +
-          App.profileLine("Allocated staff", event.allocatedStaffCount ? event.allocatedStaffCount + " staff" : "Not connected") +
-          App.profileLine("Attendance", event.attendanceStatus || "Not connected") +
-          App.profileLine("Source", event.sourceRow ? "Timeline row " + event.sourceRow : event.source || "Placeholder");
+          App.profileLine("Allocated staff", (event.staff || []).join(", ")) +
+          (event.isRehearsal ? App.profileLine("Attendance", event.attendanceStatus || "Not connected") : "") +
+          App.profileLine("Notes", event.notes) +
+          App.profileLine("Source", event.sourceRow ? "Timeline row " + event.sourceRow : event.source || "Timeline") +
+          (event.attendanceSession ? '<button class="quickLink compact" type="button" onclick="App.openAttendanceEvent(\'' + App.escapeJs(event.attendanceSession.sessionId) + '\',\'' + App.escapeJs(event.title || event.event || "Event") + '\')">Open attendance roll →</button>' : '');
       },
 
       goCalendarToday: function () {
@@ -981,13 +1027,34 @@
 
       moveCalendar: function (months) {
         var current = App.state.calendarDate;
-        App.state.calendarDate = new Date(current.getFullYear(), current.getMonth() + months, 1);
+        if (App.state.calendarView === "day") App.state.calendarDate = new Date(current.getFullYear(), current.getMonth(), current.getDate() + months);
+        else if (App.state.calendarView === "week") App.state.calendarDate = new Date(current.getFullYear(), current.getMonth(), current.getDate() + (months * 7));
+        else App.state.calendarDate = new Date(current.getFullYear(), current.getMonth() + months, 1);
+        App.renderCalendarPage();
+      },
+
+      setCalendarView: function (view) {
+        App.state.calendarView = ["day", "week", "month", "agenda"].indexOf(view) >= 0 ? view : "month";
         App.renderCalendarPage();
       },
 
       toggleCalendarView: function () {
         App.state.calendarView = App.state.calendarView === "month" ? "agenda" : "month";
         App.renderCalendarPage();
+      },
+
+      getCalendarHeading: function () {
+        var date = App.state.calendarDate;
+        if (App.state.calendarView === "day") return App.formatShortDate(date);
+        if (App.state.calendarView === "week") {
+          var start = new Date(date);
+          start.setDate(start.getDate() - start.getDay() + 1);
+          var end = new Date(start);
+          end.setDate(start.getDate() + 6);
+          return App.formatShortDate(start) + " – " + App.formatShortDate(end);
+        }
+        if (App.state.calendarView === "agenda") return "Agenda";
+        return new Intl.DateTimeFormat("en-AU", { month: "long", year: "numeric" }).format(date);
       },
 
       groupEventsByDate: function (events) {
@@ -1379,7 +1446,9 @@
       },
 
       getFilteredRehearsals: function () {
-        var events = (App.state.rehearsals || []).slice();
+        var events = (App.state.rehearsals || []).filter(function (event) {
+          return event.eventType !== "Operational Event";
+        });
         var search = String((document.getElementById("rehearsalSearch") || {}).value || "").toLowerCase();
         var venue = String((document.getElementById("rehearsalVenueFilter") || {}).value || "");
         var type = String((document.getElementById("rehearsalTypeFilter") || {}).value || "");
@@ -1418,9 +1487,9 @@
         if (view === "overview") {
           el.innerHTML = App.renderOperationsOverview();
         } else if (view === "events") {
-          el.innerHTML = '<div class="empty">Event management will connect to Timeline in a later sprint.</div>';
+          el.innerHTML = App.renderOperationsEvents(App.state.projectData.events || []);
         } else if (view === "users") {
-          el.innerHTML = '<div class="empty">Users and permissions will connect to the Staff Production Team source.</div>';
+          el.innerHTML = App.renderOperationsUsers(App.state.projectData.users || []);
         } else if (view === "data") {
           el.innerHTML = '<div class="empty">Import Centre, acceptance syncing and reconciliation tools will appear here.</div>';
         } else if (view === "announcements") {
@@ -1451,6 +1520,30 @@
         }).join("") + '</div>' +
           '<h4 class="sectionTitle">Project Management</h4>' +
           App.renderTaskBoard((App.state.projectData && App.state.projectData.tasks) || [], (App.state.projectData && App.state.projectData.statuses) || []);
+      },
+
+      renderOperationsUsers: function (users) {
+        if (!users.length) return '<div class="empty">No users were returned by Staff Production Team.</div>';
+        return '<div class="adminModeBanner">Capability-based access · ' + users.length + ' known users</div>' +
+          App.renderDataTable(users.map(function (user) {
+            return {
+              name: user.name,
+              email: user.email,
+              department: user.department,
+              role: user.role,
+              status: user.status,
+              scope: user.scope && user.scope.type || "production"
+            };
+          }), ["name", "email", "department", "role", "status", "scope"]);
+      },
+
+      renderOperationsEvents: function (events) {
+        var controls = App.state.adminMode
+          ? '<div class="adminActions"><button class="quickLink compact" type="button" disabled title="Editor foundation only">Add operational event</button></div>'
+          : '';
+        return controls + (events.length
+          ? events.map(App.renderTimelineEventCard).join("")
+          : '<div class="empty">No operational events are currently in Timeline.</div>');
       },
 
       renderOperationsIntegrations: function () {

@@ -36,8 +36,60 @@ function openSpecPortalOnOpen_() {
 }
 
 function getCurrentStaffContext() {
-  // TODO: sync staff roles/modules from the Production Team spreadsheet.
   return StaffService.getCurrent();
+}
+
+function portalGetAuthorizationModel() {
+  const user = StaffService.getCurrentUser();
+  return {
+    grants: AuthorizationService.resolveGrants(user),
+    model: AuthorizationService.getModel(),
+    modules: ModuleRegistryService.getAllForUser(user),
+    sources: SourceRegistryService.getForUser(user),
+    adminMode: !!user.isAdmin
+  };
+}
+
+function portalGetPlatformRegistry() {
+  const user = StaffService.getCurrentUser();
+  return {
+    entities: Object.keys(EntityModelService.TYPES).map(key => EntityModelService.TYPES[key]),
+    relationships: RelationshipService.getModel(),
+    sources: SourceRegistryService.getForUser(user),
+    capabilities: AuthorizationService.getModel(),
+    generatedAt: new Date().toISOString()
+  };
+}
+
+function portalPlatformSearch(query, options) {
+  const email = Session.getActiveUser().getEmail();
+  if (!email) throw new Error("Authentication is required.");
+  return PlatformSearchService.search(query, options);
+}
+
+function portalGetRelationship(request) {
+  const email = Session.getActiveUser().getEmail();
+  if (!email || !StaffService.hasPermission(email, "Participants.View")) {
+    throw new Error("Participants.View is required.");
+  }
+  const input = request || {};
+  const action = String(input.action || "");
+  let data;
+  if (action === "participant-rehearsals") data = RelationshipService.getRehearsalsForParticipant(input.studentKey).map(toSafeEventReference_);
+  else if (action === "event-participants") data = RelationshipService.getAffectedParticipants(input.eventId).map(toSafeParticipantReference_);
+  else if (action === "segment-schools") data = RelationshipService.getSchoolsForSegment(input.segment);
+  else if (action === "date-teachers") data = RelationshipService.getTeachersForDate(input.dateKey);
+  else if (action === "venue-participants") data = RelationshipService.getParticipantsAtVenue(input.venue, input.dateKey).map(toSafeParticipantReference_);
+  else throw new Error("Unknown relationship query.");
+  return { ok: true, action, generatedAt: new Date().toISOString(), data };
+}
+
+function toSafeParticipantReference_(participant) {
+  return { id: participant.id, studentKey: participant.studentKey, name: participant.name, school: participant.school, item: participant.item, category: participant.category || participant.discipline };
+}
+
+function toSafeEventReference_(event) {
+  return { id: event.id, eventId: event.eventId, title: event.title, date: event.date, dateKey: event.dateKey, start: event.start, finish: event.finish, venue: event.venue, area: event.area, eventType: event.eventType };
 }
 
 function portalGetSpecCentralConfig() {
@@ -150,6 +202,18 @@ function portalGetParticipantAttendanceHistory(studentKey) {
   }
 
   return AttendanceService.getParticipantHistory(key);
+}
+
+function portalGetParticipantSchedule(studentKey) {
+  const key = String(studentKey || "").trim();
+  const email = Session.getActiveUser().getEmail();
+  if (!key || !email || !StaffService.hasPermission(email, "Participants.View")) {
+    return { ok: false, error: "Participant schedule access denied.", data: [] };
+  }
+  const participant = ParticipantService.getByStudentKey(key);
+  return participant
+    ? { ok: true, generatedAt: new Date().toISOString(), data: RelationshipService.getRehearsalsForParticipant(key).map(toSafeEventReference_) }
+    : { ok: true, generatedAt: new Date().toISOString(), data: [] };
 }
 
 function portalGetProjectManagementData() {

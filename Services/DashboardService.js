@@ -5,6 +5,7 @@ const DashboardService = (() => {
     const staffTeam = safeCall_("StaffService.getAll", () => StaffService.getAll(), []);
     const timeline = safeCall_("TimelineService.getDashboardSummary", () => TimelineService.getDashboardSummary(), {});
     const attendance = safeCall_("AttendanceService.getConfig", () => AttendanceService.getConfig(), {});
+    const attendanceEvents = safeCall_("AttendanceService.getEvents", () => AttendanceService.getEvents(), { data: [] });
     const announcements = safeCall_("AnnouncementService.getActive", () => AnnouncementService.getActive(), []);
     const notifications = safeCall_("NotificationService.getForCurrentUser", () => NotificationService.getForCurrentUser(), []);
 
@@ -22,7 +23,7 @@ const DashboardService = (() => {
       dashboardProfile: getDashboardProfile_(staff),
       rehearsals: timeline.upcomingRehearsals || [],
       todaysRehearsals: timeline.todaysRehearsals || [],
-      attendanceEvents: [],
+      attendanceEvents: attendanceEvents.data || [],
       currentDate: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM"),
       generatedAt: new Date().toISOString(),
       services: {

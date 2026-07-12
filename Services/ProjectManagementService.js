@@ -5,11 +5,28 @@ const ProjectManagementService = (() => {
     requirePermission_(VIEW_PERMISSION);
 
     const tasks = getPlaceholderTasks_();
+    const user = StaffService.getCurrentUser();
+    const users = StaffService.getAll().map(staff => ({
+      name: staff.name || staff.displayName || "",
+      email: staff.email || "",
+      department: staff.department || staff.team || "",
+      role: staff.role || "Production Team Member",
+      status: staff.status || "Active",
+      capabilities: AuthorizationService.resolveGrants(staff).map(grant => grant.capability),
+      scope: staff.scope || { type: "production", values: [] }
+    }));
+    const events = TimelineService.getTimelineEvents().filter(event => event.isOperational);
 
     return {
-      source: "Protected Operations placeholder data",
+      source: "Staff Production Team + Timeline",
       generatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM h:mma"),
+      users,
+      events,
+      authorization: AuthorizationService.getModel(),
+      modules: ModuleRegistryService.getAllForUser(user),
+      adminMode: !!user.isAdmin,
       tasks,
+      tasksSource: "Placeholder until a production task source is selected",
       statuses: ["Not started", "In progress", "Waiting", "Ready for review", "Complete"],
       milestones: ["Applications", "Auditions", "Acceptances", "Rehearsals", "Production", "Show Week", "Post-event"]
     };

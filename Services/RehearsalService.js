@@ -1,8 +1,8 @@
 const RehearsalService = (() => {
   const TIMELINE_ID = "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog";
   const TIMELINE_SHEET_NAME = "Operation Schedule";
-  const CACHE_KEY = "SPEC_REHEARSALS_V2";
-  const CACHE_HOURS = 6;
+  const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V3";
+  const CACHE_SECONDS = 5 * 60;
 
   function getAll() {
     const cache = CacheService.getScriptCache();
@@ -17,7 +17,7 @@ const RehearsalService = (() => {
     cache.put(
       CACHE_KEY,
       JSON.stringify(rehearsals),
-      CACHE_HOURS * 60 * 60
+      CACHE_SECONDS
     );
 
     return rehearsals;
@@ -120,9 +120,9 @@ const RehearsalService = (() => {
 
     for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
       const headers = values[rowIndex].map(header => normaliseHeader_(header));
-      const hasDate = headers.some(header => ["date", "rehearsal date", "day date", "day/date"].includes(header));
-      const hasEvent = headers.some(header => ["activity", "title", "event", "rehearsal", "name", "details", "item", "items"].includes(header));
-      const hasVenue = headers.some(header => ["location", "venue", "venue location", "where"].includes(header));
+      const hasDate = headers.some(header => ["date", "event date", "rehearsal date", "day date", "day/date"].includes(header));
+      const hasEvent = headers.some(header => ["activity", "title", "event", "event name", "session", "rehearsal", "name", "details", "item", "items"].includes(header));
+      const hasVenue = headers.some(header => ["location", "venue", "location/venue", "venue location", "where"].includes(header));
 
       if (hasDate && (hasEvent || hasVenue)) return rowIndex;
     }
@@ -142,18 +142,23 @@ const RehearsalService = (() => {
     const dateDisplay = getFirstValue_(raw, [
       "Date",
       "DATE",
+      "Event Date",
       "Rehearsal Date",
       "Day / Date",
       "Day/Date"
     ]);
+    const eventId = getFirstValue_(raw, ["Event ID", "Event Id", "Session ID", "Timeline ID"]);
 
     const title = getFirstValue_(raw, [
       "Activity",
       "Title",
       "Event",
+      "Event Name",
+      "Session",
       "Rehearsal",
-      "Name"
-    ]);
+      "Name",
+      "Details"
+    ]) || "Timeline event";
 
     const details = getFirstValue_(raw, [
       "Details",
@@ -164,9 +169,12 @@ const RehearsalService = (() => {
       "Notes"
     ]);
 
+    const area = getFirstValue_(raw, ["Area", "Department", "Team"]);
+
     const venue = getFirstValue_(raw, [
       "Location",
       "Venue",
+      "Location/Venue",
       "Venue / Location",
       "Where"
     ]);
@@ -175,7 +183,8 @@ const RehearsalService = (() => {
       "Start Time",
       "Start",
       "From",
-      "Time"
+      "Time",
+      "Event Time"
     ]);
 
     const finish = getFirstValue_(raw, [
@@ -192,34 +201,60 @@ const RehearsalService = (() => {
       "Comment"
     ]);
 
-    const type = inferType_([title, details, venue].join(" "));
+    const categories = parseItems_(getFirstValue_(raw, [
+      "Categories", "Category", "Individual", "Event Categories", "Category Selection"
+    ]));
+    const schoolGroups = parseItems_(getFirstValue_(raw, ["School Groups"]));
+    const studentGroups = parseItems_(getFirstValue_(raw, [
+      "Indv. Student Groups", "Individual Student Groups"
+    ]));
+    const individualStudents = parseItems_(getFirstValue_(raw, [
+      "Indv. Students", "Individual Students"
+    ]));
+    const staff = parseItems_(getFirstValue_(raw, ["Staff", "Allocated Staff", "Team"]));
+    const isRehearsal = [categories, schoolGroups, studentGroups, individualStudents]
+      .some(selection => selection.length > 0);
+    const eventType = isRehearsal ? "Rehearsal" : "Operational Event";
+
+    const type = isRehearsal ? inferType_([title, details, venue].join(" ")) : "Operational Event";
     const dateKey = buildDateKey_(dateDisplay);
 
-    return {
-      id: `REH-${rowNumber}`,
+    return EntityModelService.timelineEvent({
+      eventId,
+      legacyIds: [`TIMELINE-${rowNumber}`, `REH-${rowNumber}`],
       sourceRow: rowNumber,
       dateDisplay,
       dateKey,
       day: inferDay_(dateDisplay),
+      area,
       start,
       finish,
       venue,
       title,
       details,
       type,
+      eventType,
+      isRehearsal,
+      isOperational: !isRehearsal,
       notes,
       colour: colourForType_(type),
-      items: parseItems_(details || title),
+      categories,
+      schoolGroups,
+      studentGroups,
+      individualStudents,
+      items: categories.concat(schoolGroups, studentGroups),
       participants: [],
-      staff: [],
+      staff,
       raw
-    };
+    });
   }
 
   function getFirstValue_(raw, possibleHeaders) {
-    for (const header of possibleHeaders) {
-      if (raw[header]) {
-        return String(raw[header]).trim();
+    const keys = Object.keys(raw);
+    const aliases = possibleHeaders.map(normaliseHeader_);
+    for (const key of keys) {
+      if (aliases.includes(normaliseHeader_(key)) && raw[key]) {
+        return String(raw[key]).trim();
       }
     }
     return "";
@@ -322,6 +357,7 @@ const RehearsalService = (() => {
   function colourForType_(type) {
     const value = normaliseText_(type);
 
+    if (value.includes("operational")) return "#475569";
     if (value.includes("dress")) return "#bb529e";
     if (value.includes("technical")) return "#f79420";
     if (value.includes("arena")) return "#2d67b2";

@@ -185,7 +185,7 @@ ParticipantService.getAll = function () {
     participant.name = participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" ");
     participant.studentKey = this.makeStudentKey(participant);
 
-    return participant;
+    return EntityModelService.participant(participant);
 
   });
 
@@ -196,18 +196,19 @@ ParticipantService.getAll = function () {
  * from the Participants workbook, so this is the canonical cross-project key.
  */
 ParticipantService.makeStudentKey = function (participant) {
-  return [
-    participant && participant.applicationId,
-    participant && participant.studentId,
-    participant && (participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" ")),
-    participant && participant.school
-  ].filter(Boolean).join(" | ");
+  return EntityModelService.participant(participant).studentKey;
 };
 
 ParticipantService.hasStudentKey = function (studentKey) {
   const target = String(studentKey || "").trim();
   if (!target) return false;
   return this.getAll().some(participant => participant.studentKey === target);
+};
+
+ParticipantService.getByStudentKey = function (studentKey) {
+  const target = String(studentKey || "").trim();
+  if (!target) return null;
+  return this.getAll().find(participant => participant.studentKey === target) || null;
 };
 function testGetAllParticipants() {
 
@@ -280,6 +281,7 @@ ParticipantService.getGroups = function () {
   const itemIndex = getIndex(["Item", "Item / Group", "Items / Groups"]);
   const categoryIndex = getIndex(["Category", "Category selection"]);
   const groupNameIndex = getIndex(["Dance group name (if group is made up of multiple schools)", "Group Name", "Dance group name"]);
+  const groupIdIndex = getIndex(["Group ID", "Group Id"]);
   const teacherEmailIndex = getIndex(["Teacher Email", "Contact teacher's email", "Teacher email (DoE)", "All Teacher Emails"]);
   const classroomIndex = getIndex(["Google Classroom", "Classroom"]);
   const teacherFirstIndex = getIndex(["Contact teacher's first name", "Teacher first name", "Teacher First Name"]);
@@ -299,7 +301,8 @@ ParticipantService.getGroups = function () {
 
   return values.slice(1)
     .filter(row => row.some(cell => cell !== "" && cell !== null))
-    .map(row => ({
+    .map(row => EntityModelService.group({
+      groupId: row[groupIdIndex] || "",
       school: row[schoolIndex >= 0 ? schoolIndex : 7] || "",
       segment: row[segmentIndex >= 0 ? segmentIndex : 13] || "",
       item: row[itemIndex >= 0 ? itemIndex : 14] || "",
@@ -340,7 +343,7 @@ ParticipantService.getSchoolsMasterData = function () {
 
   return values.slice(1)
     .filter(row => row.some(cell => cell !== "" && cell !== null))
-    .map(row => ({
+    .map(row => EntityModelService.school({
       code: row[0] || "",
       schoolName: row[2] || "",
       schoolEmail: row[7] || "",
@@ -402,12 +405,12 @@ ParticipantService.getActiveSchoolsData = function (participants, groups) {
   return Array.from(activeSchools.entries())
     .map(([key, schoolName]) => {
       const master = masterByName.get(key) || {};
-      return {
+      return EntityModelService.school({
         code: master.code || "",
         schoolName: master.schoolName || schoolName,
         schoolEmail: master.schoolEmail || "",
         directorate: master.directorate || ""
-      };
+      });
     })
     .sort((a, b) => String(a.schoolName || "").localeCompare(String(b.schoolName || "")));
 };

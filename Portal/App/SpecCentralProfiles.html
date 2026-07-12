@@ -86,6 +86,10 @@
               '<div id="participantAttendanceHistory" class="scProfileSection scAttendanceHistory">' +
                 '<div class="empty">Loading attendance history...</div>' +
               '</div>' +
+              '<div class="sectionTitle">Rehearsal Schedule</div>' +
+              '<div id="participantRehearsalSchedule" class="scProfileSection scAttendanceHistory">' +
+                '<div class="empty">Loading Timeline schedule...</div>' +
+              '</div>' +
               '<div class="sectionTitle">School & Teacher</div>' +
               '<div class="scProfileSection">' +
                 App.profileLine("School", school) +
@@ -107,6 +111,27 @@
             '</div>' +
           '</div>';
         App.loadParticipantAttendanceHistory(participant);
+        App.loadParticipantRehearsalSchedule(participant);
+      },
+
+      loadParticipantRehearsalSchedule: function (participant) {
+        var container = document.getElementById("participantRehearsalSchedule");
+        var studentKey = String(participant && participant.studentKey || "").trim();
+        if (!container || !studentKey) return;
+        google.script.run
+          .withSuccessHandler(function (response) {
+            if (App.state.selectedParticipant !== participant) return;
+            var events = response && response.ok && Array.isArray(response.data) ? response.data : [];
+            container.innerHTML = events.length ? events.sort(App.sortEvents).map(function (event) {
+              return '<article class="scAttendanceHistoryItem"><strong>' + App.escapeHtml(event.title || "Rehearsal") + '</strong>' +
+                '<div class="scAttendanceHistoryMeta">' + App.escapeHtml([event.date, event.start, event.venue].filter(Boolean).join(" · ")) + '</div>' +
+                (event.notes ? '<div class="scAttendanceHistoryNote">' + App.escapeHtml(event.notes) + '</div>' : '') + '</article>';
+            }).join("") : '<div class="empty">No assigned rehearsals found.</div>';
+          })
+          .withFailureHandler(function () {
+            if (App.state.selectedParticipant === participant) container.innerHTML = '<div class="empty">Timeline schedule is unavailable.</div>';
+          })
+          .portalGetParticipantSchedule(studentKey);
       },
 
       loadParticipantAttendanceHistory: function (participant, forceRefresh) {

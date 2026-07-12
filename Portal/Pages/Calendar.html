@@ -9,11 +9,14 @@
         <button class="quickLink compact" type="button" onclick="App.goCalendarToday()">Today</button>
         <button class="quickLink compact" type="button" onclick="App.moveCalendar(-1)">Previous</button>
         <button class="quickLink compact" type="button" onclick="App.moveCalendar(1)">Next</button>
-        <button class="quickLink compact" type="button" onclick="App.toggleCalendarView()">Month / Agenda</button>
+        <button class="quickLink compact" type="button" onclick="App.setCalendarView('day')">Day</button>
+        <button class="quickLink compact" type="button" onclick="App.setCalendarView('week')">Week</button>
+        <button class="quickLink compact" type="button" onclick="App.setCalendarView('month')">Month</button>
+        <button class="quickLink compact" type="button" onclick="App.setCalendarView('agenda')">Agenda</button>
       </div>
     </div>
     <div class="filterRow">
-      <input id="calendarSearch" class="participantSearch" type="search" placeholder="Filter events, venues, groups or items..." oninput="App.renderCalendarPage()">
+      <input id="calendarSearch" class="participantSearch" type="search" placeholder="Filter events, area, venue, staff or assignments..." oninput="App.renderCalendarPage()">
       <select id="calendarTypeFilter" class="filterSelect" onchange="App.renderCalendarPage()"></select>
       <select id="calendarVenueFilter" class="filterSelect" onchange="App.renderCalendarPage()"></select>
     </div>

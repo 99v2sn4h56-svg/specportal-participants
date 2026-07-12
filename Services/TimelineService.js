@@ -1,6 +1,6 @@
 const TimelineService = (() => {
   function getDashboardSummary() {
-    const rehearsals = getTimelineEvents({ upcomingOnly: true, limit: 12 });
+    const rehearsals = getTimelineEvents({ upcomingOnly: true, limit: 12, rehearsalsOnly: true });
     const todayKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     return {
@@ -17,32 +17,45 @@ const TimelineService = (() => {
     let rehearsals = [];
 
     try {
-      rehearsals = opts.upcomingOnly
-        ? RehearsalService.next(opts.limit || 50)
-        : RehearsalService.getAll();
+      rehearsals = RehearsalService.getAll();
     } catch (err) {
       Logger.log("TimelineService.getTimelineEvents failed: " + (err && err.message ? err.message : err));
-      rehearsals = getMockRehearsals_();
+      throw new Error("Timeline data is unavailable.");
     }
 
-    return rehearsals.map(normaliseTimelineEvent_);
+    let events = rehearsals.map(normaliseTimelineEvent_);
+    if (opts.rehearsalsOnly) events = events.filter(event => event.eventType === "Rehearsal");
+    if (opts.upcomingOnly) {
+      const todayKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+      events = events.filter(event => event.dateKey && event.dateKey >= todayKey);
+    }
+    events.sort((a, b) => String(a.dateKey).localeCompare(String(b.dateKey)) || String(a.start).localeCompare(String(b.start)));
+    if (opts.limit) events = events.slice(0, opts.limit);
+    return events;
   }
 
   function getCalendarData(options) {
-    const events = getTimelineEvents(options);
+    const opts = options || {};
+    const canViewOperational = canViewOperationalEvents_();
+    const events = getTimelineEvents(opts).filter(event =>
+      event.eventType === "Rehearsal" || canViewOperational
+    );
 
     return {
-      source: events.some(event => event.source === "Timeline") ? "TimelineService/RehearsalService" : "Placeholder timeline data",
+      source: "Timeline · Operation Schedule",
       generatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM h:mma"),
-      events
+      canViewOperational,
+      events: RelationshipService.linkAttendanceSessions(events)
     };
   }
 
   function normaliseTimelineEvent_(rehearsal) {
     const title = rehearsal.event || rehearsal.title || "Rehearsal";
 
-    return {
-      id: rehearsal.id || `timeline-${rehearsal.sourceRow || title}`,
+    return EntityModelService.timelineEvent({
+      id: rehearsal.id,
+      eventId: rehearsal.eventId,
+      legacyIds: rehearsal.legacyIds || [],
       title,
       event: title,
       date: rehearsal.date || rehearsal.dateDisplay || "",
@@ -50,8 +63,16 @@ const TimelineService = (() => {
       start: rehearsal.start || "",
       finish: rehearsal.finish || "",
       venue: rehearsal.venue || "",
+      area: rehearsal.area || "",
       type: rehearsal.type || rehearsal.status || "Rehearsal",
       rehearsalType: rehearsal.type || "Rehearsal",
+      eventType: rehearsal.eventType || (rehearsal.isOperational ? "Operational Event" : "Rehearsal"),
+      isRehearsal: rehearsal.eventType !== "Operational Event",
+      isOperational: rehearsal.eventType === "Operational Event",
+      categories: rehearsal.categories || [],
+      schoolGroups: rehearsal.schoolGroups || [],
+      studentGroups: rehearsal.studentGroups || [],
+      individualStudents: rehearsal.individualStudents || [],
       groups: rehearsal.items || [],
       items: rehearsal.items || [],
       participants: rehearsal.participants || null,
@@ -70,28 +91,16 @@ const TimelineService = (() => {
       status: rehearsal.status || "Upcoming",
       colour: rehearsal.colour || "#2d67b2",
       sourceRow: rehearsal.sourceRow || "",
-      source: rehearsal.sourceRow ? "Timeline" : "Placeholder",
+      notes: rehearsal.notes || "",
+      source: "Timeline",
       raw: rehearsal.raw || {}
-    };
+    });
   }
 
-  function getMockRehearsals_() {
-    const timeZone = Session.getScriptTimeZone();
-    const today = new Date();
-
-    return [0, 3, 8].map((offset, index) => {
-      const date = new Date(today.getTime());
-      date.setDate(today.getDate() + offset);
-
-      return {
-        id: `mock-rehearsal-${index + 1}`,
-        dateKey: Utilities.formatDate(date, timeZone, "yyyy-MM-dd"),
-        date: Utilities.formatDate(date, timeZone, "EEE, d MMM"),
-        venue: ["Sydney Olympic Park", "Qudos Bank Arena", "ICC Sydney"][index],
-        event: ["Featured artists rehearsal", "Mass dance rehearsal", "Combined choir call"][index],
-        status: offset === 0 ? "Today" : "Upcoming"
-      };
-    });
+  function canViewOperationalEvents_() {
+    const email = Session.getActiveUser().getEmail();
+    return StaffService.hasPermission(email, "Calendar.Operational.View") ||
+      StaffService.hasPermission(email, "Operations.Admin");
   }
 
   return {

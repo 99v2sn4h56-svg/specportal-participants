@@ -285,7 +285,7 @@ const AttendanceService = (() => {
 
   function sanitiseEvent_(event) {
     const counts = event.attendanceCounts || {};
-    return {
+    return EntityModelService.attendanceSession({
       sessionId: event.sessionId || "",
       sheetName: event.sheetName || "",
       date: event.date || "",
@@ -302,7 +302,7 @@ const AttendanceService = (() => {
         total: Number(counts.total) || 0,
         byStatus: counts.byStatus && typeof counts.byStatus === "object" ? counts.byStatus : {}
       }
-    };
+    });
   }
 
   function buildApiUrl_(baseUrl, parameters) {
