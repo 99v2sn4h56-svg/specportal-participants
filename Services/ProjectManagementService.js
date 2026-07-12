@@ -23,9 +23,10 @@ const ProjectManagementService = (() => {
       users,
       events,
       authorization: AuthorizationService.getModel(),
-      modules: ModuleRegistryService.getAllForUser(user),
+      modules: SourceRegistryService.getForUser(user),
       adminMode: !!user.isAdmin,
       tasks,
+      workflowTasks: TaskService.list(),
       tasksSource: "Placeholder until a production task source is selected",
       statuses: ["Not started", "In progress", "Waiting", "Ready for review", "Complete"],
       milestones: ["Applications", "Auditions", "Acceptances", "Rehearsals", "Production", "Show Week", "Post-event"]

@@ -1,6 +1,4 @@
 const RehearsalService = (() => {
-  const TIMELINE_ID = "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog";
-  const TIMELINE_SHEET_NAME = "Operation Schedule";
   const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V3";
   const CACHE_SECONDS = 5 * 60;
 
@@ -97,8 +95,9 @@ const RehearsalService = (() => {
   }
 
   function loadTimeline_() {
-    const ss = SpreadsheetApp.openById(TIMELINE_ID);
-    const sheet = ss.getSheetByName(TIMELINE_SHEET_NAME) || ss.getSheets()[0];
+    const source = SourceRegistryService.getSourceConfig("timeline");
+    const ss = SpreadsheetApp.openById(source.spreadsheetId);
+    const sheet = ss.getSheetByName(source.sheetName) || ss.getSheets()[0];
     const values = sheet.getDataRange().getDisplayValues();
 
     if (values.length < 2) {
@@ -119,10 +118,10 @@ const RehearsalService = (() => {
     const maxRows = Math.min(values.length, 12);
 
     for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
-      const headers = values[rowIndex].map(header => normaliseHeader_(header));
-      const hasDate = headers.some(header => ["date", "event date", "rehearsal date", "day date", "day/date"].includes(header));
-      const hasEvent = headers.some(header => ["activity", "title", "event", "event name", "session", "rehearsal", "name", "details", "item", "items"].includes(header));
-      const hasVenue = headers.some(header => ["location", "venue", "location/venue", "venue location", "where"].includes(header));
+      const headers = values[rowIndex].map(header => EntityModelService.normaliseKey(header));
+      const hasDate = EntityModelService.findHeaderIndex(headers, ["date", "event date", "rehearsal date", "day date", "day/date"]) >= 0;
+      const hasEvent = EntityModelService.findHeaderIndex(headers, ["activity", "title", "event", "event name", "session", "rehearsal", "name", "details", "item", "items"]) >= 0;
+      const hasVenue = EntityModelService.findHeaderIndex(headers, ["location", "venue", "location/venue", "venue location", "where"]) >= 0;
 
       if (hasDate && (hasEvent || hasVenue)) return rowIndex;
     }
@@ -147,7 +146,7 @@ const RehearsalService = (() => {
       "Day / Date",
       "Day/Date"
     ]);
-    const eventId = getFirstValue_(raw, ["Event ID", "Event Id", "Session ID", "Timeline ID"]);
+    const eventId = getFirstValue_(raw, ["Event ID", "Event Id", "Timeline ID"]);
 
     const title = getFirstValue_(raw, [
       "Activity",
@@ -251,9 +250,9 @@ const RehearsalService = (() => {
 
   function getFirstValue_(raw, possibleHeaders) {
     const keys = Object.keys(raw);
-    const aliases = possibleHeaders.map(normaliseHeader_);
+    const aliases = possibleHeaders.map(EntityModelService.normaliseKey);
     for (const key of keys) {
-      if (aliases.includes(normaliseHeader_(key)) && raw[key]) {
+      if (aliases.includes(EntityModelService.normaliseKey(key)) && raw[key]) {
         return String(raw[key]).trim();
       }
     }
@@ -263,13 +262,6 @@ const RehearsalService = (() => {
   function normaliseText_(value) {
     return String(value || "")
       .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  function normaliseHeader_(value) {
-    return normaliseText_(value)
-      .replace(/[^\w/ ]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -381,13 +373,3 @@ const RehearsalService = (() => {
     byItem
   };
 })();
-
-function testRehearsalService() {
-  const data = RehearsalService.refresh();
-
-  Logger.log(`Loaded ${data.length} rehearsals`);
-
-  if (data.length) {
-    Logger.log(JSON.stringify(data[0], null, 2));
-  }
-}

@@ -1,6 +1,5 @@
 const DashboardService = (() => {
   function getContext() {
-    const properties = PropertiesService.getScriptProperties();
     const staff = safeCall_("StaffService.getCurrent", () => StaffService.getCurrent(), {});
     const staffTeam = safeCall_("StaffService.getAll", () => StaffService.getAll(), []);
     const timeline = safeCall_("TimelineService.getDashboardSummary", () => TimelineService.getDashboardSummary(), {});
@@ -8,6 +7,7 @@ const DashboardService = (() => {
     const attendanceEvents = safeCall_("AttendanceService.getEvents", () => AttendanceService.getEvents(), { data: [] });
     const announcements = safeCall_("AnnouncementService.getActive", () => AnnouncementService.getActive(), []);
     const notifications = safeCall_("NotificationService.getForCurrentUser", () => NotificationService.getForCurrentUser(), []);
+    const workflowSummary = safeCall_("Workflow platform summary", () => ({ queue: OperationsQueueService.summary(), tasks: TaskService.summary(staff.email || "") }), {});
 
     return {
       staff,
@@ -20,6 +20,7 @@ const DashboardService = (() => {
       attendanceSource: attendance.source || "",
       announcements,
       notifications,
+      workflowSummary,
       dashboardProfile: getDashboardProfile_(staff),
       rehearsals: timeline.upcomingRehearsals || [],
       todaysRehearsals: timeline.todaysRehearsals || [],

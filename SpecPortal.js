@@ -44,7 +44,7 @@ function portalGetAuthorizationModel() {
   return {
     grants: AuthorizationService.resolveGrants(user),
     model: AuthorizationService.getModel(),
-    modules: ModuleRegistryService.getAllForUser(user),
+    modules: SourceRegistryService.getForUser(user),
     sources: SourceRegistryService.getForUser(user),
     adminMode: !!user.isAdmin
   };
@@ -59,6 +59,51 @@ function portalGetPlatformRegistry() {
     capabilities: AuthorizationService.getModel(),
     generatedAt: new Date().toISOString()
   };
+}
+
+function portalGetStableIdMigrationReport() {
+  return StableIdMigrationService.dryRun();
+}
+
+function portalGetWorkflowArchitecture() {
+  requirePortalCapability_("Operations.View");
+  return WorkflowService.getArchitecture();
+}
+
+function portalDryRunWorkflow(workflowId, inputs) {
+  return WorkflowService.execute(workflowId, inputs || {}, { dryRun: true, trigger: { type: "Manual" } });
+}
+
+function portalExecuteWorkflow(workflowId, inputs) {
+  return WorkflowService.execute(workflowId, inputs || {}, { trigger: { type: "Manual" } });
+}
+
+function portalGetOperationsConsole() {
+  return OperationsConsoleService.getData();
+}
+
+function portalPublishPlatformEvent(eventType, payload) {
+  requirePortalCapability_("Workflow.Admin");
+  return WorkflowService.publishEvent(eventType, payload || {}, { source: "SpecPortal gateway" });
+}
+
+function portalEnqueueJob(jobType, payload) {
+  requirePortalCapability_("Jobs.Run");
+  return JobService.enqueue(jobType, payload || {});
+}
+
+function portalRunNextJob() {
+  requirePortalCapability_("Workflow.Admin");
+  return JobService.runNext();
+}
+
+function requirePortalCapability_(capability) {
+  const email = Session.getActiveUser().getEmail();
+  if (!email || !StaffService.hasPermission(email, capability)) throw new Error(`${capability} is required.`);
+}
+
+function portalApplyStableIdMigration(request) {
+  return StableIdMigrationService.apply(request);
 }
 
 function portalPlatformSearch(query, options) {

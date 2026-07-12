@@ -280,14 +280,7 @@ const StaffService = (() => {
   }
 
   function findHeaderIndex_(headers, aliases) {
-    const normalisedHeaders = headers.map(normaliseHeader_);
-    const normalisedAliases = aliases.map(normaliseHeader_);
-
-    return normalisedHeaders.findIndex(header => normalisedAliases.includes(header));
-  }
-
-  function normaliseHeader_(value) {
-    return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
+    return EntityModelService.findHeaderIndex(headers, aliases);
   }
 
   function getCell_(row, index) {

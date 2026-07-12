@@ -6,7 +6,9 @@ const EntityModelService = (() => {
     VENUE: "Venue", TIMELINE_EVENT: "TimelineEvent", CALENDAR_EVENT: "CalendarEvent",
     REHEARSAL: "Rehearsal", OPERATIONAL_EVENT: "OperationalEvent",
     ATTENDANCE_SESSION: "AttendanceSession", SUPPORT_PLAN: "SupportPlan",
-    COMMUNICATION: "Communication", PRODUCTION: "Production", ATTENDANCE_RECORD: "AttendanceRecord"
+    COMMUNICATION: "Communication", PRODUCTION: "Production", ATTENDANCE_RECORD: "AttendanceRecord",
+    TASK: "Task", WORKFLOW: "Workflow", WORKFLOW_EXECUTION: "WorkflowExecution", JOB: "Job",
+    NOTIFICATION: "Notification", AUDIT_RECORD: "AuditRecord", AUTOMATION_RULE: "AutomationRule"
   });
 
   function participant(input) {
@@ -101,5 +103,11 @@ const EntityModelService = (() => {
     return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
   }
 
-  return { TYPES, participant, school, group, staff, teacher, item, category, segment, venue, timelineEvent, attendanceSession, stableId, normaliseKey };
+  function findHeaderIndex(headers, aliases) {
+    const normalisedHeaders = (headers || []).map(normaliseKey);
+    const normalisedAliases = (aliases || []).map(normaliseKey);
+    return normalisedHeaders.findIndex(header => normalisedAliases.includes(header));
+  }
+
+  return { TYPES, participant, school, group, staff, teacher, item, category, segment, venue, timelineEvent, attendanceSession, stableId, normaliseKey, findHeaderIndex };
 })();
