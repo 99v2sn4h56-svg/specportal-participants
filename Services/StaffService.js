@@ -1,5 +1,4 @@
 const StaffService = (() => {
-  const STAFF_SPREADSHEET_ID = "1PBO2aN4EBpo2TmEPrVwvagNrCdC2BbmIm1ZmLLG3wSE";
   let staffCache_ = null;
 
   function getCurrent() {
@@ -14,14 +13,15 @@ const StaffService = (() => {
     if (staffCache_) return staffCache_;
 
     try {
-      const source = findStaffSource_(SpreadsheetApp.openById(STAFF_SPREADSHEET_ID).getSheets());
+      const sourceConfig = SourceRegistryService.getSourceConfig("staff");
+      const source = findStaffSource_(SpreadsheetApp.openById(sourceConfig.spreadsheetId).getSheets());
       const values = source.values;
       if (!values.length) return [];
 
       const headerRowIndex = source.headerRowIndex;
       const headers = values[headerRowIndex].map(value => String(value || "").trim());
       const indexes = {
-        name: findHeaderIndex_(headers, ["name", "staff name", "full name", "preferred name"]),
+        name: findPreferredHeaderIndex_(headers, ["display name", "name", "staff name", "full name", "preferred name"]),
         firstName: findHeaderIndex_(headers, ["first name", "given name"]),
         lastName: findHeaderIndex_(headers, ["last name", "second name", "surname", "family name"]),
         email: findPreferredHeaderIndex_(headers, ["speccentral email", "email", "email address", "det email", "work email"]),
@@ -35,14 +35,15 @@ const StaffService = (() => {
         team: findHeaderIndex_(headers, ["team", "department", "area"]),
         department: findHeaderIndex_(headers, ["department", "team", "area"]),
         departments: findHeaderIndex_(headers, ["departments", "production areas", "areas"]),
-        school: findHeaderIndex_(headers, ["school", "home school", "base school"]),
+        school: findHeaderIndex_(headers, ["associated school", "school", "home school", "base school"]),
         assignedItems: findHeaderIndex_(headers, ["assigned items", "items", "allocated items"]),
         assignedGroups: findHeaderIndex_(headers, ["assigned groups", "groups", "allocated groups"]),
-        mobile: findHeaderIndex_(headers, ["mobile", "phone", "contact number"]),
+        mobile: findHeaderIndex_(headers, ["mobile phone", "mobile", "phone", "contact number"]),
+        typeOfWork: findHeaderIndex_(headers, ["type of work", "employment type", "work type"]),
         access: findHeaderIndex_(headers, ["access", "modules", "permissions"]),
         permissions: findHeaderIndex_(headers, ["permissions", "permission", "access"]),
         allocatedEvents: findHeaderIndex_(headers, ["allocated events", "events", "event allocation", "allocated rehearsals"]),
-        photo: findHeaderIndex_(headers, ["photo", "photo url", "headshot", "profile photo"]),
+        photo: findHeaderIndex_(headers, ["display picture", "photo", "photo url", "headshot", "profile photo"]),
         status: findHeaderIndex_(headers, ["status", "active", "active?"]),
         scopeType: findHeaderIndex_(headers, ["scope type", "scope"]),
         scopeValues: findHeaderIndex_(headers, ["scope values", "scope value", "scope items"])
@@ -100,6 +101,7 @@ const StaffService = (() => {
       assignedGroups: splitList_(getCell_(row, indexes.assignedGroups)),
       assignedEvents: allocatedEvents,
       mobile: getCell_(row, indexes.mobile),
+      typeOfWork: getCell_(row, indexes.typeOfWork),
       access,
       permissions,
       allocatedEvents,

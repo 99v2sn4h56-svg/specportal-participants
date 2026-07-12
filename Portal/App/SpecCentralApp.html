@@ -20,6 +20,7 @@
         selectedCalendarEvent: null,
         timelineEditorEvent: null,
         timelineMutationPending: false,
+        profileMutationPending: false,
         projectData: null,
         projectView: "board",
         mediaData: null,
@@ -607,20 +608,64 @@
       },
 
       renderStaffContext: function () {
-        var el = document.getElementById("staffEmail");
-        var name = document.getElementById("sidebarUserName");
-        var avatar = document.querySelector(".userAvatar");
         var topAvatar = document.querySelector(".topBarUserAvatar");
         var welcome = document.getElementById("topBarWelcome");
         var role = document.getElementById("topBarUserRole");
-        if (el) el.textContent = App.state.staff.email || "Authentication required";
-        if (name) name.textContent = App.state.staff.displayName || App.state.staff.name || "Authenticated user";
-        if (avatar) avatar.innerHTML = App.state.staff.photo ? '<img src="' + App.escapeHtml(App.state.staff.photo) + '" alt="">' : App.escapeHtml(((App.state.staff.firstName || "S").charAt(0) + (App.state.staff.surname || "C").charAt(0)).toUpperCase());
-        if (topAvatar) topAvatar.innerHTML = avatar ? avatar.innerHTML : "SC";
+        var initials = ((App.state.staff.firstName || "S").charAt(0) + (App.state.staff.surname || "C").charAt(0)).toUpperCase();
+        var photo = App.state.staff.photo ? App.normalisePhotoUrl(App.state.staff.photo, 160) : "";
+        if (topAvatar) { topAvatar.innerHTML = photo ? '<img src="' + App.escapeHtml(photo) + '" alt="">' : App.escapeHtml(initials); topAvatar.title = "Open my profile"; }
         if (welcome) welcome.textContent = "Welcome " + (App.state.staff.firstName || "there") + "!";
         if (role) role.textContent = App.state.viewingAsRole || App.state.staff.role || "Staff";
         App.renderViewingAsControl();
-        App.renderWhoAmI();
+      },
+
+      openMyProfile: function () {
+        var drawer = document.getElementById("myProfileDrawer");
+        if (!drawer) return;
+        drawer.hidden = false;
+        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">My account</span><h3>Profile</h3></div><button type="button" onclick="App.closeMyProfile()" aria-label="Close profile">×</button></div><div class="drawerBody">' + App.loadingState("Loading your Staff profile") + '</div>';
+        App.services.request("myStaffProfile", "portalGetMyStaffProfile", { forceRefresh: true, timeoutMs: 20000 })
+          .then(function (profile) { App.renderMyProfileEditor(profile || {}); })
+          .catch(function (error) { drawer.innerHTML = '<div class="drawerHeader"><h3>My profile</h3><button type="button" onclick="App.closeMyProfile()" aria-label="Close profile">×</button></div><div class="drawerBody">' + App.errorState("Profile unavailable", App.getErrorMessage(error)) + '</div>'; });
+      },
+
+      renderMyProfileEditor: function (profile) {
+        var drawer = document.getElementById("myProfileDrawer");
+        if (!drawer) return;
+        var value = function (input) { return App.escapeHtml(input || ""); };
+        var photo = profile.photo ? App.normalisePhotoUrl(profile.photo, 240) : "";
+        var initials = ((profile.firstName || "S").charAt(0) + (profile.surname || "C").charAt(0)).toUpperCase();
+        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">My account</span><h3>Profile</h3></div><button type="button" onclick="App.closeMyProfile()" aria-label="Close profile">×</button></div><div class="drawerBody"><div class="myProfileSummary"><div class="myProfileAvatar">' + (photo ? '<img src="' + value(photo) + '" alt="">' : value(initials)) + '</div><div><strong>' + value(profile.displayName || [profile.firstName, profile.surname].filter(Boolean).join(" ")) + '</strong><span>' + value(profile.email) + '</span><small>' + value([profile.role, profile.department].filter(Boolean).join(" · ")) + '</small></div></div><div class="myProfileForm">' +
+          '<label><span>Display name</span><input id="myProfileDisplayName" maxlength="100" value="' + value(profile.displayName) + '"></label>' +
+          '<label><span>Display picture URL</span><input id="myProfilePhoto" type="url" maxlength="500" placeholder="Google Drive sharing link or HTTPS image URL" value="' + value(profile.photo) + '"></label>' +
+          '<label><span>Mobile phone</span><input id="myProfileMobile" type="tel" maxlength="40" value="' + value(profile.mobile) + '"></label>' +
+          '<label><span>Associated school</span><input id="myProfileSchool" maxlength="160" value="' + value(profile.school) + '"></label>' +
+          '<label><span>Type of work</span><input id="myProfileTypeOfWork" maxlength="120" placeholder="For example: The Arts Unit, teacher, contractor" value="' + value(profile.typeOfWork) + '"></label>' +
+          '</div><div class="profileAuthorityNotice"><strong>Managed by SpecCentral administrators</strong><span>Your login email, Staff ID, department, role and permissions cannot be changed here.</span></div></div><div class="drawerActions"><button class="quickLink primaryAction" type="button" onclick="App.saveMyProfile()">Save profile</button><button class="quickLink" type="button" onclick="App.closeMyProfile()">Cancel</button></div>';
+      },
+
+      saveMyProfile: function () {
+        if (App.state.profileMutationPending) return;
+        var read = function (id) { return String((document.getElementById(id) || {}).value || "").trim(); };
+        var profile = { displayName: read("myProfileDisplayName"), photo: read("myProfilePhoto"), mobile: read("myProfileMobile"), school: read("myProfileSchool"), typeOfWork: read("myProfileTypeOfWork") };
+        App.state.profileMutationPending = true;
+        App.services.request("myStaffProfileUpdate", "portalUpdateMyStaffProfile", { args: [profile], forceRefresh: true, timeoutMs: 30000 })
+          .then(function (response) {
+            var updated = response && response.data || {};
+            Object.assign(App.state.staff, updated);
+            App.state.currentUser = App.state.staff;
+            App.renderStaffContext();
+            App.renderDashboardPage();
+            App.closeMyProfile();
+            App.notify("Your profile was updated.");
+          })
+          .catch(function (error) { App.notify("Profile update failed: " + App.getErrorMessage(error)); })
+          .finally(function () { App.state.profileMutationPending = false; });
+      },
+
+      closeMyProfile: function () {
+        var drawer = document.getElementById("myProfileDrawer");
+        if (drawer) { drawer.hidden = true; drawer.innerHTML = ""; }
       },
 
       loadViewingAsRoles: function () {
@@ -659,22 +704,6 @@
 
       hasActualPermission: function (permission) {
         return App.permissionListHas((App.state.staff.permissions || []).concat(App.state.staff.capabilities || []), permission);
-      },
-
-      toggleWhoAmI: function () {
-        var panel = document.getElementById("whoAmIPanel");
-        var button = document.querySelector(".whoAmIToggle");
-        if (!panel) return;
-        panel.hidden = !panel.hidden;
-        if (button) button.setAttribute("aria-expanded", String(!panel.hidden));
-      },
-
-      renderWhoAmI: function () {
-        var panel = document.getElementById("whoAmIPanel");
-        if (!panel) return;
-        var user = App.state.staff || {};
-        var level = user.permissionLevel || "Authenticated only";
-        panel.innerHTML = '<div><span>Role</span><strong>' + App.escapeHtml(user.role || "No staff role") + '</strong></div><div><span>Department</span><strong>' + App.escapeHtml(user.department || "Not assigned") + '</strong></div><div><span>Permission level</span><strong>' + App.escapeHtml(level) + '</strong></div><div><span>Capabilities</span><strong>' + App.escapeHtml((user.capabilities || []).length) + '</strong></div>';
       },
 
       hasPermission: function (permission) {

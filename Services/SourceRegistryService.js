@@ -1,7 +1,8 @@
 /** Authoritative source, synchronization and editing contract registry. */
 const SourceRegistryService = (() => {
   const SOURCE_CONFIGS = {
-    timeline: { spreadsheetId: "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog", sheetName: "Operation Schedule" }
+    timeline: { spreadsheetId: "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog", sheetName: "Operation Schedule" },
+    staff: { spreadsheetId: "1PBO2aN4EBpo2TmEPrVwvagNrCdC2BbmIm1ZmLLG3wSE", sheetName: "SpecCentral" }
   };
   const REGISTRY = [
     entry("timeline", "TimelineEvent", "Timeline spreadsheet / Operation Schedule", "read-write-admin", "eventId", true, 300, "Timeline.Edit", ["add", "edit", "duplicate", "move", "cancel", "archive", "assign-students", "assign-groups", "assign-staff"]),
@@ -14,7 +15,7 @@ const SourceRegistryService = (() => {
     entry("categories", "Category", "Participants and Timeline category fields", "derived-read", "categoryId", false, 300, "Participants.Edit", []),
     entry("segments", "Segment", "Participants group allocations", "derived-read", "segmentId", false, 300, "Participants.Edit", []),
     entry("venues", "Venue", "Timeline spreadsheet location fields", "derived-read", "venueId", false, 300, "Calendar.Edit", []),
-    entry("staff", "StaffMember", "Staff Production Team spreadsheet", "read-now-write-later", "email", true, 300, "Users.Manage", ["edit", "assign-role", "assign-scope"]),
+    entry("staff", "StaffMember", "Staff Production Team spreadsheet / SpecCentral", "read-write-self-service", "email", true, 300, "Users.Manage", ["edit-own-profile", "assign-role", "assign-scope"]),
     entry("users", "User", "Staff Production Team identity projection", "derived-read", "email", true, 300, "Users.Manage", ["assign-role", "assign-scope", "set-status"]),
     entry("attendance", "AttendanceSession", "Attendance workbook and API", "read-write-existing-api", "sessionId", true, 120, "Attendance.Mark", ["mark", "bulk-mark", "add-notes"]),
     entry("support-plans", "SupportPlan", "Attendance support-plan Drive folder", "read-only-restricted", "supportPlanId", false, 120, "Participants.View", []),

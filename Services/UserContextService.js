@@ -57,6 +57,8 @@ const UserContextService = (() => {
       capabilities,
       scope: staff.scope || { type: "production", values: [] },
       school: staff.school || "",
+      mobile: staff.mobile || "",
+      typeOfWork: staff.typeOfWork || "",
       assignedItems: unique_(staff.assignedItems),
       assignedEvents: unique_(staff.assignedEvents || staff.allocatedEvents),
       assignedGroups: unique_(staff.assignedGroups),

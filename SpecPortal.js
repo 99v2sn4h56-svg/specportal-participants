@@ -97,6 +97,14 @@ function portalRefreshUserContext() {
   return UserContextService.refresh();
 }
 
+function portalGetMyStaffProfile() {
+  return StaffProfileService.getMyProfile();
+}
+
+function portalUpdateMyStaffProfile(profile) {
+  return StaffProfileService.updateMyProfile(profile || {});
+}
+
 function portalPublishPlatformEvent(eventType, payload) {
   requirePortalCapability_("Workflow.Admin");
   return WorkflowService.publishEvent(eventType, payload || {}, { source: "SpecPortal gateway" });

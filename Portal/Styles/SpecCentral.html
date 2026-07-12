@@ -100,15 +100,6 @@
       display: none;
     }
 
-    .staffCard {
-      padding: 13px;
-      border-radius: 16px;
-      background: rgba(255,255,255,.10);
-      color: rgba(255,255,255,.88);
-      font-size: 12px;
-      overflow-wrap: anywhere;
-    }
-
     .appMain {
       min-width: 0;
     }
@@ -1543,16 +1534,6 @@
     .sidebarLogoFallback { display:none; width:52px; height:52px; place-items:center; border-radius:15px; color:var(--navy); background:var(--yellow); font-weight:900; }
     body.sidebarCollapsed .appShell { grid-template-columns:82px minmax(0,1fr); }
     body.sidebarCollapsed .appSidebar { display:block; padding:12px 9px; }
-    .staffCard { display:flex; align-items:center; gap:10px; padding:10px; }
-    .userAvatar { width:34px; height:34px; flex:0 0 34px; display:grid; place-items:center; border-radius:11px; color:var(--navy); background:var(--yellow); font-size:10px; font-weight:900; }
-    .userAvatar img { width:100%; height:100%; border-radius:inherit; object-fit:cover; }
-    .userCardText { min-width:0; }
-    .userCardText div { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .whoAmIToggle { margin-top:5px; border:0; padding:0; color:rgba(255,255,255,.62); background:transparent; font-size:9px; }
-    .whoAmIPanel { display:grid; gap:6px; margin:-10px 0 12px; padding:10px; border-radius:12px; background:rgba(0,0,0,.12); }
-    .whoAmIPanel[hidden] { display:none; }
-    .whoAmIPanel div { display:flex; justify-content:space-between; gap:8px; color:rgba(255,255,255,.62); font-size:9px; }
-    .whoAmIPanel strong { color:#fff; text-align:right; }
     .navSectionLabel { margin:17px 10px 7px; color:rgba(255,255,255,.48); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
     .navItem { min-height:43px; margin-bottom:4px; padding:9px 10px; border-radius:11px; }
     .navItem::before { flex:0 0 27px; width:27px; height:27px; }
@@ -1564,11 +1545,10 @@
     .navChildren button { border:0; border-radius:9px; padding:8px 9px; color:rgba(255,255,255,.72); background:transparent; font-size:11px; text-align:left; }
     .navChildren button:hover:not(:disabled) { color:#fff; background:rgba(255,255,255,.12); }
     .navChildren button:disabled { cursor:not-allowed; opacity:.35; }
-    body.sidebarCollapsed .userCardText, body.sidebarCollapsed .navSectionLabel, body.sidebarCollapsed .navItem span, body.sidebarCollapsed .navGroupToggle b, body.sidebarCollapsed .navChildren { display:none; }
-    body.sidebarCollapsed .whoAmIPanel { display:none; }
+    body.sidebarCollapsed .navSectionLabel, body.sidebarCollapsed .navItem span, body.sidebarCollapsed .navGroupToggle b, body.sidebarCollapsed .navChildren { display:none; }
     body.sidebarCollapsed .sidebarBrand { min-height:58px; }
     body.sidebarCollapsed .sidebarLogo { width:58px; height:52px; }
-    body.sidebarCollapsed .staffCard, body.sidebarCollapsed .navItem { justify-content:center; padding-left:5px; padding-right:5px; }
+    body.sidebarCollapsed .navItem { justify-content:center; padding-left:5px; padding-right:5px; }
     body.sidebarCollapsed .navItem::before { width:32px; height:32px; flex-basis:32px; }
     .pageBreadcrumb { margin-bottom:5px; color:#758399; font-size:10px; font-weight:700; letter-spacing:.04em; }
     .topBarStatus { border:1px solid #cfe4d1; border-radius:999px; padding:6px 10px; color:#32723a; background:#f0faf1; font-size:10px; font-weight:800; }
@@ -1658,6 +1638,18 @@
     .timelineEditorForm input, .timelineEditorForm textarea { width:100%; border:1px solid var(--border); border-radius:11px; padding:10px 11px; color:var(--text); background:#fff; font:500 11px Poppins,sans-serif; text-transform:none; letter-spacing:normal; }
     .timelineEditorForm textarea { resize:vertical; }
     .timelineEditorActions { display:flex; flex-wrap:wrap; gap:8px; }
+    .myProfileDrawer { width:min(560px,96vw); }
+    .myProfileSummary { display:grid; grid-template-columns:72px minmax(0,1fr); align-items:center; gap:14px; margin-bottom:20px; padding:14px; border:1px solid var(--border); border-radius:16px; background:linear-gradient(145deg,#fff,#f5f8ff); }
+    .myProfileAvatar { width:72px; height:72px; display:grid; place-items:center; overflow:hidden; border-radius:20px; color:var(--navy); background:var(--yellow); font-size:18px; font-weight:900; }
+    .myProfileAvatar img { width:100%; height:100%; object-fit:cover; }
+    .myProfileSummary strong, .myProfileSummary span, .myProfileSummary small { display:block; }
+    .myProfileSummary span { margin-top:3px; color:var(--muted); font-size:10px; }
+    .myProfileSummary small { margin-top:5px; color:var(--blue); font-size:9px; font-weight:700; }
+    .myProfileForm { display:grid; gap:12px; }
+    .myProfileForm label { display:grid; gap:5px; color:var(--muted); font-size:9px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }
+    .myProfileForm input { width:100%; border:1px solid var(--border); border-radius:11px; padding:10px 11px; color:var(--text); background:#fff; font:500 11px Poppins,sans-serif; text-transform:none; letter-spacing:normal; }
+    .profileAuthorityNotice { display:grid; gap:4px; margin-top:16px; padding:12px; border-radius:13px; color:#765619; background:#fff8df; font-size:9px; }
+    .profileAuthorityNotice strong, .profileAuthorityNotice span { display:block; }
     .primaryAction { color:#fff!important; border-color:var(--blue)!important; background:var(--blue)!important; }
     .dangerAction { color:#a92828!important; border-color:#efbaba!important; background:#fff5f5!important; }
     .identitySummaryGrid { display:grid; grid-template-columns:repeat(3,minmax(180px,1fr)); gap:9px; margin-bottom:20px; }
@@ -1684,6 +1676,7 @@
     .workspaceUserArea { display:flex; align-items:center; justify-content:flex-end; gap:10px; min-width:0; }
     .topBarUserAvatar { width:40px; height:40px; display:grid; place-items:center; flex:0 0 40px; overflow:hidden; border-radius:13px; color:var(--navy); background:var(--yellow); font-size:11px; font-weight:900; }
     .topBarUserAvatar img { width:100%; height:100%; object-fit:cover; }
+    .topBarUserAvatar:hover { transform:translateY(-1px); box-shadow:0 8px 18px rgba(6,29,61,.14); }
     .workspaceWelcome { display:grid; min-width:90px; }
     .workspaceWelcome span { color:var(--navy); font-size:11px; font-weight:800; }
     .workspaceWelcome strong { color:var(--muted); font-size:9px; white-space:nowrap; }
@@ -1695,10 +1688,9 @@
     .viewingAsBadge[hidden] { display:none; }
     .workspaceContextRow { display:flex; align-items:end; justify-content:space-between; gap:16px; padding:12px 24px 14px; border-top:1px solid rgba(228,234,243,.75); background:rgba(255,255,255,.7); }
     .workspaceContextRow .pageTitle { font-size:23px; }
-    .appSidebar > .staffCard { margin-top:4px; }
     @media (max-width:1200px) { .operationsMetricGrid { grid-template-columns:repeat(3,minmax(150px,1fr)); } .operationsDashboardGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section:first-child { grid-column:1/-1; } }
     @media (max-width:1250px) { .workspaceTopRow { grid-template-columns:64px minmax(280px,1fr) auto; gap:14px; } .workspaceWelcome { display:none; } }
-    @media (max-width:1060px) { .appShell, body.sidebarCollapsed .appShell { grid-template-columns:1fr; } .appSidebar, body.sidebarCollapsed .appSidebar { position:static; height:auto; padding:10px 14px; } .sidebarBrand { min-height:54px; margin-bottom:4px; } .sidebarLogo, body.sidebarCollapsed .sidebarLogo { width:92px; height:50px; } .staffCard { display:none; } .sidebarNav { display:flex; gap:6px; overflow-x:auto; } .navSectionLabel, .navChildren { display:none!important; } .navItem, body.sidebarCollapsed .navItem { width:auto; flex:0 0 auto; justify-content:flex-start; padding:7px 10px; } .navItem span, body.sidebarCollapsed .navItem span { display:inline; } .navGroupToggle b { display:none; } .workspaceTopRow { grid-template-columns:auto minmax(240px,1fr) auto; } .viewAsControl { display:none!important; } }
+    @media (max-width:1060px) { .appShell, body.sidebarCollapsed .appShell { grid-template-columns:1fr; } .appSidebar, body.sidebarCollapsed .appSidebar { position:static; height:auto; padding:10px 14px; } .sidebarBrand { min-height:54px; margin-bottom:4px; } .sidebarLogo, body.sidebarCollapsed .sidebarLogo { width:92px; height:50px; } .sidebarNav { display:flex; gap:6px; overflow-x:auto; } .navSectionLabel, .navChildren { display:none!important; } .navItem, body.sidebarCollapsed .navItem { width:auto; flex:0 0 auto; justify-content:flex-start; padding:7px 10px; } .navItem span, body.sidebarCollapsed .navItem span { display:inline; } .navGroupToggle b { display:none; } .workspaceTopRow { grid-template-columns:auto minmax(240px,1fr) auto; } .viewAsControl { display:none!important; } }
     @media (max-width:900px) { .dashboardBriefingHero, .dashboardPrimaryGrid, .dashboardSecondaryGrid, .timelineManagementGrid { grid-template-columns:1fr; } }
     @media (max-width:700px) { .operationsMetricGrid, .operationsEventGrid, .operationsDashboardGrid, .operationsFilterBar, .identitySummaryGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section, .operationsWide { grid-column:1/-1; } .pageBreadcrumb, .topBarStatus { display:none; } .workspaceTopRow { grid-template-columns:auto 1fr auto; padding:9px 14px; } .workspaceSearch { font-size:0; min-width:0; } .workspaceSearch::before { content:"Search workspace"; font-size:11px; } .workspaceContextRow { padding:10px 16px 12px; } .briefingList, .dashboardProjectGrid { grid-template-columns:1fr; } }
     @media (max-width:480px) { .operationsMetricGrid, .operationsEventGrid, .operationsFilterBar, .timelineEditorForm { grid-template-columns:1fr; } .timelineEditorForm label.span2 { grid-column:auto; } .dashboardBriefingHero { padding:18px; } .briefingIdentityRow { grid-template-columns:1fr; gap:3px; } .briefingIdentityRow strong { text-align:left; } .scheduleRow { grid-template-columns:58px minmax(0,1fr); } .dashboardTask { grid-template-columns:1fr; } }
