@@ -14,11 +14,11 @@ const StaffService = (() => {
     if (staffCache_) return staffCache_;
 
     try {
-      const sheet = SpreadsheetApp.openById(STAFF_SPREADSHEET_ID).getSheets()[0];
-      const values = sheet.getDataRange().getValues();
+      const source = findStaffSource_(SpreadsheetApp.openById(STAFF_SPREADSHEET_ID).getSheets());
+      const values = source.values;
       if (!values.length) return [];
 
-      const headerRowIndex = findHeaderRow_(values);
+      const headerRowIndex = source.headerRowIndex;
       const headers = values[headerRowIndex].map(value => String(value || "").trim());
       const indexes = {
         name: findHeaderIndex_(headers, ["name", "staff name", "full name", "preferred name"]),
@@ -213,15 +213,13 @@ const StaffService = (() => {
   }
 
   function findHeaderRow_(values) {
-    const maxRows = Math.min(values.length, 10);
+    const maxRows = Math.min(values.length, 50);
     let bestIndex = 0;
     let bestScore = 0;
 
     for (let i = 0; i < maxRows; i++) {
       const row = values[i].map(value => String(value || "").trim().toLowerCase());
-      const score = row.filter(value =>
-        ["speccentral email", "email", "email address", "name", "staff name", "speccentral role", "role", "team", "position"].includes(value)
-      ).length;
+      const score = scoreHeaderRow_(row);
       if (score > bestScore) {
         bestScore = score;
         bestIndex = i;
@@ -229,6 +227,25 @@ const StaffService = (() => {
     }
 
     return bestIndex;
+  }
+
+  function findStaffSource_(sheets) {
+    let best = { values: [], headerRowIndex: 0, score: -1 };
+    (sheets || []).forEach(sheet => {
+      const values = sheet.getDataRange().getValues();
+      if (!values.length) return;
+      const headerRowIndex = findHeaderRow_(values);
+      const row = values[headerRowIndex].map(value => String(value || "").trim().toLowerCase());
+      const score = scoreHeaderRow_(row);
+      if (score > best.score) best = { values, headerRowIndex, score };
+    });
+    return best;
+  }
+
+  function scoreHeaderRow_(row) {
+    const headings = ["speccentral email", "email", "email address", "name", "staff name", "speccentral role", "role", "team", "position"];
+    const matches = (row || []).filter(value => headings.includes(value)).length;
+    return matches + ((row || []).includes("speccentral email") ? 10 : 0) + ((row || []).includes("speccentral role") ? 5 : 0);
   }
 
   function findHeaderIndex_(headers, aliases) {
