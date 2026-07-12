@@ -93,8 +93,7 @@ const TimelineService = (() => {
       sourceRow: rehearsal.sourceRow || "",
       fingerprint: rehearsal.fingerprint || "",
       notes: rehearsal.notes || "",
-      source: "Timeline",
-      raw: rehearsal.raw || {}
+      source: "Timeline"
     });
   }
 

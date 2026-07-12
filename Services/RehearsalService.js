@@ -1,22 +1,29 @@
 const RehearsalService = (() => {
   const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V3";
   const CACHE_SECONDS = 5 * 60;
+  const CACHE_MAX_CHARS = 80000;
 
   function getAll() {
     const cache = CacheService.getScriptCache();
     const cached = cache.get(CACHE_KEY);
 
     if (cached) {
-      return JSON.parse(cached);
+      try {
+        return JSON.parse(cached);
+      } catch (err) {
+        cache.remove(CACHE_KEY);
+      }
     }
 
     const rehearsals = loadTimeline_();
-
-    cache.put(
-      CACHE_KEY,
-      JSON.stringify(rehearsals),
-      CACHE_SECONDS
-    );
+    const json = JSON.stringify(rehearsals);
+    if (json.length <= CACHE_MAX_CHARS) {
+      try {
+        cache.put(CACHE_KEY, json, CACHE_SECONDS);
+      } catch (err) {
+        Logger.log("Timeline cache skipped: " + (err && err.message ? err.message : err));
+      }
+    }
 
     return rehearsals;
   }
@@ -247,8 +254,7 @@ const RehearsalService = (() => {
       individualStudents,
       items: categories.concat(schoolGroups, studentGroups),
       participants: [],
-      staff,
-      raw
+      staff
     });
   }
 
