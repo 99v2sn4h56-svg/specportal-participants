@@ -398,6 +398,12 @@
       navigate: function (page, options) {
         options = options || {};
         if (page === "projectManagement") page = "operations";
+        if (page === "participants" && !options.fromHistory && !options.context) {
+          App.state.participantExplorerFilters = {};
+          App.state.participantExplorerSearch = "";
+          App.state.participantExplorerSavedView = "all";
+          App.state.participantExplorerPage = 1;
+        }
         if (page === "staff") {
           if (App.hasPermission("operations.view")) { App.state.operationsView = "users"; page = "operations"; }
           else { App.notify("Staff operations require Operations access."); page = "dashboard"; }

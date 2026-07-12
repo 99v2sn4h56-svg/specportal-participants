@@ -939,7 +939,7 @@
     }
 
     .participantExplorer { display:grid; gap:14px; }
-    .participantExplorerHeader { display:grid; grid-template-columns:minmax(220px,.7fr) minmax(520px,1.3fr); align-items:center; gap:20px; }
+    .participantExplorerHeader { display:grid; grid-template-columns:1fr; align-items:center; gap:14px; }
     .participantExplorerHeader h3 { margin:3px 0; color:var(--navy); font-size:24px; }
     .participantExplorerHeader p { margin:0; color:var(--muted); }
     .participantExplorerActions { display:grid; grid-template-columns:minmax(280px,1fr) minmax(170px,220px) minmax(150px,190px); align-items:center; gap:8px; }
@@ -982,6 +982,8 @@
     .participantExplorerTable td { max-width:240px; overflow:hidden; text-overflow:ellipsis; padding:9px; border-bottom:1px solid var(--border); }
     .participantExplorerTable tbody tr:nth-child(even) { background:#f7f9fd; }
     .participantExplorerTable tbody tr:hover { background:#edf4ff; }
+    .participantCategoryPills { display:flex; flex-wrap:wrap; gap:4px; }
+    .participantCategoryPills button { border:1px solid #cbd9ee; border-radius:999px; padding:3px 6px; color:var(--blue); background:#f4f7fd; font-size:8px; font-weight:800; }
     .participantOpenButton { border:1px solid #bfd0ec; border-radius:8px; padding:5px 7px; color:var(--blue); background:#fff; font-size:8px; font-weight:900; }
     .participantPagination { display:flex; align-items:center; justify-content:center; gap:10px; padding-top:12px; }
     .participantPagination button { border:1px solid var(--border); border-radius:9px; padding:7px 10px; color:var(--blue); background:#fff; font-size:9px; font-weight:800; }
