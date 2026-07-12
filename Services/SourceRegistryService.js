@@ -5,7 +5,7 @@ const SourceRegistryService = (() => {
     staff: { spreadsheetId: "1PBO2aN4EBpo2TmEPrVwvagNrCdC2BbmIm1ZmLLG3wSE", sheetName: "SpecCentral" }
   };
   const REGISTRY = [
-    entry("timeline", "TimelineEvent", "Timeline spreadsheet / Operation Schedule", "read-write-admin", "eventId", true, 300, "Timeline.Edit", ["add", "edit", "duplicate", "move", "cancel", "archive", "assign-students", "assign-groups", "assign-staff"]),
+    entry("timeline", "TimelineEvent", "Timeline spreadsheet / Operation Schedule", "read-only-command-foundation", "eventId", false, 300, "Timeline.Edit", []),
     entry("calendar", "CalendarEvent", "Timeline projection", "derived-read", "eventId", false, 120, "Calendar.Edit", []),
     entry("participants", "Participant", "Participants spreadsheet / INDIVIDUALS(YES)", "read-now-write-later", "studentKey", true, 120, "Participants.Edit", ["edit", "change-school", "change-item", "merge", "accept", "reject"]),
     entry("schools", "School", "Participants spreadsheet / Schools Master Dataset", "read-now-write-later", "schoolId", true, 300, "Participants.Edit", ["add", "edit", "merge"]),

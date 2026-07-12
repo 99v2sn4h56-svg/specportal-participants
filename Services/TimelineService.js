@@ -55,6 +55,8 @@ const TimelineService = (() => {
     return EntityModelService.timelineEvent({
       id: rehearsal.id,
       eventId: rehearsal.eventId,
+      persistentEventId: rehearsal.eventId || "",
+      eventIdSource: rehearsal.eventId ? "Timeline" : "Derived",
       legacyIds: rehearsal.legacyIds || [],
       title,
       event: title,

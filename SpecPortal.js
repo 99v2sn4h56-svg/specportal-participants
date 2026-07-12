@@ -227,16 +227,20 @@ function portalGetCalendarData() {
   return TimelineService.getCalendarData();
 }
 
-function portalSaveTimelineEvent(command) {
-  return TimelineWriteService.save(command || {});
+function portalGetEventManagerLanding() {
+  return EventManagerService.getLanding();
 }
 
-function portalDuplicateTimelineEvent(command) {
-  return TimelineWriteService.duplicate(command || {});
+function portalGetEventWorkspace(eventId, section) {
+  return EventManagerService.getWorkspace(eventId, section);
 }
 
-function portalSetTimelineEventStatus(command) {
-  return TimelineWriteService.setStatus(command || {});
+function portalGetCommandArchitecture() {
+  return CommandService.getArchitecture();
+}
+
+function portalExecuteCommand(request) {
+  return CommandService.execute(request || {});
 }
 
 function portalGetAttendanceConfig() {

@@ -18,8 +18,14 @@
         calendarDate: new Date(),
         calendarView: "month",
         selectedCalendarEvent: null,
-        timelineEditorEvent: null,
-        timelineMutationPending: false,
+        eventManagerData: null,
+        eventManagerSearch: "",
+        eventManagerRange: "upcoming",
+        eventManagerType: "",
+        eventManagerWarningsOnly: false,
+        eventManagerView: sessionStorage.getItem("specCentralEventManagerView") || "cards",
+        selectedEventWorkspaceId: "",
+        selectedEventWorkspaceSection: "overview",
         profileMutationPending: false,
         projectData: null,
         projectView: "board",
@@ -1651,6 +1657,18 @@
         var source = document.getElementById("operationsSource");
         if (!el) return;
 
+        var view = App.state.operationsView || "overview";
+        if (view === "events") {
+          if (!App.state.eventManagerData) {
+            el.innerHTML = App.loadingState("Loading Event Manager");
+            App.loadEventManagerLanding();
+          } else {
+            if (source) source.textContent = App.state.eventManagerData.source + " · " + App.formatAdministrationTimestamp(App.state.eventManagerData.generatedAt);
+            el.innerHTML = App.renderEventManager();
+          }
+          return;
+        }
+
         if (!App.state.projectData) {
           el.innerHTML = App.loadingState("Loading Operations workspace");
           App.loadOperationsData();
@@ -1661,12 +1679,8 @@
           (App.state.projectData.generatedAt ? " · " + App.state.projectData.generatedAt : "");
 
         var tasks = App.state.projectData.tasks || [];
-        var view = App.state.operationsView || "overview";
-
         if (view === "overview") {
           el.innerHTML = App.renderOperationsOverview();
-        } else if (view === "events") {
-          el.innerHTML = App.renderOperationsEvents(App.state.projectData.events || []);
         } else if (view === "users") {
           el.innerHTML = App.renderOperationsStaffDashboard(App.state.projectData.users || []);
         } else if (view === "timeline") {
@@ -1771,16 +1785,8 @@
         return '<article class="timelineManagementCard ' + (event.status === "Cancelled" ? "cancelled" : "") + '"><button class="timelineCardMain" type="button" onclick="App.openOperationsEvent(\'' + App.escapeJs(event.id || event.eventId) + '\')"><span class="dateBadge" style="background:' + App.escapeHtml(event.colour || "#2d67b2") + '">' + App.escapeHtml(event.start || event.date || "TBC") + '</span><span><strong>' + App.escapeHtml(event.title || event.event || "Event") + '</strong><small>' + App.escapeHtml([event.date, event.venue, event.area, event.status, (event.staff || []).join(", ")].filter(Boolean).join(" · ")) + '</small></span></button>' + (canEdit ? '<button class="timelineEditButton" type="button" onclick="App.openTimelineEditor(\'' + App.escapeJs(event.id || event.eventId) + '\')" aria-label="Edit ' + App.escapeHtml(event.title || event.event || "event") + '">Edit</button>' : "") + '</article>';
       },
 
-      openTimelineEditor: function (id) {
-        if (!App.canEditTimeline()) { App.notify("Administrator Timeline access is required."); return; }
-        var events = ((App.state.projectData || {}).timelineEvents || []).concat((App.state.calendarData && App.state.calendarData.events) || []);
-        var event = id ? events.find(function (item) { return String(item.id || item.eventId) === String(id); }) : null;
-        App.state.timelineEditorEvent = event || { categories: [], schoolGroups: [], studentGroups: [], individualStudents: [], staff: [], status: "Active" };
-        App.renderTimelineEditor();
-      },
-
       canEditTimeline: function () {
-        return !!App.state.staff.isAdmin && App.hasActualPermission("Administration.View") && App.hasActualPermission("Timeline.Edit") && App.hasPermission("Administration.View") && App.hasPermission("Timeline.Edit");
+        return false;
       },
 
       renderTimelineEditor: function () {
@@ -1819,13 +1825,13 @@
       saveTimelineEditor: function () {
         var command = App.collectTimelineEditor();
         if (!command.title || !command.date) { App.notify("Event name and date are required."); return; }
-        App.runTimelineMutation("portalSaveTimelineEvent", command, command.sourceRow ? "Timeline event updated." : "Timeline event created.");
+        App.notify("Timeline editing is not enabled.");
       },
 
       duplicateTimelineEvent: function () {
         var command = App.collectTimelineEditor();
         if (!command.sourceRow || !window.confirm("Create a draft copy of this event?")) return;
-        App.runTimelineMutation("portalDuplicateTimelineEvent", command, "Timeline event duplicated as a draft.");
+        App.notify("Timeline editing is not enabled.");
       },
 
       setTimelineEventStatus: function (status) {
@@ -1833,28 +1839,11 @@
         var prompt = status === "Cancelled" ? "Cancel this event? Existing Attendance history will be preserved." : status === "Archived" ? "Archive this event and hide it from Calendar views?" : "Set this event back to active?";
         if (!command.sourceRow || !window.confirm(prompt)) return;
         command.status = status;
-        App.runTimelineMutation("portalSetTimelineEventStatus", command, "Timeline event marked " + status.toLowerCase() + ".");
+        App.notify("Timeline editing is not enabled.");
       },
 
       runTimelineMutation: function (serverFunction, command, message) {
-        if (App.state.timelineMutationPending) return;
-        App.state.timelineMutationPending = true;
-        App.services.request("timelineMutation", serverFunction, { args: [command], forceRefresh: true, timeoutMs: 45000 })
-          .then(function () {
-            App.closeTimelineEditor();
-            App.state.calendarData = null;
-            App.notify(message);
-            App.loadCalendarData(true).then(function (data) {
-              var events = data && data.events;
-              if (App.state.projectData && Array.isArray(events)) {
-                App.state.projectData.timelineEvents = events;
-                App.state.projectData.events = events.filter(function (event) { return event.eventType === "Operational Event"; });
-              }
-              if (App.state.currentPage === "operations") App.renderOperationsPage();
-            });
-          })
-          .catch(function (error) { App.notify("Timeline change failed: " + App.getErrorMessage(error)); })
-          .finally(function () { App.state.timelineMutationPending = false; });
+        App.notify("Timeline editing is not enabled.");
       },
 
       filterOperationsTimeline: function (query) {
@@ -1890,6 +1879,67 @@
           ? events.map(App.renderOperationsEventCard).join("")
           : App.emptyState("No operational events", "The authoritative Timeline has no operational events in this view.")) + '</div>';
       },
+
+      loadEventManagerLanding: function (forceRefresh) {
+        return App.services.request("eventManagerLanding", "portalGetEventManagerLanding", { cacheMs: 120000, timeoutMs: 45000, forceRefresh: !!forceRefresh })
+          .then(function (data) { App.state.eventManagerData = data; if (App.state.currentPage === "operations" && App.state.operationsView === "events") App.renderOperationsPage(); return data; })
+          .catch(function (error) { App.notify("Event Manager could not be loaded: " + App.getErrorMessage(error)); App.state.eventManagerData = { events: [], summary: {}, filters: {}, source: "Timeline unavailable", generatedAt: new Date().toISOString() }; App.renderOperationsPage(); });
+      },
+
+      renderEventManager: function () {
+        var data = App.state.eventManagerData || { events: [], summary: {}, filters: {} };
+        var summary = data.summary || {};
+        var metrics = [[summary.events, "Events"], [summary.today, "Today"], [summary.upcoming, "Upcoming"], [summary.attendanceLinked, "Attendance linked"], [summary.warnings, "Warnings"]]
+          .filter(function (item) { return Number(item[0]) > 0; });
+        var events = App.getFilteredEventManagerEvents();
+        var view = App.state.eventManagerView;
+        var createAction = data.permissions && data.permissions.canEdit
+          ? '<button class="quickLink compact" disabled title="Editing is not enabled">New event</button>'
+          : '<button class="quickLink compact" disabled title="Timeline editing is not enabled">New event</button>';
+        return '<div class="eventManagerHeader"><div><span class="scProfileKicker">Authoritative Timeline</span><h3>Event Manager</h3><p>Browse events and inspect their operational relationships. Editing is not enabled.</p></div><div class="toolbarActions"><button class="quickLink compact" type="button" onclick="App.loadEventManagerLanding(true)">Refresh</button>' + createAction + '</div></div>' +
+          (metrics.length ? '<div class="operationsMetricGrid eventManagerMetrics">' + metrics.map(function (item) { return App.renderOperationsMetric(item[0], item[1], "Timeline"); }).join("") + '</div>' : '') +
+          '<div class="eventManagerFilters"><input class="participantSearch" type="search" value="' + App.escapeHtml(App.state.eventManagerSearch) + '" placeholder="Search events, venues, staff or assignments…" oninput="App.setEventManagerSearch(this.value)"><select class="filterSelect" onchange="App.state.eventManagerRange=this.value;App.renderOperationsPage()"><option value="upcoming"' + (App.state.eventManagerRange === "upcoming" ? " selected" : "") + '>Upcoming</option><option value="today"' + (App.state.eventManagerRange === "today" ? " selected" : "") + '>Today</option><option value="past"' + (App.state.eventManagerRange === "past" ? " selected" : "") + '>Past</option><option value="all"' + (App.state.eventManagerRange === "all" ? " selected" : "") + '>All dates</option></select><select class="filterSelect" onchange="App.state.eventManagerType=this.value;App.renderOperationsPage()"><option value="">All types</option>' + ((data.filters || {}).types || []).map(function (type) { return '<option' + (App.state.eventManagerType === type ? ' selected' : '') + '>' + App.escapeHtml(type) + '</option>'; }).join("") + '</select><label class="eventManagerCheck"><input type="checkbox"' + (App.state.eventManagerWarningsOnly ? " checked" : "") + ' onchange="App.state.eventManagerWarningsOnly=this.checked;App.renderOperationsPage()"> Warnings only</label><button class="quickLink compact" type="button" onclick="App.toggleEventManagerView()">' + (view === "cards" ? "Table view" : "Card view") + '</button></div>' +
+          '<div class="eventManagerActive">' + events.length + ' visible events · Source ' + App.escapeHtml(data.sourceHealth || "Unknown") + '</div>' +
+          (events.length ? (view === "table" ? App.renderEventManagerTable(events) : '<div class="operationsEventGrid eventManagerGrid">' + events.map(App.renderEventManagerCard).join("") + '</div>') : App.emptyState("No events match", "Clear or adjust the Event Manager filters."));
+      },
+
+      getFilteredEventManagerEvents: function () {
+        var query = String(App.state.eventManagerSearch || "").toLowerCase();
+        var today = App.toDateKey(new Date());
+        return ((App.state.eventManagerData || {}).events || []).filter(function (event) {
+          if (query && [event.title, event.venue, event.area, (event.staff || []).join(" "), (event.categories || []).join(" "), (event.studentGroups || []).join(" ")].join(" ").toLowerCase().indexOf(query) < 0) return false;
+          if (App.state.eventManagerType && event.eventType !== App.state.eventManagerType) return false;
+          if (App.state.eventManagerWarningsOnly && !(event.warnings || []).length) return false;
+          if (App.state.eventManagerRange === "today") return event.dateKey === today;
+          if (App.state.eventManagerRange === "past") return event.dateKey && event.dateKey < today;
+          if (App.state.eventManagerRange === "upcoming") return !event.dateKey || event.dateKey >= today;
+          return true;
+        }).sort(App.sortEvents);
+      },
+
+      setEventManagerSearch: function (value) { clearTimeout(App.state.eventManagerSearchTimer); App.state.eventManagerSearch = value; App.state.eventManagerSearchTimer = setTimeout(App.renderOperationsPage, 180); },
+      toggleEventManagerView: function () { App.state.eventManagerView = App.state.eventManagerView === "cards" ? "table" : "cards"; sessionStorage.setItem("specCentralEventManagerView", App.state.eventManagerView); App.renderOperationsPage(); },
+      renderEventManagerCard: function (event) { var warning = (event.warnings || []).length ? '<span class="eventWarningBadge">' + event.warnings.length + ' warning' + (event.warnings.length === 1 ? '' : 's') + '</span>' : ''; return '<button class="timelineManagementCard eventManagerCard" type="button" onclick="App.openEventWorkspace(\'' + App.escapeJs(event.id) + '\')"><span class="dateBadge">' + App.escapeHtml(event.date || "TBC") + '</span><span><strong>' + App.escapeHtml(event.title) + '</strong><small>' + App.escapeHtml([event.start, event.venue, event.area, event.eventType].filter(Boolean).join(" · ")) + '</small><small>' + App.escapeHtml((event.staff || []).join(", ")) + '</small></span>' + warning + '<b>→</b></button>'; },
+      renderEventManagerTable: function (events) { return '<div class="tableWrap"><table class="adminTable"><thead><tr><th>Date</th><th>Event</th><th>Type</th><th>Venue</th><th>Attendance</th><th>Warnings</th></tr></thead><tbody>' + events.map(function (event) { return '<tr tabindex="0" onclick="App.openEventWorkspace(\'' + App.escapeJs(event.id) + '\')"><td>' + App.escapeHtml(event.date || "TBC") + '</td><td><strong>' + App.escapeHtml(event.title) + '</strong></td><td>' + App.escapeHtml(event.eventType) + '</td><td>' + App.escapeHtml(event.venue || "—") + '</td><td>' + App.escapeHtml((event.attendance || {}).linked ? "Linked" : "Not linked") + '</td><td>' + (event.warnings || []).length + '</td></tr>'; }).join("") + '</tbody></table></div>'; },
+
+      openEventWorkspace: function (eventId, section) {
+        App.state.selectedEventWorkspaceId = eventId;
+        App.state.selectedEventWorkspaceSection = section || "overview";
+        var drawer = document.getElementById("eventWorkspaceDrawer");
+        if (drawer) { drawer.hidden = false; drawer.innerHTML = App.loadingState("Loading event workspace"); }
+        App.services.request("eventWorkspace:" + eventId + ":" + App.state.selectedEventWorkspaceSection, "portalGetEventWorkspace", { args: [eventId, App.state.selectedEventWorkspaceSection], cacheMs: 60000, timeoutMs: 45000 })
+          .then(App.renderEventWorkspace).catch(function (error) { if (drawer) drawer.innerHTML = App.emptyState("Event workspace unavailable", App.getErrorMessage(error)); });
+      },
+
+      renderEventWorkspace: function (workspace) {
+        var drawer = document.getElementById("eventWorkspaceDrawer"); if (!drawer) return;
+        var event = workspace.event || {}; var sections = ["overview", "people", "assignments", "staff", "venue", "attendance", "tasks", "communications", "activity", "diagnostics"];
+        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">Event workspace</span><h3>' + App.escapeHtml(event.title || "Event") + '</h3><span>' + App.escapeHtml([event.date, event.start, event.venue].filter(Boolean).join(" · ")) + '</span></div><button type="button" onclick="App.closeEventWorkspace()" aria-label="Close event workspace">×</button></div><div class="eventWorkspaceTabs">' + sections.map(function (name) { return '<button class="' + (workspace.section === name ? 'active' : '') + '" type="button" onclick="App.openEventWorkspace(\'' + App.escapeJs(event.id) + '\',\'' + name + '\')">' + App.toTitle(name) + '</button>'; }).join("") + '</div><div class="drawerBody">' + App.renderEventWorkspaceSection(workspace) + '</div><div class="drawerActions"><button class="quickLink" type="button" onclick="App.openOperationsEvent(\'' + App.escapeJs(event.id) + '\')">Open in Calendar</button><button class="quickLink" disabled title="Editing is not enabled">Edit event</button></div>';
+      },
+      renderEventWorkspaceSection: function (workspace) { var section = workspace.section; if (section === "overview") return '<div class="eventWorkspaceSummary"><section><h4>Event</h4>' + App.renderKeyValueRows(workspace.event, ["eventType", "status", "area", "venue", "notes"]) + '</section><section><h4>Warnings</h4>' + App.renderEventWarnings(workspace.warnings) + '</section></div>'; if (section === "people") return workspace.participants.length ? App.renderDataTable(workspace.participants, ["name", "school", "item", "category", "matchReasons"]) : App.emptyState("No affected participants", "No participant relationship matched this event."); if (section === "assignments") return App.renderKeyValueRows({ categories: workspace.categories, groups: workspace.groups, schools: workspace.schools, items: workspace.items }, ["categories", "groups", "schools", "items"]); if (section === "staff") return workspace.staff.length ? App.renderDataTable(workspace.staff, ["name", "assignment"]) : App.emptyState("No staff allocated", "Timeline Staff is blank."); if (section === "attendance") return App.renderKeyValueRows(workspace.attendance || {}, ["status", "studentCount", "attendanceCounts"]); if (section === "tasks") return workspace.tasks.length ? App.renderDataTable(workspace.tasks, ["title", "assignedUser", "dueDate", "priority", "status"]) : App.emptyState("No linked tasks", "Task Service has no task linked to this event."); if (section === "activity") return workspace.activity.length ? App.renderDataTable(workspace.activity, ["action", "actor", "occurredAt"]) : App.emptyState("No event activity", "No visible audit activity is linked."); if (section === "diagnostics") return workspace.diagnostics ? App.renderKeyValueRows(workspace.diagnostics, Object.keys(workspace.diagnostics)) : App.emptyState("Diagnostics restricted", "Administration.View is required."); if (section === "communications") return App.emptyState("Communications unavailable", "No communications source is connected."); return App.renderKeyValueRows(workspace.venue || {}, Object.keys(workspace.venue || {})); },
+      renderKeyValueRows: function (object, keys) { return '<div class="eventKeyValues">' + keys.map(function (key) { var value = object[key]; if (Array.isArray(value)) value = value.join(", "); else if (value && typeof value === "object") value = JSON.stringify(value); return '<div><span>' + App.escapeHtml(App.toTitle(key)) + '</span><strong>' + App.escapeHtml(value || "—") + '</strong></div>'; }).join("") + '</div>'; },
+      renderEventWarnings: function (warnings) { return (warnings || []).length ? warnings.map(function (item) { return '<div class="eventWarning ' + String(item.severity || '').toLowerCase() + '"><strong>' + App.escapeHtml(item.title) + '</strong><span>' + App.escapeHtml(item.detail) + '</span></div>'; }).join("") : App.emptyState("No current warnings", "No data-quality warning was detected."); },
+      closeEventWorkspace: function () { var drawer = document.getElementById("eventWorkspaceDrawer"); if (drawer) { drawer.hidden = true; drawer.innerHTML = ""; } },
 
       renderOperationsIntegrations: function () {
         return '<div class="moduleGrid">' + App.getStatusItems().map(function (item) {

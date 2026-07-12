@@ -45,6 +45,32 @@ const RelationshipService = (() => {
     return event ? ParticipantService.getAll().filter(participant => participantMatchesEvent(participant, event)) : [];
   }
 
+  function getAffectedParticipantsWithReasons(eventId) {
+    const event = findTimelineEvent_(eventId);
+    if (!event) return { participants: [], unresolvedSelections: [] };
+    const all = ParticipantService.getAll();
+    const selections = (event.individualStudents || []).map(EntityModelService.normaliseKey).filter(Boolean);
+    const nameCounts = {};
+    all.forEach(participant => {
+      const key = EntityModelService.normaliseKey(participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" "));
+      if (key) nameCounts[key] = (nameCounts[key] || 0) + 1;
+    });
+    const unresolvedSelections = selections.filter(selection => nameCounts[selection] > 1)
+      .map(selection => "The selection '" + selection + "' matches more than one participant; use an ID, email, or name plus school.");
+    const participants = all.map(participant => {
+      const reasons = [];
+      const values = [participant.category, participant.discipline, participant.subDiscipline, participant.item].map(EntityModelService.normaliseKey).filter(Boolean);
+      const categoryGroups = (event.categories || []).concat(event.studentGroups || []).map(EntityModelService.normaliseKey).filter(Boolean);
+      if (values.some(value => categoryGroups.includes(value))) reasons.push("Category or student group");
+      if ((event.schoolGroups || []).map(EntityModelService.normaliseKey).includes(EntityModelService.normaliseKey(participant.school))) reasons.push("School group");
+      const name = EntityModelService.normaliseKey(participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" "));
+      const strongIdentities = [participant.applicationId, participant.studentId, participant.studentEmail, [participant.name, participant.school].filter(Boolean).join(" ")].map(EntityModelService.normaliseKey).filter(Boolean);
+      if (selections.some(selection => strongIdentities.includes(selection) || (selection === name && nameCounts[name] === 1))) reasons.push("Individual student");
+      return Object.assign({}, participant, { matchReasons: reasons });
+    }).filter(participant => participant.matchReasons.length);
+    return { participants, unresolvedSelections };
+  }
+
   function getSchoolsForSegment(segment) {
     const key = EntityModelService.normaliseKey(segment);
     const names = ParticipantService.getGroups().filter(group => EntityModelService.normaliseKey(group.segment) === key)
@@ -107,5 +133,5 @@ const RelationshipService = (() => {
     return Object.values(byId);
   }
 
-  return { getModel, participantMatchesEvent, getRehearsalsForParticipant, getAffectedParticipants, getSchoolsForSegment, getTeachersForDate, getParticipantsAtVenue, linkAttendanceSessions };
+  return { getModel, participantMatchesEvent, getRehearsalsForParticipant, getAffectedParticipants, getAffectedParticipantsWithReasons, getSchoolsForSegment, getTeachersForDate, getParticipantsAtVenue, linkAttendanceSessions };
 })();
