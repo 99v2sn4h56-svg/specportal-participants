@@ -220,7 +220,7 @@ const StaffService = (() => {
     for (let i = 0; i < maxRows; i++) {
       const row = values[i].map(value => String(value || "").trim().toLowerCase());
       const score = row.filter(value =>
-        ["email", "email address", "name", "staff name", "role", "team", "position"].includes(value)
+        ["speccentral email", "email", "email address", "name", "staff name", "speccentral role", "role", "team", "position"].includes(value)
       ).length;
       if (score > bestScore) {
         bestScore = score;
