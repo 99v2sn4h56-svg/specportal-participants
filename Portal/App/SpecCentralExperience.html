@@ -111,7 +111,7 @@
         setTimeout(function waitForEvent() { if (!App.state.calendarData) { setTimeout(waitForEvent, 100); return; } App.showCalendarEventDetail(id); var detail = document.getElementById("calendarEventDetail"); if (detail) detail.scrollIntoView({ behavior: "smooth", block: "start" }); }, 50); return;
       }
       if (type === "venue") { App.navigate("calendar"); setTimeout(function () { var search = document.getElementById("calendarSearch"); if (search) { search.value = title; App.setCalendarView("agenda"); } }, 0); return; }
-      if (type === "staff") { App.navigate("staff"); return; }
+      if (type === "staff") { if (App.hasPermission("operations.view")) App.openOperationsView("users"); else App.notify("Staff operations require Operations access."); return; }
       App.navigate("participants");
       App.ensurePortalDataLoaded().then(function () {
         if (type === "school") App.renderSchoolProfile(App.buildSchoolProfile(title));

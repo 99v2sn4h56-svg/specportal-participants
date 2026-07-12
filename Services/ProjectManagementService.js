@@ -30,13 +30,28 @@ const ProjectManagementService = (() => {
       capabilities: AuthorizationService.resolveGrants(staff).map(grant => grant.capability),
       scope: staff.scope || { type: "production", values: [] }
     }));
-    const events = TimelineService.getTimelineEvents().filter(event => event.isOperational);
+    const timelineEvents = TimelineService.getTimelineEvents();
+    const events = timelineEvents.filter(event => event.isOperational);
+    const attendanceSummary = safeCall_(() => AttendanceService.getSummary(), { ok: false, data: {} });
+    const attendanceEvents = safeCall_(() => AttendanceService.getEvents(), { ok: false, data: [] });
+    const operationsConsole = safeCall_(() => OperationsConsoleService.getData(), {});
 
     return {
       source: "Staff Production Team + Timeline",
       generatedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM h:mma"),
       users,
       events,
+      timelineEvents,
+      attendanceSummary: attendanceSummary.ok ? attendanceSummary.data || {} : {},
+      attendanceEvents: attendanceEvents.ok ? attendanceEvents.data || [] : [],
+      jobs: operationsConsole.jobs || [],
+      jobRegistry: operationsConsole.jobRegistry || [],
+      workflowQueue: operationsConsole.workflowQueue || [],
+      queueSummary: operationsConsole.queueSummary || {},
+      taskSummary: operationsConsole.taskSummary || {},
+      notifications: operationsConsole.notifications || [],
+      automationRules: operationsConsole.automationRules || [],
+      audit: operationsConsole.audit || [],
       authorization: AuthorizationService.getModel(),
       modules: SourceRegistryService.getForUser(user),
       adminMode: !!user.isAdmin,
@@ -53,6 +68,10 @@ const ProjectManagementService = (() => {
     if (!StaffService.hasPermission(email, permission)) {
       throw new Error(`Permission required: ${permission}`);
     }
+  }
+
+  function safeCall_(callback, fallback) {
+    try { return callback(); } catch (err) { return fallback; }
   }
 
   return {

@@ -3,8 +3,8 @@
     <section class="heroPanel span12">
       <div class="operationalHeroGrid">
         <div>
-          <div class="kicker">Schools Spectacular 2026</div>
-          <h2>Morning Brief</h2>
+          <div class="kicker">My Home · Schools Spectacular 2026</div>
+          <h2 id="homeWelcome">Today at Spec Central</h2>
           <div id="dashboardGreeting" class="heroMeta">Good morning</div>
           <div id="dashboardDate" class="heroMeta">Today</div>
           <div class="heroMetricGrid">
@@ -14,15 +14,15 @@
             </div>
             <div class="heroMetric">
               <strong id="heroUpcomingRehearsals">0</strong>
-              <span>Upcoming rehearsals</span>
+              <span>My open tasks</span>
             </div>
             <div class="heroMetric">
               <strong id="heroOutstandingActions">0</strong>
-              <span>Outstanding actions</span>
+              <span>Things requiring attention</span>
             </div>
             <div class="heroMetric">
               <strong id="heroAttendanceAlerts">0</strong>
-              <span>Attendance alerts</span>
+              <span>Unread notifications</span>
             </div>
           </div>
         </div>
@@ -31,37 +31,33 @@
           <strong id="dashboardStaffName">Spec Central user</strong>
           <span id="dashboardStaffRole">Staff</span>
           <span id="dashboardStaffDepartment">Department pending</span>
-          <div class="moduleMeta" style="margin-top:12px;">Next rehearsal</div>
+          <div class="moduleMeta" style="margin-top:12px;">Next relevant event</div>
           <strong id="dashboardNextRehearsal">Loading...</strong>
         </div>
       </div>
     </section>
 
-    <section class="panel span12">
-      <h3 class="sectionTitle">Operational Overview</h3>
-      <div id="dashboardStatsFull" class="moduleGrid"></div>
+    <section class="panel span12 homeQuickActionsPanel">
+      <h3 class="sectionTitle">Quick Actions</h3>
+      <div class="homeActionGrid">
+        <button type="button" onclick="App.focusParticipantsSearch()"><b>P</b><strong>Find Participant</strong><span>Search passports and relationships</span></button>
+        <button type="button" onclick="App.openAttendance()"><b>A</b><strong>Open Attendance</strong><span>Launch live attendance operations</span></button>
+        <button type="button" onclick="App.navigate('calendar')"><b>C</b><strong>Today’s Calendar</strong><span>See today’s full schedule</span></button>
+        <button type="button" onclick="App.navigate('rehearsals')"><b>R</b><strong>My Rehearsals</strong><span>Review rehearsal detail</span></button>
+        <button type="button" onclick="App.browseGlobal('schools')"><b>S</b><strong>Search School</strong><span>Open a School Passport</span></button>
+        <button type="button" data-permission="operations.view" onclick="App.openOperationsView('timeline')"><b>T</b><strong>Open Timeline</strong><span>Operational Timeline workspace</span></button>
+        <button type="button" data-permission="operations.view" onclick="App.openOperationsView('projects')"><b>✓</b><strong>My Tasks</strong><span>Open assigned work</span></button>
+      </div>
     </section>
 
     <section class="panel span7">
-      <h3 class="sectionTitle">Briefings & Notifications</h3>
-      <div id="announcementCards" class="announcementGrid"></div>
-    </section>
-
-    <section class="panel span5">
-      <h3 class="sectionTitle">Upcoming Rehearsals</h3>
+      <h3 class="sectionTitle">Today’s Schedule</h3>
       <div id="upcomingRehearsals" class="dateList"></div>
     </section>
 
     <section class="panel span5">
-      <h3 class="sectionTitle">Quick Actions</h3>
-      <div class="quickLinks">
-        <button class="quickLink" type="button" onclick="App.focusParticipantsSearch()">Search Participants</button>
-        <button class="quickLink" type="button" onclick="App.openAttendance()">Open Attendance</button>
-        <button class="quickLink" type="button" onclick="App.browseGlobal('schools')">Browse Schools</button>
-        <button class="quickLink" type="button" onclick="App.browseGlobal('items')">Browse Items</button>
-        <button class="quickLink" type="button" onclick="App.navigate('rehearsals')">Today's Rehearsals</button>
-        <button class="quickLink" type="button" data-permission="operations.data.manage" onclick="App.openImportCentre()">Upload Acceptance Data</button>
-      </div>
+      <h3 class="sectionTitle">Things Requiring Attention</h3>
+      <div id="dashboardAttention" class="attentionList"></div>
     </section>
 
     <section class="panel span7">
@@ -70,13 +66,18 @@
     </section>
 
     <section class="panel span5">
-      <h3 class="sectionTitle">Tasks Requiring Attention</h3>
+      <h3 class="sectionTitle">My Tasks</h3>
       <div id="dashboardTasks" class="activityList"></div>
     </section>
 
     <section class="panel span4">
       <h3 class="sectionTitle">My Schools</h3>
       <div id="dashboardMySchools" class="relationshipList"></div>
+    </section>
+
+    <section class="panel span8">
+      <h3 class="sectionTitle">Announcements</h3>
+      <div id="announcementCards" class="announcementGrid"></div>
     </section>
 
     <section class="panel span4">

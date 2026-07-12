@@ -1,17 +1,14 @@
 <template id="page-operations">
   <section class="panel span12">
-    <h3 class="sectionTitle">Operations</h3>
+    <div class="operationsTitleRow"><div><div class="scProfileKicker">Mission Control</div><h3 class="sectionTitle">Operations</h3></div><span class="statusChip">Live platform view</span></div>
     <div id="operationsSource" class="moduleMeta">Protected operations area. Loading permitted data...</div>
     <div class="adminModeBanner" data-admin-control hidden>Admin mode · editing controls are capability-gated. Write actions are not enabled in this foundation release.</div>
-    <div class="viewTabs">
-      <button class="quickLink compact" type="button" onclick="App.setOperationsView('overview')">Overview</button>
-      <button class="quickLink compact" type="button" data-permission="operations.events.manage" onclick="App.setOperationsView('events')">Events</button>
-      <button class="quickLink compact" type="button" data-permission="operations.users.manage" onclick="App.setOperationsView('users')">Users & Permissions</button>
-      <button class="quickLink compact" type="button" data-permission="operations.projects.view" onclick="App.setOperationsView('projects')">Project Management</button>
-      <button class="quickLink compact" type="button" data-permission="operations.data.manage" onclick="App.setOperationsView('data')">Data Management</button>
-      <button class="quickLink compact" type="button" data-permission="operations.announcements.manage" onclick="App.setOperationsView('announcements')">Announcements</button>
-      <button class="quickLink compact" type="button" data-permission="operations.integrations.manage" onclick="App.setOperationsView('integrations')">Integrations</button>
-      <button class="quickLink compact" type="button" data-permission="operations.diagnostics.view" onclick="App.setOperationsView('diagnostics')">Diagnostics</button>
+    <div class="viewTabs operationsTabs">
+      <button class="quickLink compact" type="button" onclick="App.setOperationsView('overview')">Dashboard</button>
+      <button class="quickLink compact" type="button" onclick="App.setOperationsView('users')">Staff</button>
+      <button class="quickLink compact" type="button" onclick="App.setOperationsView('projects')">Projects</button>
+      <button class="quickLink compact" type="button" onclick="App.setOperationsView('timeline')">Timeline</button>
+      <button class="quickLink compact" type="button" onclick="App.setOperationsView('events')">Event Manager</button>
     </div>
     <div id="operationsContent" class="moduleWorkspace"></div>
   </section>

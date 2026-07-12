@@ -54,6 +54,7 @@
         dashboardStats: null,
         dashboardRenderTimer: null,
         dashboardParticipantLoadAttempted: false,
+        operationsNavExpanded: true,
         dashboardProfile: "operations",
         applicationVersion: "5",
         selectedParticipant: null,
@@ -157,12 +158,41 @@
       restoreSidebarState: function () {
         var collapsed = App.safeLoadJson("specCentralSidebarCollapsed", false);
         document.body.classList.toggle("sidebarCollapsed", !!collapsed);
+        App.state.operationsNavExpanded = App.safeLoadJson("specCentralOperationsNavExpanded", true);
+        App.renderOperationsNavState();
       },
 
       toggleSidebar: function () {
         var collapsed = !document.body.classList.contains("sidebarCollapsed");
         document.body.classList.toggle("sidebarCollapsed", collapsed);
         App.safeSaveJson("specCentralSidebarCollapsed", collapsed);
+      },
+
+      toggleOperationsNav: function () {
+        if (document.body.classList.contains("sidebarCollapsed")) {
+          document.body.classList.remove("sidebarCollapsed");
+          App.safeSaveJson("specCentralSidebarCollapsed", false);
+          App.state.operationsNavExpanded = true;
+          App.safeSaveJson("specCentralOperationsNavExpanded", true);
+          App.renderOperationsNavState();
+          return;
+        }
+        App.state.operationsNavExpanded = !App.state.operationsNavExpanded;
+        App.safeSaveJson("specCentralOperationsNavExpanded", App.state.operationsNavExpanded);
+        App.renderOperationsNavState();
+      },
+
+      renderOperationsNavState: function () {
+        var children = document.getElementById("operationsNavChildren");
+        if (children) children.hidden = !App.state.operationsNavExpanded;
+        document.body.classList.toggle("operationsNavCollapsed", !App.state.operationsNavExpanded);
+      },
+
+      openOperationsView: function (view) {
+        App.state.operationsView = view || "overview";
+        App.state.operationsNavExpanded = true;
+        App.renderOperationsNavState();
+        App.navigate("operations");
       },
 
       events: {
@@ -347,6 +377,10 @@
       navigate: function (page, options) {
         options = options || {};
         if (page === "projectManagement") page = "operations";
+        if (page === "staff") {
+          if (App.hasPermission("operations.view")) { App.state.operationsView = "users"; page = "operations"; }
+          else { App.notify("Staff operations require Operations access."); page = "dashboard"; }
+        }
         var config = App.pages[page] || App.pages.dashboard;
         var template = document.getElementById(config.template);
         var outlet = document.getElementById("appContent");
@@ -366,6 +400,10 @@
         }
         document.getElementById("topBarTitle").textContent = config.title;
         document.getElementById("topBarDescription").textContent = config.description;
+        var breadcrumb = document.getElementById("topBarBreadcrumb");
+        var contextStatus = document.getElementById("topBarContextStatus");
+        if (breadcrumb) breadcrumb.textContent = page === "operations" ? "Spec Central / Operations / " + App.toTitle(App.state.operationsView || "dashboard") : "Spec Central / " + config.title;
+        if (contextStatus) contextStatus.textContent = page === "administration" ? "Read only" : (App.state.systemStatus[page] && App.state.systemStatus[page].status || "Live");
 
         Array.prototype.forEach.call(document.querySelectorAll("[data-nav-page]"), function (button) {
           button.classList.toggle("active", button.getAttribute("data-nav-page") === page);
@@ -688,6 +726,7 @@
           App.ensurePortalDataLoaded().catch(function () {});
         }
         var greeting = document.getElementById("dashboardGreeting");
+        var homeWelcome = document.getElementById("homeWelcome");
         var date = document.getElementById("dashboardDate");
         var staffName = document.getElementById("dashboardStaffName");
         var staffRole = document.getElementById("dashboardStaffRole");
@@ -699,18 +738,19 @@
         var attendanceAlerts = document.getElementById("heroAttendanceAlerts");
 
         if (greeting) greeting.textContent = App.getGreeting() + ", " + (App.state.staff.displayName || App.state.staff.name || "Spec Central user");
+        if (homeWelcome) homeWelcome.textContent = App.getGreeting() + " " + String(App.state.staff.displayName || App.state.staff.name || "").split(" ")[0];
         if (date) date.textContent = App.state.currentDate || App.formatShortDate(new Date());
         if (staffName) staffName.textContent = App.state.staff.displayName || App.state.staff.name || App.state.staff.email || "Spec Central user";
         if (staffRole) staffRole.textContent = App.state.staff.role || "Staff";
         if (staffDepartment) staffDepartment.textContent = App.state.staff.department || "Department not connected";
         if (nextRehearsal) {
-          var next = (App.state.rehearsals || [])[0] || {};
-          nextRehearsal.textContent = next.event || next.title || "No upcoming rehearsal loaded";
+          var next = App.getRelevantHomeEvents(false)[0] || {};
+          nextRehearsal.textContent = next.event || next.title || "Your schedule is clear";
         }
-        if (todayRehearsals) todayRehearsals.textContent = (App.state.todaysRehearsals || []).length;
-        if (upcomingRehearsals) upcomingRehearsals.textContent = (App.state.rehearsals || []).length;
+        if (todayRehearsals) todayRehearsals.textContent = App.getRelevantHomeEvents(true).length;
+        if (upcomingRehearsals) upcomingRehearsals.textContent = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
         if (outstandingActions) outstandingActions.textContent = App.getOutstandingActionCount();
-        if (attendanceAlerts) attendanceAlerts.textContent = App.state.attendanceEvents.length || 0;
+        if (attendanceAlerts) { var prefs = App.getNotificationPrefs(); attendanceAlerts.textContent = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length; }
 
         var stats = document.getElementById("dashboardStatsFull");
         if (stats) {
@@ -725,6 +765,7 @@
         App.renderRecentActivity();
         App.renderAttendanceActionSummary();
         App.renderDashboardTasks();
+        App.renderDashboardAttention();
         if (App.state.ready) App.renderDashboardRelationships();
       },
 
@@ -747,10 +788,43 @@
         var el = document.getElementById("upcomingRehearsals");
         if (!el) return;
 
-        var rehearsals = (App.state.rehearsals || []).slice(0, 5);
+        var rehearsals = App.getRelevantHomeEvents(true).slice(0, 6);
         el.innerHTML = rehearsals.length
           ? rehearsals.map(App.renderRehearsalItem).join("")
-          : App.emptyState("Schedule clear", "No upcoming rehearsals are assigned or available.");
+          : App.emptyState("Your schedule is clear", "No relevant events are scheduled for today.");
+      },
+
+      getRelevantHomeEvents: function (todayOnly) {
+        var staff = App.state.staff || {};
+        var name = String(staff.displayName || staff.name || "").toLowerCase();
+        var email = String(staff.email || "").toLowerCase();
+        var department = String(staff.department || staff.team || "").toLowerCase();
+        var allocated = (staff.allocatedEvents || []).map(function (item) { return String(item).toLowerCase(); });
+        var today = App.toDateKey(new Date());
+        var events = (App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || [];
+        return events.filter(function (event) {
+          var dateKey = event.dateKey || App.toDateKey(event.date);
+          if (todayOnly && dateKey !== today) return false;
+          var text = [event.id, event.title, event.event, event.area, (event.staff || []).join(" ")].join(" ").toLowerCase();
+          if (!name && !email && !department && !allocated.length) return true;
+          return (name && text.indexOf(name) >= 0) || (email && text.indexOf(email) >= 0) || (department && text.indexOf(department) >= 0) || allocated.some(function (item) { return text.indexOf(item) >= 0; });
+        }).sort(App.sortEvents);
+      },
+
+      renderDashboardAttention: function () {
+        var el = document.getElementById("dashboardAttention");
+        if (!el) return;
+        var prefs = App.getNotificationPrefs();
+        var unread = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length;
+        var openTasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length;
+        var attendance = (App.state.attendanceEvents || []).length;
+        var rows = [
+          { label: "Unread notifications", value: unread, action: "App.openNotificationCentre()" },
+          { label: "Open tasks", value: openTasks, action: "App.openOperationsView('projects')", permission: "operations.view" },
+          { label: "Attendance sessions", value: attendance, action: "App.navigate('attendance')" },
+          { label: "Upcoming relevant events", value: App.getRelevantHomeEvents(false).length, action: "App.navigate('rehearsals')" }
+        ].filter(function (item) { return !item.permission || App.hasPermission(item.permission); });
+        el.innerHTML = rows.map(function (item) { return '<button class="attentionRow" type="button" onclick="' + item.action + '"><span>' + App.escapeHtml(item.label) + '</span><strong>' + App.escapeHtml(item.value) + '</strong></button>'; }).join("");
       },
 
       renderRecentActivity: function () {
@@ -1514,7 +1588,9 @@
         } else if (view === "events") {
           el.innerHTML = App.renderOperationsEvents(App.state.projectData.events || []);
         } else if (view === "users") {
-          el.innerHTML = App.renderOperationsUsers(App.state.projectData.users || []);
+          el.innerHTML = App.renderOperationsStaffDashboard(App.state.projectData.users || []);
+        } else if (view === "timeline") {
+          el.innerHTML = App.renderOperationsTimeline(App.state.projectData.timelineEvents || []);
         } else if (view === "data") {
           el.innerHTML = '<div class="adminModeBanner">Connected sources are read-only from this view.</div>' + App.renderDataTable((App.state.projectData.modules || []).map(function (item) { return { name: item.id, source: item.source, direction: item.direction, identity: item.identityField, status: item.canEdit ? "Capability available" : "Read only" }; }), ["name", "source", "direction", "identity", "status"]);
         } else if (view === "announcements") {
@@ -1539,12 +1615,86 @@
       },
 
       renderOperationsOverview: function () {
-        var stats = App.buildDashboardStats();
-        return '<div class="moduleGrid">' + stats.map(function (stat) {
-          return '<div class="moduleCard"><div class="moduleTitle">' + App.escapeHtml(stat.value) + '</div><div class="moduleMeta">' + App.escapeHtml(stat.label) + '</div>' + (stat.note ? '<div class="moduleNote">' + App.escapeHtml(stat.note) + '</div>' : '') + '</div>';
-        }).join("") + '</div>' +
-          '<h4 class="sectionTitle">Project Management</h4>' +
-          App.renderTaskBoard((App.state.projectData && App.state.projectData.tasks) || [], (App.state.projectData && App.state.projectData.statuses) || []);
+        var data = App.state.projectData || {};
+        var today = App.toDateKey(new Date());
+        var timeline = data.timelineEvents || [];
+        var todayEvents = timeline.filter(function (item) { return item.dateKey === today; });
+        var attendanceEvents = data.attendanceEvents || [];
+        var summary = data.attendanceSummary || {};
+        var statusCounts = summary.countsByStatus || summary.attendanceCounts || {};
+        var peopleOnSite = Number(statusCounts.Present || statusCounts.present || 0);
+        var unmarked = Number(statusCounts["Not Marked"] || statusCounts.Unmarked || statusCounts.unmarked || 0);
+        var totalRecords = Number(summary.totalStudentEventRecords || summary.totalRecords || Object.keys(statusCounts).reduce(function (sum, key) { return sum + Number(statusCounts[key] || 0); }, 0));
+        var completion = totalRecords ? Math.round(((totalRecords - unmarked) / totalRecords) * 100) + "%" : "—";
+        var queue = data.queueSummary || {};
+        var metrics = [
+          [todayEvents.filter(function (item) { return item.eventType === "Rehearsal"; }).length, "Today’s rehearsals", "Timeline"],
+          [todayEvents.filter(function (item) { return item.eventType === "Operational Event"; }).length, "Operational events", "Timeline"],
+          [attendanceEvents.length, "Attendance sessions", "Attendance"],
+          [completion, "Attendance completion", "Attendance"],
+          [peopleOnSite, "People marked present", "Attendance"],
+          [(data.tasks || []).filter(function (item) { return item.status !== "Completed" && (!item.dueDate || item.dueDate <= today); }).length, "Tasks due", "Task Service"],
+          [(data.jobs || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).length, "Active jobs", "Job Service"],
+          [(data.notifications || []).length, "Notifications", "Notification Service"],
+          [Number(queue.pending || 0) + Number(queue.running || 0), "Workflow queue", "Workflow Engine"],
+          [(data.automationRules || []).filter(function (item) { return item.enabled; }).length, "Enabled automations", "Automation Registry"],
+          [(data.modules || []).filter(function (item) { return item.direction !== "none"; }).length, "Connected sources", "Platform Registry"],
+          [(data.users || []).filter(function (item) { return !item.role || item.status === "Inactive"; }).length, "Permission issues", "Authorization"]
+        ];
+        return '<div class="operationsMetricGrid">' + metrics.map(function (item) { return App.renderOperationsMetric(item[0], item[1], item[2]); }).join("") + '</div>' +
+          '<div class="operationsDashboardGrid"><section><h4>Today’s run sheet</h4>' + (todayEvents.length ? todayEvents.slice(0, 8).map(App.renderOperationsEventCard).join("") : App.emptyState("No events today", "Timeline has no activity scheduled for today.")) + '</section>' +
+          '<section><h4>Platform queues</h4>' + App.renderOperationsQueueSummary(data) + '</section>' +
+          '<section><h4>Recent audit activity</h4>' + App.renderOperationsAudit(data.audit || []) + '</section></div>';
+      },
+
+      renderOperationsMetric: function (value, label, source) {
+        return '<article class="operationsMetric"><div class="operationsMetricIcon">' + App.escapeHtml(String(label || "").charAt(0)) + '</div><div><strong>' + App.escapeHtml(value) + '</strong><span>' + App.escapeHtml(label) + '</span><small>' + App.escapeHtml(source) + '</small></div></article>';
+      },
+
+      renderOperationsQueueSummary: function (data) {
+        var rows = [
+          ["Workflow pending", (data.queueSummary || {}).pending || 0], ["Workflow running", (data.queueSummary || {}).running || 0],
+          ["Jobs", (data.jobs || []).length], ["Notifications", (data.notifications || []).length],
+          ["Automation rules", (data.automationRules || []).length], ["Registered job adapters", (data.jobRegistry || []).length]
+        ];
+        return rows.map(function (item) { return '<div class="operationsStatusRow"><span>' + App.escapeHtml(item[0]) + '</span><strong>' + App.escapeHtml(item[1]) + '</strong></div>'; }).join("");
+      },
+
+      renderOperationsAudit: function (audit) {
+        return audit.length ? audit.slice(0, 8).map(function (item) { return '<div class="activityItem"><strong>' + App.escapeHtml(item.action || "Platform activity") + '</strong><span>' + App.escapeHtml([item.actor, App.formatAdministrationTimestamp(item.occurredAt)].filter(Boolean).join(" · ")) + '</span></div>'; }).join("") : App.emptyState("No audit activity", "No recent platform activity is recorded.");
+      },
+
+      renderOperationsEventCard: function (event) {
+        return '<button class="operationsEventCard" type="button" onclick="App.openOperationsEvent(\'' + App.escapeJs(event.id) + '\')"><span class="dateBadge" style="background:' + App.escapeHtml(event.colour || "#2d67b2") + '">' + App.escapeHtml(event.start || event.date || "TBC") + '</span><span><strong>' + App.escapeHtml(event.title || event.event || "Event") + '</strong><small>' + App.escapeHtml([event.venue, event.area, (event.staff || []).join(", ")].filter(Boolean).join(" · ")) + '</small></span><b>→</b></button>';
+      },
+
+      openOperationsEvent: function (id) {
+        App.navigate("calendar");
+        App.loadCalendarData();
+        setTimeout(function waitForCalendar() { if (!App.state.calendarData) { setTimeout(waitForCalendar, 100); return; } App.showCalendarEventDetail(id); }, 50);
+      },
+
+      renderOperationsStaffDashboard: function (users) {
+        var roles = {}, departments = {}, active = 0;
+        users.forEach(function (item) { roles[item.role || "Unassigned"] = (roles[item.role || "Unassigned"] || 0) + 1; departments[item.department || "Unassigned"] = (departments[item.department || "Unassigned"] || 0) + 1; if (item.status !== "Inactive") active++; });
+        return '<div class="operationsMetricGrid">' + App.renderOperationsMetric(users.length, "Current staff", "Staff source") + App.renderOperationsMetric(active, "Available / active", "Staff status") + App.renderOperationsMetric(Object.keys(departments).length, "Departments", "Allocation") + App.renderOperationsMetric(Object.keys(roles).length, "Roles", "Authorization") + '</div><div class="operationsDashboardGrid"><section><h4>Department allocation</h4>' + Object.keys(departments).sort().map(function (name) { return '<div class="operationsStatusRow"><span>' + App.escapeHtml(name) + '</span><strong>' + departments[name] + '</strong></div>'; }).join("") + '</section><section class="operationsWide"><h4>Staff directory</h4>' + App.renderOperationsUsers(users) + '</section></div>';
+      },
+
+      renderOperationsTimeline: function (events) {
+        return '<div class="operationsWorkspaceHeader"><div><h4>Authoritative Timeline</h4><span>' + events.length + ' scheduled records</span></div><button class="quickLink compact" type="button" onclick="App.navigate(\'calendar\')">Open calendar view</button></div><div class="operationsFilterBar"><input id="operationsTimelineSearch" class="participantSearch" type="search" placeholder="Search event, venue, area, staff or assignment..." oninput="App.filterOperationsTimeline(this.value)"><select id="operationsTimelineType" class="filterSelect" onchange="App.filterOperationsTimeline()"><option value="">All classifications</option><option>Rehearsal</option><option>Operational Event</option></select></div><div id="operationsTimelineList" class="operationsEventGrid">' + (events.length ? events.slice().sort(App.sortEvents).map(App.renderOperationsEventCard).join("") : App.emptyState("Timeline is empty", "No Timeline events are currently visible.")) + '</div>';
+      },
+
+      filterOperationsTimeline: function (query) {
+        var input = document.getElementById("operationsTimelineSearch");
+        var type = String((document.getElementById("operationsTimelineType") || {}).value || "");
+        var text = String(query === undefined ? input && input.value || "" : query).toLowerCase();
+        var el = document.getElementById("operationsTimelineList");
+        if (!el) return;
+        var events = ((App.state.projectData || {}).timelineEvents || []).filter(function (item) {
+          var haystack = [item.title, item.event, item.venue, item.area, item.eventType, (item.staff || []).join(" "), (item.items || []).join(" ")].join(" ").toLowerCase();
+          return (!text || haystack.indexOf(text) >= 0) && (!type || item.eventType === type);
+        }).sort(App.sortEvents);
+        el.innerHTML = events.length ? events.map(App.renderOperationsEventCard).join("") : App.emptyState("No matching events", "Adjust the Timeline search or classification filter.");
       },
 
       renderOperationsUsers: function (users) {
@@ -1563,9 +1713,11 @@
       },
 
       renderOperationsEvents: function (events) {
-        return (events.length
-          ? events.map(App.renderTimelineEventCard).join("")
-          : App.emptyState("No operational events", "The authoritative Timeline has no operational events in this view."));
+        var data = App.state.projectData || {};
+        var attendance = data.attendanceEvents || [];
+        return '<div class="operationsMetricGrid">' + App.renderOperationsMetric(events.length, "Operational events", "Timeline") + App.renderOperationsMetric(attendance.length, "Attendance sessions", "Attendance") + App.renderOperationsMetric(events.reduce(function (total, item) { return total + (item.staff || []).length; }, 0), "Staff allocations", "Timeline") + App.renderOperationsMetric(Array.from(new Set(events.map(function (item) { return item.venue; }).filter(Boolean))).length, "Venues", "Timeline") + '</div><div class="operationsEventGrid">' + (events.length
+          ? events.map(App.renderOperationsEventCard).join("")
+          : App.emptyState("No operational events", "The authoritative Timeline has no operational events in this view.")) + '</div>';
       },
 
       renderOperationsIntegrations: function () {
@@ -1588,6 +1740,8 @@
 
       setOperationsView: function (view) {
         App.state.operationsView = view;
+        var breadcrumb = document.getElementById("topBarBreadcrumb");
+        if (breadcrumb) breadcrumb.textContent = "Spec Central / Operations / " + App.toTitle(view === "overview" ? "Dashboard" : view);
         App.renderOperationsPage();
       },
 

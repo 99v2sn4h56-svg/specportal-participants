@@ -1,19 +1,39 @@
 <aside class="appSidebar">
+  <div class="sidebarBrand">
+    <button class="sidebarToggle" type="button" aria-label="Collapse sidebar" onclick="App.toggleSidebar()">☰</button>
+    <img class="sidebarLogo" src="https://drive.google.com/thumbnail?id=1kK8A7JiFcuumLUM47CHLfj-MIw39-BQQ&sz=w600" alt="Schools Spectacular" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';">
+    <div class="sidebarLogoFallback" aria-hidden="true">SS</div>
+    <div class="sidebarBrandText"><strong>Spec Central</strong><span>Schools Spectacular</span></div>
+  </div>
   <div class="sidebarSection staffCard">
-    <strong>Signed in</strong>
-    <div id="staffEmail">Loading staff context...</div>
+    <div class="userAvatar" aria-hidden="true">SC</div>
+    <div class="userCardText"><strong>Signed in</strong><div id="staffEmail">Loading staff context...</div></div>
   </div>
 
   <nav class="sidebarNav" aria-label="Spec Central navigation">
-    <button class="navItem active" type="button" data-icon="H" data-nav-page="dashboard" onclick="App.navigate('dashboard')">Home</button>
-    <button class="navItem" type="button" data-icon="P" data-nav-page="participants" onclick="App.navigate('participants')">Participants</button>
-    <button class="navItem" type="button" data-icon="C" data-nav-page="calendar" onclick="App.navigate('calendar')">Calendar</button>
-    <button class="navItem" type="button" data-icon="R" data-nav-page="rehearsals" onclick="App.navigate('rehearsals')">Rehearsals</button>
-    <button class="navItem" type="button" data-icon="A" data-nav-page="attendance" onclick="App.navigate('attendance')">Attendance</button>
-    <button class="navItem" type="button" data-icon="S" data-nav-page="staff" onclick="App.navigate('staff')">Staff</button>
-    <button class="navItem" type="button" data-icon="O" data-nav-page="operations" data-permission="operations.view" onclick="App.navigate('operations')">Operations</button>
-    <button class="navItem" type="button" data-icon="M" data-nav-page="administration" data-permission="Administration.View" onclick="App.navigate('administration')">Administration</button>
-    <button class="navItem" type="button" data-icon="T" data-nav-page="mediaTimeline" data-permission="mediaTimeline.view" onclick="App.navigate('mediaTimeline')">Media Timeline</button>
-    <button class="navItem" type="button" data-icon="G" data-nav-page="settings" data-permission="settings.view" onclick="App.navigate('settings')">Settings</button>
+    <div class="navSectionLabel">Workspace</div>
+    <button class="navItem active" type="button" title="Home" data-icon="H" data-nav-page="dashboard" onclick="App.navigate('dashboard')"><span>Home</span></button>
+    <button class="navItem" type="button" title="Participants" data-icon="P" data-nav-page="participants" onclick="App.navigate('participants')"><span>Participants</span></button>
+    <button class="navItem" type="button" title="Calendar" data-icon="C" data-nav-page="calendar" onclick="App.navigate('calendar')"><span>Calendar</span></button>
+    <button class="navItem" type="button" title="Rehearsals" data-icon="R" data-nav-page="rehearsals" onclick="App.navigate('rehearsals')"><span>Rehearsals</span></button>
+    <button class="navItem" type="button" title="Attendance" data-icon="A" data-nav-page="attendance" onclick="App.navigate('attendance')"><span>Attendance</span></button>
+
+    <div class="navSectionLabel" data-permission="operations.view">Management</div>
+    <div class="navGroup" data-permission="operations.view">
+      <button class="navItem navGroupToggle" type="button" title="Operations" data-icon="O" data-nav-page="operations" onclick="App.toggleOperationsNav()"><span>Operations</span><b>⌄</b></button>
+      <div id="operationsNavChildren" class="navChildren">
+        <button type="button" onclick="App.openOperationsView('overview')">Dashboard</button>
+        <button type="button" onclick="App.openOperationsView('users')">Staff</button>
+        <button type="button" onclick="App.openOperationsView('projects')">Projects</button>
+        <button type="button" onclick="App.openOperationsView('timeline')">Timeline</button>
+        <button type="button" onclick="App.openOperationsView('events')">Event Manager</button>
+        <button type="button" disabled title="No authoritative logistics source is registered">Logistics</button>
+        <button type="button" disabled title="Use live module reporting until a reporting source is registered">Reports</button>
+        <button type="button" disabled title="Operational settings remain read-only">Settings</button>
+      </div>
+    </div>
+
+    <div class="navSectionLabel" data-permission="Administration.View">Platform</div>
+    <button class="navItem" type="button" title="Administration" data-icon="M" data-nav-page="administration" data-permission="Administration.View" onclick="App.navigate('administration')"><span>Administration</span></button>
   </nav>
 </aside>
