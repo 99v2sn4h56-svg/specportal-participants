@@ -1,21 +1,174 @@
 <template id="page-participants">
-  <div class="participantLayout">
-    <section class="panel">
-      <h3 class="sectionTitle">Participant Search</h3>
-      <input
-        id="participantSearch"
-        class="participantSearch"
-        type="search"
-        placeholder="Search people, schools, items, groups or teachers..."
-        autocomplete="off"
-        oninput="App.queueParticipantSearch()"
-      >
-      <div id="participantStatus" class="status">Loading participant data...</div>
-      <div id="participantResults" class="results"></div>
+  <div class="participantExplorer">
+    <section class="panel participantExplorerHeader">
+      <div><span class="scProfileKicker">Live production database</span><h3>Participants</h3><p>Filter, group and inspect the current production cohort.</p></div>
+      <div class="participantExplorerActions">
+        <input id="participantSearch" class="participantSearch" type="search" placeholder="Search name, school, item, teacher, ID, email or group…" autocomplete="off" oninput="App.queueParticipantExplorer()">
+        <button class="quickLink compact" type="button" onclick="App.toggleParticipantFilters()">Filters</button>
+        <select id="participantSavedView" class="filterSelect" onchange="App.applyParticipantSavedView(this.value)" aria-label="Saved view"></select>
+        <select id="participantLayout" class="filterSelect" onchange="App.applyParticipantLayout(this.value)" aria-label="Table layout"><option value="default">Default columns</option><option value="compact">Compact columns</option><option value="production">Production columns</option></select>
+      </div>
+      <div id="participantQuickFilters" class="participantQuickFilters"></div>
     </section>
 
-    <aside id="participantProfilePanel" class="profilePanel">
-      <div class="statePanel"><span class="stateIcon">◇</span><strong>Choose a workspace record</strong><small>Search for a participant, school, item, group or teacher to open its passport.</small></div>
+    <div id="participantStats" class="participantExplorerStats" aria-live="polite"></div>
+
+    <div class="participantExplorerBody">
+      <aside id="participantFilterPanel" class="panel participantFilterPanel"></aside>
+      <section class="panel participantTablePanel">
+        <div class="participantTableToolbar"><div id="participantStatus" class="status">Loading participant data…</div><div id="participantActiveFilters" class="participantActiveFilters"></div></div>
+        <div id="participantResults" class="participantDatabase"></div>
+        <div id="participantPagination" class="participantPagination"></div>
+      </section>
+    </div>
+
+    <aside id="participantProfilePanel" class="profilePanel participantExplorerPassport">
+      <div class="statePanel"><span class="stateIcon">◇</span><strong>Participant Passport</strong><small>Select a participant from the database to open their full production profile.</small></div>
     </aside>
   </div>
 </template>
+
+<script>
+  Object.assign(App, {
+    participantSavedViews: {
+      all: { label: "All Participants", filters: {} },
+      featured: { label: "Featured Performers", filters: { featuredPerformer: true } },
+      aboriginal: { label: "Aboriginal Students", filters: { aboriginal: true } },
+      lote: { label: "LOTE Students", filters: { hasLote: true } },
+      support: { label: "Support Plans", filters: { hasSupportPlan: true } },
+      medical: { label: "Medical", filters: { hasMedicalAlert: true } },
+      attendanceToday: { label: "Today's Attendance", filters: { attendanceToday: true } },
+      secondaryChoir: { label: "Secondary Choir", filters: { productionText: "secondary choir" } },
+      combinedDance: { label: "Combined Dance", filters: { productionText: "combined dance" } },
+      myStudents: { label: "My Students", filters: { myStudents: true } },
+      recent: { label: "Recently Updated", filters: { recentlyUpdated: true } }
+    },
+
+    renderParticipantExplorer: function () {
+      var root = document.querySelector(".participantExplorer");
+      if (!root) return;
+      if (!App.state.ready) {
+        var results = document.getElementById("participantResults");
+        if (results) results.innerHTML = App.loadingState("Loading participant database");
+        App.ensurePortalDataLoaded().then(App.renderParticipantExplorer).catch(function (error) { if (results) results.innerHTML = App.emptyState("Participant data unavailable", App.getErrorMessage(error)); });
+        return;
+      }
+      App.initialiseParticipantExplorer();
+      var filtered = App.getFilteredParticipants();
+      App.renderParticipantExplorerStats(filtered);
+      App.renderParticipantFilterPanel();
+      App.renderParticipantQuickFilters();
+      App.renderParticipantActiveFilters();
+      App.renderParticipantTable(filtered);
+      App.renderParticipantSavedViews();
+    },
+
+    initialiseParticipantExplorer: function () {
+      if (!App.state.participantExplorerInitialised) {
+        App.state.participantExplorerFilters = App.state.participantExplorerFilters || {};
+        App.state.participantExplorerPage = 1;
+        App.state.participantExplorerSort = { key: "name", direction: "asc" };
+        App.state.participantExplorerLayout = sessionStorage.getItem("specParticipantLayout") || "default";
+        try { App.state.participantHiddenColumns = JSON.parse(sessionStorage.getItem("specParticipantHiddenColumns") || "[]"); } catch (error) { App.state.participantHiddenColumns = []; }
+        App.state.participantFiltersOpen = sessionStorage.getItem("specParticipantFiltersOpen") !== "false";
+        App.state.participantExplorerInitialised = true;
+      }
+      var search = document.getElementById("participantSearch");
+      if (search && search.value !== (App.state.participantExplorerSearch || "")) search.value = App.state.participantExplorerSearch || "";
+      var layout = document.getElementById("participantLayout"); if (layout) layout.value = App.state.participantExplorerLayout;
+      var panel = document.getElementById("participantFilterPanel"); if (panel) panel.hidden = !App.state.participantFiltersOpen;
+    },
+
+    queueParticipantExplorer: function () {
+      clearTimeout(App.state.participantSearchTimer);
+      App.state.participantSearchTimer = setTimeout(function () { var input = document.getElementById("participantSearch"); App.state.participantExplorerSearch = String(input && input.value || ""); App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); }, 140);
+    },
+
+    getFilteredParticipants: function () {
+      var filters = App.state.participantExplorerFilters || {}, query = String(App.state.participantExplorerSearch || "").trim().toLowerCase();
+      var list = (App.state.participants || []).filter(function (participant) {
+        var values = App.getParticipantExplorerValues(participant);
+        if (query && values.search.indexOf(query) < 0) return false;
+        if (filters.category && values.category !== filters.category) return false;
+        if (filters.item && values.item !== filters.item) return false;
+        if (filters.school && values.school !== filters.school) return false;
+        if (filters.region && values.region !== filters.region) return false;
+        if (filters.year && values.year !== filters.year) return false;
+        if (filters.gender && values.gender !== filters.gender) return false;
+        if (filters.directorate && values.directorate !== filters.directorate) return false;
+        if (filters.status && values.status !== filters.status) return false;
+        if (filters.participationType && values.participationType !== filters.participationType) return false;
+        if (filters.segment && values.segment !== filters.segment) return false;
+        if (filters.staffAllocation && values.staffAllocation !== filters.staffAllocation) return false;
+        if (filters.rehearsal && !App.participantMatchesRehearsal(participant, filters.rehearsal)) return false;
+        if (filters.teacher && values.teacher !== filters.teacher) return false;
+        if (filters.schoolGroup && values.schoolGroup !== filters.schoolGroup) return false;
+        if (filters.productionText && values.production.indexOf(filters.productionText) < 0) return false;
+        var booleans = ["aboriginal", "torresStraitIslander", "eald", "featuredPerformer", "hasSupportAdjustments", "hasSupportPlan", "hasMedicalAlert", "firstTime", "returningStudent", "supervisingTeacherRequired", "outstandingForms"];
+        if (booleans.some(function (key) { return filters[key] === true && !participant[key]; })) return false;
+        if (filters.hasLote && !String(participant.lote || "").trim()) return false;
+        if (filters.hasAttendance && !String(participant.attendanceStatus || "").trim()) return false;
+        if (filters.missingAttendance && String(participant.attendanceStatus || "").trim()) return false;
+        if (filters.myStudents) { var staff = App.state.staff || {}; var mine = [staff.email, staff.displayName, staff.name].filter(Boolean).map(function (value) { return String(value).toLowerCase(); }); if (!mine.includes(String(values.teacher || "").toLowerCase()) && !mine.includes(String(participant.teacherEmail || "").toLowerCase())) return false; }
+        if (filters.recentlyUpdated && !App.participantUpdatedRecently(participant)) return false;
+        if (filters.attendanceToday && !App.participantHasAttendanceToday(participant)) return false;
+        return true;
+      });
+      var sort = App.state.participantExplorerSort || { key: "name", direction: "asc" };
+      return list.sort(function (a, b) { var av = sort.key === "rehearsal" ? App.getParticipantNextRehearsal(a) : App.getParticipantExplorerValues(a)[sort.key] || "", bv = sort.key === "rehearsal" ? App.getParticipantNextRehearsal(b) : App.getParticipantExplorerValues(b)[sort.key] || ""; var result = String(av).localeCompare(String(bv), undefined, { numeric: true }); return sort.direction === "desc" ? -result : result; });
+    },
+
+    getParticipantExplorerValues: function (participant) {
+      var name = App.getParticipantName(participant), school = App.getParticipantSchool(participant), category = App.getParticipantCategory(participant), item = App.getParticipantItem(participant), teacher = App.getParticipantTeacherName(participant) || App.getParticipantTeacherEmail(participant);
+      var production = [category, App.getParticipantCategoryDetail(participant), item, participant.schoolGroup].filter(Boolean).join(" ").toLowerCase();
+      return { name: name, school: school, category: category, item: item, year: String(App.getParticipantYear(participant) || ""), region: String(participant.region || ""), gender: String(participant.gender || ""), directorate: String(participant.directorate || ""), status: String(participant.applicationStatus || ""), participationType: String(participant.participationType || ""), segment: String(participant.segment || ""), staffAllocation: String(participant.staffAllocation || ""), teacher: String(teacher || ""), schoolGroup: String(participant.schoolGroup || ""), attendance: String(participant.attendanceStatus || ""), production: production, search: [name, school, category, App.getParticipantCategoryDetail(participant), item, teacher, participant.teacherEmail, participant.applicationId, participant.studentId, participant.studentEmail, participant.schoolGroup, participant.participationType, participant.segment, participant.staffAllocation].filter(Boolean).join(" ").toLowerCase() };
+    },
+
+    getParticipantFacets: function () {
+      var fields = ["category", "item", "school", "region", "year", "gender", "directorate", "status", "participationType", "segment", "staffAllocation", "teacher", "schoolGroup"], facets = {};
+      fields.forEach(function (field) { facets[field] = []; });
+      (App.state.participants || []).forEach(function (participant) { var values = App.getParticipantExplorerValues(participant); fields.forEach(function (field) { if (values[field] && facets[field].indexOf(values[field]) < 0) facets[field].push(values[field]); }); });
+      fields.forEach(function (field) { facets[field].sort(function (a, b) { return String(a).localeCompare(String(b), undefined, { numeric: true }); }); });
+      facets.rehearsal = ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []).filter(function (event) { return event.eventType !== "Operational Event"; }).map(function (event) { return event.id || event.eventId || event.title || event.event; }).filter(function (value, index, values) { return value && values.indexOf(value) === index; });
+      return facets;
+    },
+
+    renderParticipantFilterPanel: function () {
+      var el = document.getElementById("participantFilterPanel"); if (!el) return; var facets = App.getParticipantFacets();
+      var fields = [["category", "Category"], ["item", "Item"], ["school", "School"], ["region", "Region"], ["year", "Year"], ["gender", "Gender"], ["directorate", "Directorate"], ["segment", "Segment"], ["rehearsal", "Rehearsal"], ["staffAllocation", "Staff allocation"], ["status", "Application status"], ["participationType", "Participation type"], ["schoolGroup", "School group"], ["teacher", "Teacher"]];
+      el.innerHTML = '<div class="participantFilterHeading"><div><span class="scProfileKicker">Database filters</span><h4>Filter participants</h4></div><button type="button" onclick="App.toggleParticipantFilters()">×</button></div>' + fields.map(function (field) { return App.renderParticipantFilterSelect(field[0], field[1], facets[field[0]]); }).join("") + '<div class="participantFilterChecks">' + [["featuredPerformer", "Featured performer"], ["aboriginal", "Aboriginal"], ["torresStraitIslander", "Torres Strait Islander"], ["eald", "EAL/D"], ["hasLote", "LOTE"], ["hasSupportAdjustments", "Support adjustments"], ["hasSupportPlan", "Support plan"], ["hasMedicalAlert", "Medical alert"], ["firstTime", "First time"], ["returningStudent", "Returning student"], ["supervisingTeacherRequired", "Teacher required"], ["outstandingForms", "Outstanding forms"], ["hasAttendance", "Has attendance"], ["missingAttendance", "Missing attendance"]].map(function (item) { return '<label><input type="checkbox"' + ((App.state.participantExplorerFilters || {})[item[0]] ? ' checked' : '') + ' onchange="App.setParticipantExplorerFilter(\'' + item[0] + '\',this.checked)"> ' + App.escapeHtml(item[1]) + '</label>'; }).join("") + '</div><details class="participantColumnChooser"><summary>Visible columns</summary>' + App.getParticipantColumns(true).map(function (column) { var hidden = (App.state.participantHiddenColumns || []).includes(column[0]); return '<label><input type="checkbox"' + (hidden ? '' : ' checked') + ' onchange="App.toggleParticipantColumn(\'' + column[0] + '\',this.checked)"> ' + App.escapeHtml(column[1]) + '</label>'; }).join("") + '</details><button class="quickLink compact" type="button" onclick="App.clearParticipantExplorerFilters()">Clear all filters</button>';
+    },
+
+    renderParticipantFilterSelect: function (key, label, values) { var selected = (App.state.participantExplorerFilters || {})[key] || ""; return '<label class="participantFilterField"><span>' + App.escapeHtml(label) + '</span><select class="filterSelect" onchange="App.setParticipantExplorerFilter(\'' + key + '\',this.value)"><option value="">All</option>' + (values || []).map(function (value) { return '<option' + (selected === value ? ' selected' : '') + '>' + App.escapeHtml(value) + '</option>'; }).join("") + '</select></label>'; },
+    setParticipantExplorerFilter: function (key, value) { if (value === false || value === "") delete App.state.participantExplorerFilters[key]; else App.state.participantExplorerFilters[key] = value; App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); },
+    clearParticipantExplorerFilters: function () { App.state.participantExplorerFilters = {}; App.state.participantExplorerSearch = ""; App.state.participantExplorerSavedView = "all"; App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); },
+    toggleParticipantFilters: function () { App.state.participantFiltersOpen = !App.state.participantFiltersOpen; sessionStorage.setItem("specParticipantFiltersOpen", App.state.participantFiltersOpen); App.renderParticipantExplorer(); },
+
+    renderParticipantQuickFilters: function () { var el = document.getElementById("participantQuickFilters"); if (!el) return; var quick = [["featuredPerformer", "Featured"], ["aboriginal", "Aboriginal"], ["hasLote", "LOTE"], ["hasSupportPlan", "Support plans"], ["hasMedicalAlert", "Medical"], ["outstandingForms", "Outstanding forms"]]; el.innerHTML = quick.map(function (item) { var active = !!(App.state.participantExplorerFilters || {})[item[0]]; return '<button class="filterChip ' + (active ? 'active' : '') + '" type="button" onclick="App.setParticipantExplorerFilter(\'' + item[0] + '\',' + (!active) + ')">' + App.escapeHtml(item[1]) + '</button>'; }).join(""); },
+    renderParticipantActiveFilters: function () { var el = document.getElementById("participantActiveFilters"); if (!el) return; var filters = App.state.participantExplorerFilters || {}; var chips = Object.keys(filters).filter(function (key) { return filters[key] !== false && filters[key] !== ""; }).map(function (key) { return '<button type="button" onclick="App.setParticipantExplorerFilter(\'' + key + '\',\'\')">' + App.escapeHtml(App.toTitle(key) + (filters[key] === true ? "" : ": " + filters[key])) + ' ×</button>'; }); el.innerHTML = chips.join(""); },
+
+    renderParticipantExplorerStats: function (participants) {
+      var el = document.getElementById("participantStats"); if (!el) return; var unique = function (values) { return new Set(values.filter(Boolean)).size; };
+      var stats = [[participants.length, "Total Participants"], [unique(participants.map(App.getParticipantSchool)), "Schools"], [unique(participants.map(App.getParticipantCategory)), "Categories"], [participants.filter(function (p) { return p.featuredPerformer; }).length, "Featured Performers"], [participants.filter(function (p) { return p.aboriginal; }).length, "Aboriginal Students"], [participants.filter(function (p) { return String(p.lote || "").trim(); }).length, "LOTE Students"], [participants.filter(function (p) { return p.hasSupportPlan; }).length, "Support Plans"], [participants.filter(function (p) { return p.firstTime; }).length, "First Time"], [participants.filter(function (p) { return p.returningStudent; }).length, "Returning"], [participants.filter(App.participantHasAttendanceToday).length, "Attendance Today"]];
+      el.innerHTML = stats.filter(function (item) { return Number(item[0]) > 0 || ["Total Participants", "Schools", "Categories"].includes(item[1]); }).map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
+    },
+
+    getParticipantColumns: function (includeHidden) { var layouts = { default: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Year"], ["region", "Region"], ["attendance", "Attendance"], ["rehearsal", "Upcoming rehearsal"], ["status", "Status"]], compact: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["status", "Status"]], production: [["name", "Name"], ["category", "Category"], ["item", "Item"], ["schoolGroup", "Group"], ["teacher", "Teacher"], ["rehearsal", "Upcoming rehearsal"], ["attendance", "Attendance"]] }; var columns = layouts[App.state.participantExplorerLayout] || layouts.default; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
+    renderParticipantTable: function (participants) { var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return; var size = 50, pages = Math.max(1, Math.ceil(participants.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = participants.slice((page - 1) * size, page * size), columns = App.getParticipantColumns(); App.state.participantExplorerPage = page; if (status) status.textContent = participants.length + " matching participants · page " + page + " of " + pages; el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable"><thead><tr>' + columns.map(function (column) { var sort = App.state.participantExplorerSort || {}; return '<th><button type="button" onclick="App.sortParticipantExplorer(\'' + column[0] + '\')">' + App.escapeHtml(column[1]) + (sort.key === column[0] ? (sort.direction === "asc" ? " ↑" : " ↓") : "") + '</button></th>'; }).join("") + '<th>Open</th></tr></thead><tbody>' + rows.map(function (participant, index) { var values = App.getParticipantExplorerValues(participant); return '<tr>' + columns.map(function (column) { return '<td>' + App.renderParticipantCell(participant, values, column[0]) + '</td>'; }).join("") + '<td><button class="participantOpenButton" type="button" onclick="App.openExplorerParticipant(' + ((page - 1) * size + index) + ')">Passport →</button></td></tr>'; }).join("") + '</tbody></table></div>' : App.emptyState("No participants match these filters", "Clear or adjust the active filters."); if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>'; App.state.participantExplorerCurrentRows = participants; },
+    renderParticipantCell: function (participant, values, key) { if (key === "rehearsal") return App.escapeHtml(App.getParticipantNextRehearsal(participant)); if (key === "name") return '<strong>' + App.escapeHtml(values.name) + '</strong>'; return App.escapeHtml(values[key] || "—"); },
+    openExplorerParticipant: function (index) { var participant = (App.state.participantExplorerCurrentRows || [])[index]; if (participant) { App.openParticipant(participant); setTimeout(function () { var panel = document.getElementById("participantProfilePanel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }, 20); } },
+    sortParticipantExplorer: function (key) { var sort = App.state.participantExplorerSort || {}; App.state.participantExplorerSort = { key: key, direction: sort.key === key && sort.direction === "asc" ? "desc" : "asc" }; App.renderParticipantExplorer(); },
+    changeParticipantPage: function (delta) { App.state.participantExplorerPage = Math.max(1, (App.state.participantExplorerPage || 1) + delta); App.renderParticipantExplorer(); },
+    applyParticipantLayout: function (layout) { App.state.participantExplorerLayout = layout; sessionStorage.setItem("specParticipantLayout", layout); App.renderParticipantExplorer(); },
+    toggleParticipantColumn: function (key, visible) { var hidden = App.state.participantHiddenColumns || []; hidden = hidden.filter(function (item) { return item !== key; }); if (!visible) hidden.push(key); App.state.participantHiddenColumns = hidden; sessionStorage.setItem("specParticipantHiddenColumns", JSON.stringify(hidden)); App.renderParticipantExplorer(); },
+
+    renderParticipantSavedViews: function () { var select = document.getElementById("participantSavedView"); if (!select) return; select.innerHTML = Object.keys(App.participantSavedViews).map(function (key) { return '<option value="' + key + '"' + (App.state.participantExplorerSavedView === key ? ' selected' : '') + '>' + App.escapeHtml(App.participantSavedViews[key].label) + '</option>'; }).join(""); },
+    applyParticipantSavedView: function (key) { var view = App.participantSavedViews[key] || App.participantSavedViews.all; App.state.participantExplorerSavedView = key; App.state.participantExplorerFilters = Object.assign({}, view.filters); App.state.participantExplorerSearch = ""; App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); },
+    openParticipantsForCategory: function (category) { App.state.participantExplorerFilters = { productionText: String(category || "").toLowerCase() }; App.state.participantExplorerSavedView = ""; App.state.participantExplorerPage = 1; App.navigate("participants", { context: { category: category } }); setTimeout(App.renderParticipantExplorer, 0); },
+
+    getParticipantNextRehearsal: function (participant) { var today = App.toDateKey(new Date()), category = String(App.getParticipantCategory(participant) || "").toLowerCase(), detail = String(App.getParticipantCategoryDetail(participant) || "").toLowerCase(), item = String(App.getParticipantItem(participant) || "").toLowerCase(), school = String(App.getParticipantSchool(participant) || "").toLowerCase(); var event = ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []).filter(function (event) { return !event.dateKey || event.dateKey >= today; }).find(function (event) { var selections = (event.categories || []).concat(event.studentGroups || []).map(function (value) { return String(value).toLowerCase(); }); var schools = (event.schoolGroups || []).map(function (value) { return String(value).toLowerCase(); }); return selections.includes(category) || selections.includes(detail) || selections.includes(item) || schools.includes(school); }); return event ? [event.date, event.start].filter(Boolean).join(" · ") : "Not scheduled"; },
+    participantUpdatedRecently: function (participant) { var date = new Date(participant.lastUpdated || ""); return !isNaN(date.getTime()) && Date.now() - date.getTime() <= 14 * 86400000; },
+    participantHasAttendanceToday: function (participant) { var today = App.toDateKey(new Date()), production = App.getParticipantExplorerValues(participant).production; return (App.state.attendanceEvents || []).some(function (event) { return event.dateKey === today && [event.eventName, event.categories, event.studentGroups].join(" ").toLowerCase().split(/[,;]+/).some(function (value) { return value.trim() && production.indexOf(value.trim()) >= 0; }); }); },
+    participantMatchesRehearsal: function (participant, rehearsalId) { var event = ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []).find(function (item) { return [item.id, item.eventId, item.title, item.event].map(String).includes(String(rehearsalId)); }); if (!event) return false; var values = App.getParticipantExplorerValues(participant); var selections = (event.categories || []).concat(event.studentGroups || [], event.items || []).map(function (value) { return String(value).toLowerCase(); }); return selections.includes(String(values.category).toLowerCase()) || selections.includes(String(App.getParticipantCategoryDetail(participant)).toLowerCase()) || selections.includes(String(values.item).toLowerCase()) || (event.schoolGroups || []).map(function (value) { return String(value).toLowerCase(); }).includes(String(values.school).toLowerCase()); }
+  });
+</script>

@@ -10,6 +10,13 @@
         var statusEl = document.getElementById("participantStatus");
         var query = String((search && search.value) || "").trim().toLowerCase();
 
+        if (document.querySelector(".participantExplorer") && App.renderParticipantExplorer) {
+          App.state.participantExplorerSearch = String((search && search.value) || "");
+          App.state.participantExplorerPage = 1;
+          App.renderParticipantExplorer();
+          return;
+        }
+
         if (!resultsEl || !statusEl) return;
 
         if (!App.state.ready) {

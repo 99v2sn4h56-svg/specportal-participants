@@ -46,6 +46,10 @@
         staffStatus: "",
         latestResults: [],
         participantSearchTimer: null,
+        participantExplorerSearch: "",
+        participantExplorerFilters: {},
+        participantExplorerPage: 1,
+        participantExplorerSavedView: "all",
         searchProviders: [],
         searchHistory: [],
         recentlyViewed: [],
@@ -433,7 +437,7 @@
         if (page === "dashboard") App.renderDashboardPage();
         if (page === "participants") {
           App.renderParticipantStatus();
-          App.ensurePortalDataLoaded();
+          App.ensurePortalDataLoaded().then(function () { if (App.renderParticipantExplorer) App.renderParticipantExplorer(); });
         }
         if (page === "calendar") App.renderCalendarPage();
         if (page === "attendance") App.renderAttendancePage();
@@ -550,6 +554,7 @@
             App.renderStatusRibbon();
             App.renderDashboardPage();
             App.renderParticipantStatus();
+            if (App.state.currentPage === "participants" && App.renderParticipantExplorer) App.renderParticipantExplorer();
             if (Object.keys(App.state.photos || {}).length) {
               App.state.participants.forEach(function (participant) {
                 var photoUrl = App.getParticipantPhotoUrl(participant, true);
@@ -883,6 +888,7 @@
         if (actingPermissions) actingPermissions.textContent = App.state.viewingAsRole || ((App.state.staff.capabilities || []).length + " active capabilities");
 
         App.renderDashboardBriefing();
+        App.renderProductionOverview();
         App.renderDashboardSchedule();
         App.renderDashboardTasks();
         App.renderDashboardNotifications();
@@ -905,6 +911,47 @@
           [unread, unread === 1 ? "unread update" : "unread updates"]
         ];
         el.innerHTML = rows.map(function (row) { return '<li><strong>' + row[0] + '</strong><span>' + App.escapeHtml(row[1]) + '</span></li>'; }).join("");
+      },
+
+      renderProductionOverview: function () {
+        var el = document.getElementById("productionOverview");
+        if (!el) return;
+        if (!App.hasPermission("Participants.View")) { if (el.parentElement) el.parentElement.hidden = true; return; }
+        if (el.parentElement) el.parentElement.hidden = false;
+        if (!App.state.ready) {
+          el.innerHTML = App.loadingState("Loading production categories");
+          App.ensurePortalDataLoaded().then(function () { if (App.state.currentPage === "dashboard") App.renderProductionOverview(); });
+          return;
+        }
+        var categories = {};
+        (App.state.participants || []).forEach(function (participant) {
+          var name = String(App.getParticipantCategoryDetail(participant) || App.getParticipantCategory(participant) || "").trim();
+          if (!name) return;
+          categories[name] = categories[name] || { name: name, participants: 0, schools: {}, items: {} };
+          categories[name].participants++;
+          var school = App.getParticipantSchool(participant); if (school) categories[name].schools[school] = true;
+          var item = App.getParticipantItem(participant); if (item) categories[name].items[item] = true;
+        });
+        var priority = ["Aboriginal Dance Ensemble", "Boys Hip Hop", "Featured Dance", "Featured Drama", "Featured Vocalists", "Backing Vocalists", "Signing Choir", "Combined Choir", "Orchestra", "Stage Band", "Circus Arts", "D'Arts", "Public Speaking", "Student Hosts", "Student Production Team"];
+        var rows = Object.keys(categories).map(function (key) {
+          var category = categories[key];
+          category.schoolCount = Object.keys(category.schools).length;
+          category.rehearsalCount = App.countUpcomingCategoryRehearsals(category.name, Object.keys(category.items));
+          category.attendanceCompletion = App.getCategoryAttendanceCompletion(category.name, Object.keys(category.items));
+          return category;
+        }).sort(function (a, b) { var ai = priority.indexOf(a.name), bi = priority.indexOf(b.name); if (ai < 0) ai = 999; if (bi < 0) bi = 999; return ai - bi || a.name.localeCompare(b.name); });
+        el.innerHTML = rows.length ? rows.map(function (category, index) { return '<button class="productionTile productionTone' + (index % 8) + '" type="button" onclick="App.openParticipantsForCategory(\'' + App.escapeJs(category.name) + '\')"><span class="productionTileName">' + App.escapeHtml(category.name) + '</span><strong>' + category.participants + '</strong><small>participants</small><div><span>' + category.schoolCount + ' schools</span><span>' + category.rehearsalCount + ' upcoming rehearsals</span>' + (category.attendanceCompletion !== null ? '<span>' + category.attendanceCompletion + '% Attendance</span>' : '') + '</div></button>'; }).join("") : App.emptyState("No production categories available", "Participant categories will appear when the live database is available.");
+      },
+
+      countUpcomingCategoryRehearsals: function (category, items) {
+        var today = App.toDateKey(new Date()), terms = [category].concat(items || []).map(function (value) { return String(value).toLowerCase(); });
+        return ((App.state.calendarData && App.state.calendarData.events) || App.state.rehearsals || []).filter(function (event) { if (event.dateKey && event.dateKey < today) return false; var selections = (event.categories || []).concat(event.studentGroups || [], event.items || []).map(function (value) { return String(value).toLowerCase(); }); return terms.some(function (term) { return selections.includes(term); }); }).length;
+      },
+
+      getCategoryAttendanceCompletion: function (category, items) {
+        var terms = [category].concat(items || []).map(function (value) { return String(value).toLowerCase(); }), total = 0, waiting = 0, matched = false;
+        (App.state.attendanceEvents || []).forEach(function (event) { var text = [event.categories, event.studentGroups, event.eventName].join(" ").toLowerCase(); if (!terms.some(function (term) { return term && text.indexOf(term) >= 0; })) return; var counts = (event.attendanceCounts || {}).byStatus || {}; var eventTotal = Number(event.studentCount || (event.attendanceCounts || {}).total) || 0; total += eventTotal; waiting += Number(counts.Waiting || counts["Not Marked"] || counts.Unmarked || 0); matched = true; });
+        return matched && total ? Math.round((total - waiting) / total * 100) : null;
       },
 
       renderDashboardSchedule: function () {

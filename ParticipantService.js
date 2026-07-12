@@ -131,9 +131,35 @@ ParticipantService.getAll = function () {
     studentId: getFirstIndex([this.FIELDS.STUDENT_ID, this.FIELDS.SRN]),
     srn: getIndex(this.FIELDS.SRN),
     photoId: getFirstIndex(["PhotoID", "Photo ID", "Photo Id", "Drive Photo ID", "Headshot ID"]),
-    photoUrl: getFirstIndex(["Photo URL", "PhotoURL", "Headshot URL", "HeadshotURL", "Image URL"])
+    photoUrl: getFirstIndex(["Photo URL", "PhotoURL", "Headshot URL", "HeadshotURL", "Image URL"]),
+    region: getFirstIndex(["Region", "School Region"]),
+    directorate: getFirstIndex(["Directorate"]),
+    gender: getFirstIndex(["Gender", "Student Gender"]),
+    lote: getFirstIndex(["LOTE", "Language Other Than English"]),
+    aboriginal: getFirstIndex(["Aboriginal", "Aboriginal Student", "Aboriginality"]),
+    torresStraitIslander: getFirstIndex(["Torres Strait Islander", "TSI"]),
+    eald: getFirstIndex(["EAL/D", "EALD"]),
+    supportAdjustments: getFirstIndex(["Support Adjustments", "Adjustments Required"]),
+    supportPlan: getFirstIndex(["Support Plan", "Support Plan ID", "Support Plan URL"]),
+    medicalAlert: getFirstIndex(["Medical Alert", "Medical", "Medical Information"]),
+    firstTime: getFirstIndex(["First Time", "First Time Participant", "First Time at Spec"]),
+    returningStudent: getFirstIndex(["Returning Student", "Returning Participant"]),
+    featuredPerformer: getFirstIndex(["Featured Performer", "Featured"]),
+    supervisingTeacherRequired: getFirstIndex(["Supervising Teacher Required", "Teacher Required"]),
+    applicationStatus: getFirstIndex(["Application Status", "Status", "Acceptance Status"]),
+    participationType: getFirstIndex(["Participation Type", "Participant Type", "Entry Type"]),
+    segment: getFirstIndex(["Segment", "Production Segment"]),
+    staffAllocation: getFirstIndex(["Staff Allocation", "Assigned Staff", "Allocated Staff"]),
+    schoolGroup: getFirstIndex(["School Group", "Group Name"]),
+    outstandingForms: getFirstIndex(["Outstanding Forms", "Forms Outstanding"]),
+    attendanceStatus: getFirstIndex(["Attendance Status", "Latest Attendance Status"]),
+    lastUpdated: getFirstIndex(["Last Updated", "Updated At", "Modified"])
   };
   const getCell = (row, index) => index >= 0 ? row[index] : "";
+  const hasIndicator = value => {
+    const text = String(value || "").trim().toLowerCase();
+    return !!text && !["no", "n", "false", "none", "not required", "0"].includes(text);
+  };
 
   return data.map(row => {
 
@@ -170,7 +196,30 @@ ParticipantService.getAll = function () {
   studentId: getCell(row, indexes.studentId),
   srn: getCell(row, indexes.srn),
   photoId: getCell(row, indexes.photoId),
-  photoUrl: getCell(row, indexes.photoUrl)
+  photoUrl: getCell(row, indexes.photoUrl),
+
+  region: getCell(row, indexes.region),
+  directorate: getCell(row, indexes.directorate),
+  gender: getCell(row, indexes.gender),
+  lote: getCell(row, indexes.lote),
+  aboriginal: hasIndicator(getCell(row, indexes.aboriginal)),
+  torresStraitIslander: hasIndicator(getCell(row, indexes.torresStraitIslander)),
+  eald: hasIndicator(getCell(row, indexes.eald)),
+  hasSupportAdjustments: hasIndicator(getCell(row, indexes.supportAdjustments)),
+  hasSupportPlan: hasIndicator(getCell(row, indexes.supportPlan)),
+  hasMedicalAlert: hasIndicator(getCell(row, indexes.medicalAlert)),
+  firstTime: hasIndicator(getCell(row, indexes.firstTime)),
+  returningStudent: hasIndicator(getCell(row, indexes.returningStudent)),
+  featuredPerformer: hasIndicator(getCell(row, indexes.featuredPerformer)),
+  supervisingTeacherRequired: hasIndicator(getCell(row, indexes.supervisingTeacherRequired)),
+  applicationStatus: getCell(row, indexes.applicationStatus),
+  participationType: getCell(row, indexes.participationType),
+  segment: getCell(row, indexes.segment),
+  staffAllocation: getCell(row, indexes.staffAllocation),
+  schoolGroup: getCell(row, indexes.schoolGroup),
+  outstandingForms: hasIndicator(getCell(row, indexes.outstandingForms)),
+  attendanceStatus: getCell(row, indexes.attendanceStatus),
+  lastUpdated: getCell(row, indexes.lastUpdated)
 
 };
 
