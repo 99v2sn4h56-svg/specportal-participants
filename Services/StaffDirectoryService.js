@@ -76,17 +76,18 @@ const StaffDirectoryService = (() => {
   }
 
   function directoryRecord_(staff) {
+    const displayName = normaliseDisplayName_(staff.displayName || staff.name || "Staff member", staff.preferredName || "");
     return {
       id: staff.id || "", staffId: staff.staffId || "", entityType: "StaffMember",
-      name: staff.displayName || staff.name || "Staff member", displayName: staff.displayName || staff.name || "Staff member",
-      preferredName: staff.preferredName || "", photo: staff.photo || "", email: staff.email || staff.primaryEmail || "", phone: staff.mobile || "", mobile: staff.mobile || "",
+      name: displayName, displayName,
+      preferredName: staff.preferredName || "", hasPhoto: !!staff.photo, email: staff.email || staff.primaryEmail || "", phone: staff.mobile || "", mobile: staff.mobile || "",
       department: staff.department || staff.team || "", departments: unique_(staff.departments || [staff.department]), team: staff.team || staff.department || "", teams: unique_(staff.teams || [staff.team, staff.department]),
       role: staff.productionRole || "", productionRole: staff.productionRole || "", productionRoles: unique_(staff.productionRoles || [staff.productionRole]),
       employment: staff.employment || staff.typeOfWork || "", employmentType: staff.employmentType || staff.employment || staff.typeOfWork || "",
       school: staff.school || "", organisation: staff.organisation || "", status: staff.status || "Active",
       specCentralRole: staff.specCentralRole || "No Access", specCentralAccess: !!staff.specCentralAccess, accessStatus: staff.accessStatus || (staff.specCentralAccess ? "Enabled" : "No Access"),
       permissionLevel: staff.specCentralAccess ? staff.specCentralRole || "Custom" : "No Access",
-      categoryResponsibilities: unique_(staff.categoryResponsibilities || staff.assignedItems), badges: badges_(staff), source: staff.source || "Staff Production Team spreadsheet"
+      categoryResponsibilities: unique_(staff.categoryResponsibilities || staff.assignedItems), badges: badges_(staff), incompleteProfile: !(staff.email || staff.primaryEmail) || !(staff.productionRole || staff.role) || !(staff.department || staff.team), source: staff.source || "Staff Production Team spreadsheet"
     };
   }
 
@@ -105,9 +106,10 @@ const StaffDirectoryService = (() => {
   }
 
   function findStaff_(id) { const target = String(id || "").trim().toLowerCase(); return StaffService.getAll().find(staff => [staff.id, staff.staffId, staff.email, staff.primaryEmail].map(value => String(value || "").trim().toLowerCase()).includes(target)) || null; }
-  function facets_(staff) { const facet = key => unique_(staff.flatMap(record => record[key] || [])).sort(); return { departments: facet("departments"), roles: facet("productionRoles"), teams: facet("teams"), employment: facet("employmentType"), statuses: facet("status"), access: facet("accessStatus"), permissionLevels: facet("permissionLevel"), categories: facet("categoryResponsibilities") }; }
+  function facets_(staff) { const facet = key => unique_(staff.flatMap(record => record[key] || [])).sort(); return { departments: facet("departments"), roles: facet("productionRoles"), teams: facet("teams"), employment: facet("employmentType"), staffTypes: unique_(staff.flatMap(record => [].concat(record.productionRoles || [], record.employmentType || [], record.employment || []))).sort(), statuses: facet("status"), access: facet("accessStatus"), permissionLevels: facet("permissionLevel"), categories: facet("categoryResponsibilities"), incompleteProfiles: staff.filter(record => record.incompleteProfile).length }; }
   function summary_(staff) { return { total: staff.length, active: staff.filter(item => /^active$/i.test(item.status)).length, departments: new Set(staff.flatMap(item => item.departments || []).filter(Boolean)).size, enabledUsers: staff.filter(item => item.specCentralAccess).length, contactable: staff.filter(item => item.email || item.phone).length }; }
   function badges_(staff) { return unique_([staff.specCentralAccess ? staff.specCentralRole : "No Access", staff.status, staff.employment || staff.typeOfWork].filter(Boolean)); }
+  function normaliseDisplayName_(value, preferred) { const tokens = String(value || "").trim().split(/\s+/); const preferredKey = String(preferred || "").trim().toLowerCase(); if (tokens.length > 2 && tokens[0].toLowerCase() === tokens[tokens.length - 1].toLowerCase() && (!preferredKey || tokens[0].toLowerCase() === preferredKey)) tokens.pop(); return tokens.join(" "); }
   function requireViewer_() { const user = UserContextService.getCurrent(); if (!AuthorizationService.hasCapability(user, "Operations.View")) throw new Error("Operations.View is required."); return user; }
   function unique_(values) { return Array.from(new Set([].concat(values || []).map(value => String(value || "").trim()).filter(Boolean))); }
   function safe_(callback, fallback) { try { return callback(); } catch (err) { return fallback; } }

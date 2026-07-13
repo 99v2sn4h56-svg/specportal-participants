@@ -294,15 +294,7 @@
       },
 
       getParticipantPhotoUrl: function (participant, forceCache, size) {
-        if (!participant) return "";
-        var explicitId = App.getField(participant, ["photoId", "PhotoID", "Photo ID", "Photo Id", "Drive Photo ID", "headshotId", "Headshot ID"]);
-        if (explicitId) return App.normalisePhotoUrl(explicitId, size || 360);
-        var explicitUrl = App.getField(participant, ["photoUrl", "Photo URL", "PhotoURL", "Headshot URL", "HeadshotURL", "imageUrl", "Image URL"]);
-        if (!forceCache && explicitUrl) return App.normalisePhotoUrl(explicitUrl, size || 360);
-        var photo = App.state.photos[App.getPhotoKey(participant)] || {};
-        if (typeof photo === "string") return App.normalisePhotoUrl(photo, size || 360);
-        if (photo.fileId) return App.buildDriveThumbnailUrl(photo.fileId, size || 360);
-        return App.normalisePhotoUrl(photo.url || photo.thumbnailUrl || "", size || 360);
+        return "";
       },
 
       normalisePhotoUrl: function (value, size) {
@@ -323,13 +315,85 @@
       },
 
       buildDriveThumbnailUrl: function (fileId, size) {
-        return "https://drive.google.com/thumbnail?id=" + encodeURIComponent(fileId) + "&sz=w" + (size || 360);
+        return "";
+      },
+
+      secureAvatarHtml: function (entityType, entityId, name, size) {
+        var type = String(entityType || "").toLowerCase();
+        var id = String(entityId || "").trim();
+        var initials = App.getInitials(name || "");
+        if (!id) return '<span class="avatarFallbackInline" style="display:grid">' + App.escapeHtml(initials) + '</span>';
+        var key = type + "|" + id + "|" + (size || "card");
+        var cached = App.state.secureImages[key];
+        return '<img class="secureAvatarImage" data-secure-image="1" data-secure-key="' + App.escapeHtml(key) + '" data-entity-type="' + App.escapeHtml(type) + '" data-entity-id="' + App.escapeHtml(id) + '" data-image-size="' + App.escapeHtml(size || "card") + '" alt="Headshot of ' + App.escapeHtml(name || "profile") + '" loading="lazy" onerror="App.showAvatarFallback(this)"' + (cached ? ' src="' + App.escapeHtml(cached) + '"' : ' hidden') + '><span class="avatarFallbackInline"' + (cached ? ' hidden' : ' style="display:grid"') + '>' + App.escapeHtml(initials) + '</span>';
+      },
+
+      initSecureImages: function () {
+        if (!("IntersectionObserver" in window)) return;
+        App.state.secureImageObserver = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (!entry.isIntersecting) return;
+            App.state.secureImageObserver.unobserve(entry.target);
+            App.queueSecureImage(entry.target);
+          });
+        }, { rootMargin: "180px" });
+        var mutation = new MutationObserver(function () { App.observeSecureImages(); });
+        mutation.observe(document.documentElement, { childList: true, subtree: true });
+        App.observeSecureImages();
+      },
+
+      observeSecureImages: function () {
+        document.querySelectorAll('img[data-secure-image="1"]:not([data-secure-observed])').forEach(function (image) {
+          image.dataset.secureObserved = "1";
+          var cached = App.state.secureImages[image.dataset.secureKey];
+          if (cached) App.applySecureImage(image, cached);
+          else if (App.state.secureImageObserver) App.state.secureImageObserver.observe(image);
+          else App.queueSecureImage(image);
+        });
+      },
+
+      queueSecureImage: function (image) {
+        if (!image || !image.dataset.entityId) return;
+        App.state.secureImageQueue[image.dataset.secureKey] = {
+          entityType: image.dataset.entityType,
+          entityId: image.dataset.entityId,
+          size: image.dataset.imageSize || "card"
+        };
+        clearTimeout(App.state.secureImageTimer);
+        App.state.secureImageTimer = setTimeout(App.flushSecureImages, 30);
+      },
+
+      flushSecureImages: function () {
+        var keys = Object.keys(App.state.secureImageQueue).slice(0, 12);
+        if (!keys.length) return;
+        var requests = keys.map(function (key) { var item = App.state.secureImageQueue[key]; delete App.state.secureImageQueue[key]; return item; });
+        App.services.request("secureImages:" + Date.now(), "portalResolveSecureImages", { args: [requests], timeoutMs: 45000, forceRefresh: true })
+          .then(function (responses) {
+            (responses || []).forEach(function (response) {
+              if (!response || !response.ok || !response.dataUrl) return;
+              var request = requests.find(function (item) { return item.entityType === response.entityType && item.entityId === response.entityId; });
+              var key = response.entityType + "|" + response.entityId + "|" + (request && request.size || "card");
+              App.state.secureImages[key] = response.dataUrl;
+              document.querySelectorAll('img[data-secure-image="1"]').forEach(function (image) {
+                if (image.dataset.entityType === response.entityType && image.dataset.entityId === response.entityId) App.applySecureImage(image, response.dataUrl);
+              });
+            });
+          })
+          .catch(function (error) { console.warn("Secure images could not be loaded", App.getErrorMessage(error)); })
+          .finally(function () { if (Object.keys(App.state.secureImageQueue).length) App.flushSecureImages(); });
+      },
+
+      applySecureImage: function (image, dataUrl) {
+        image.src = dataUrl;
+        image.hidden = false;
+        image.style.display = "block";
+        if (image.nextElementSibling) { image.nextElementSibling.hidden = true; image.nextElementSibling.style.display = "none"; }
       },
 
       showAvatarFallback: function (image) {
         if (!image) return;
         image.style.display = "none";
-        if (image.nextElementSibling) image.nextElementSibling.style.display = "grid";
+        if (image.nextElementSibling) { image.nextElementSibling.hidden = false; image.nextElementSibling.style.display = "grid"; }
       },
 
       getInitials: function (name) {

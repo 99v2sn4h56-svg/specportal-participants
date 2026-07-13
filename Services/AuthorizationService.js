@@ -13,6 +13,10 @@ const AuthorizationService = (() => {
 
   const ROLES = {
     "System Administrator": CAPABILITIES.slice(),
+    "Lead Production Team": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Calendar.Edit", "Timeline.Edit", "Reports.Export", "Communications.Send", "Operations.View", "Operations.Admin", "Data.Sync", "Workflow.Run", "Notifications.View"],
+    "Wellbeing Manager": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Reports.Export", "Communications.Send", "Operations.View", "Notifications.View"],
+    "Ensemble Manager": ["Participants.View", "Attendance.View", "Attendance.Mark", "Calendar.View", "Reports.Export", "Operations.View", "Notifications.View"],
+    "Administration": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Calendar.Edit", "Timeline.Edit", "Reports.Export", "Communications.Send", "Operations.View", "Data.Sync", "Notifications.View"],
     "Executive": ["Participants.View", "Attendance.View", "Calendar.View", "Calendar.Operational.View", "Reports.Export", "Operations.View"],
     "Operations Manager": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Calendar.Edit", "Timeline.Edit", "Reports.Export", "Communications.Send", "Operations.View", "Operations.Admin", "Data.Sync", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View"],
     "Department Manager": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Reports.Export", "Operations.View", "Data.Sync"],

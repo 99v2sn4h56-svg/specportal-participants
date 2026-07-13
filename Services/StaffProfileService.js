@@ -31,11 +31,14 @@ const StaffProfileService = (() => {
       const indexes = indexes_(source.headers);
       const rowNumber = findOwnRow_(source, indexes.email, user.email);
       const before = readEditable_(source.sheet, rowNumber, indexes);
-      Object.keys(EDITABLE).forEach(field => source.sheet.getRange(rowNumber, indexes[field] + 1).setValue(cellText_(input[field])));
+      Object.keys(EDITABLE).forEach(field => {
+        const next = field === "photo" && !input.photo ? before.photo : input[field];
+        source.sheet.getRange(rowNumber, indexes[field] + 1).setValue(cellText_(next));
+      });
       SpreadsheetApp.flush();
       StaffService.refresh();
       const refreshed = UserContextService.refresh();
-      const changedFields = Object.keys(EDITABLE).filter(field => String(before[field] || "") !== String(input[field] || ""));
+      const changedFields = Object.keys(EDITABLE).filter(field => field !== "photo" || input.photo).filter(field => String(before[field] || "") !== String(input[field] || ""));
       AuditService.record("StaffSelfProfileUpdated", { type: "StaffMember", id: refreshed.staffId || refreshed.email }, { changedFields });
       return { ok: true, generatedAt: new Date().toISOString(), data: profile_(refreshed) };
     } finally {
@@ -56,7 +59,8 @@ const StaffProfileService = (() => {
       displayName: user.displayName || "",
       firstName: user.firstName || "",
       surname: user.surname || "",
-      photo: user.photo || "",
+      photo: "",
+      photoConfigured: !!user.photo,
       mobile: user.mobile || "",
       school: user.school || "",
       typeOfWork: user.typeOfWork || "",

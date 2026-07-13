@@ -36,7 +36,10 @@ function openSpecPortalOnOpen_() {
 }
 
 function getCurrentStaffContext() {
-  return UserContextService.getCurrent();
+  const context = Object.assign({}, UserContextService.getCurrent());
+  context.hasPhoto = !!context.photo;
+  delete context.photo;
+  return context;
 }
 
 function portalGetAuthorizationModel() {
@@ -85,14 +88,24 @@ function portalGetOperationsConsole() {
   return OperationsConsoleService.getData();
 }
 
+function portalGetProductionExceptions() {
+  return ProductionExceptionService.getData();
+}
+
 function portalGetAdministrationData() {
   const user = UserContextService.getCurrent();
   requirePortalCapability_("Administration.View");
+  const staffEpoch = CacheService.getScriptCache().get("SC_STAFF_EPOCH") || "0";
   return PerformanceCacheService.getOrLoadUser(
-    PerformanceCacheService.userProjectionKey("administration", user),
+    PerformanceCacheService.userProjectionKey(`administration:${staffEpoch}`, user),
     5 * 60,
     () => AdministrationService.getData()
   );
+}
+
+function portalUpdateStaffAccessRole(request) {
+  requirePortalCapability_("Permissions.Manage");
+  return StaffAccessService.updateRole(request || {});
 }
 
 function portalSyncData(request) {
@@ -150,7 +163,7 @@ function requirePortalCapability_(capability) {
 
 function filterParticipantsForUser_(participants, user) {
   const scope = user && user.scope || { type: "production", values: [] };
-  if (!scope.type || scope.type === "production" || user.isAdmin || user.isOperations) return participants || [];
+  if (!scope.type || scope.type === "production" || user.isAdmin) return participants || [];
   const allowed = (scope.values || []).map(value => String(value || "").toLowerCase()).filter(Boolean);
   if (!allowed.length) return [];
   return (participants || []).filter(participant => {
@@ -165,7 +178,7 @@ function filterParticipantsForUser_(participants, user) {
 
 function filterGroupsForUser_(groups, user) {
   const scope = user && user.scope || { type: "production", values: [] };
-  if (!scope.type || scope.type === "production" || user.isAdmin || user.isOperations) return groups || [];
+  if (!scope.type || scope.type === "production" || user.isAdmin) return groups || [];
   const allowed = (scope.values || []).map(value => String(value || "").toLowerCase()).filter(Boolean);
   return (groups || []).filter(group => {
     const candidates = scope.type === "category" ? [group.category, group.discipline]
@@ -179,7 +192,7 @@ function filterGroupsForUser_(groups, user) {
 
 function filterEventsForUser_(events, user) {
   const scope = user && user.scope || { type: "production", values: [] };
-  if (!scope.type || scope.type === "production" || user.isAdmin || user.isOperations) return events || [];
+  if (!scope.type || scope.type === "production" || user.isAdmin) return events || [];
   const allowed = (scope.values || []).map(value => String(value || "").toLowerCase()).filter(Boolean);
   if (!allowed.length) return [];
   return (events || []).filter(event => {
@@ -253,7 +266,26 @@ function portalSearchParticipants(query) {
 
 function portalGetAllParticipants() {
   const user = requirePortalCapability_("Participants.View");
-  return filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => ParticipantService.getAll()), user);
+  return filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => ParticipantService.getAll()), user).map(participant => toSafePortalParticipant_(participant, null));
+}
+
+function portalGetProductionOverview() {
+  const user = requirePortalCapability_("Participants.View");
+  const started = Date.now();
+  try {
+    return PerformanceCacheService.getOrLoadUser(
+      PerformanceCacheService.userProjectionKey("production-overview:v2", user),
+      10 * 60,
+      () => {
+        const all = ParticipantService.getAll();
+        const participants = filterParticipantsForUser_(all, user);
+        const categories = ParticipantService.getProductionOverview(participants);
+        return { ok: true, generatedAt: new Date().toISOString(), lastRefreshed: new Date().toISOString(), categories, diagnostics: { sourceRowCount: all.length, visibleParticipantCount: participants.length, categoryCount: categories.length, cacheSeconds: 600 } };
+      }
+    );
+  } catch (err) {
+    return { ok: false, generatedAt: new Date().toISOString(), categories: [], errorCategory: "PARTICIPANT_SOURCE_UNAVAILABLE", error: err && err.message ? err.message : String(err), diagnostics: { responseMs: Date.now() - started } };
+  }
 }
 
 function portalGetAllGroups() {
@@ -273,12 +305,20 @@ function portalGetSchoolProfile(schoolName) {
 
 function portalGetStudentPhotos() {
   requirePortalCapability_("Participants.View");
-  return ProfilePhotoService.getStudentPhotos();
+  return {};
 }
 
 function portalGetPhotoDiagnostics() {
   requirePortalCapability_("Participants.View");
   return ProfilePhotoService.getPhotoDiagnostics();
+}
+
+function portalResolveSecureImages(requests) {
+  return SecureImageService.resolveMany(requests || []);
+}
+
+function portalGetSecureImageHealth() {
+  return SecureImageService.getHealth();
 }
 
 function portalRefreshPhotoCache() {
@@ -293,13 +333,22 @@ function portalGetPortalData() {
   const groups = filterGroupsForUser_(canonical.groups || [], user);
   const schools = new Set(participants.concat(groups).map(item => String(item.school || "").toLowerCase()).filter(Boolean));
   const scope = user.scope || { type: "production", values: [] };
-  const canUseCanonicalPhotos = !scope.type || scope.type === "production" || user.isAdmin || user.isOperations;
+  const canUseCanonicalPhotos = !scope.type || scope.type === "production" || user.isAdmin;
   return {
-    participants,
+    participants: participants.map(participant => toSafePortalParticipant_(participant, canonical.photos || {})),
     groups,
     schools: canUseCanonicalPhotos ? (canonical.schools || []) : (canonical.schools || []).filter(item => schools.has(String(item.schoolName || item.name || "").toLowerCase())),
-    photos: canUseCanonicalPhotos ? canonical.photos || {} : {}
+    photos: {}
   };
+}
+
+function toSafePortalParticipant_(participant, photoIndex) {
+  const value = Object.assign({}, participant || {});
+  const photoKey = String(value.name || [value.firstName, value.lastName].filter(Boolean).join(" ")).replace(/\.[^.]+$/, "").replace(/\s*-\s*Headshot$/i, "").replace(/[\-_]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  value.hasPhoto = !!(value.photoId || value.photoUrl || (photoIndex && photoIndex[photoKey]));
+  delete value.photoId;
+  delete value.photoUrl;
+  return value;
 }
 
 function portalGetStaffProductionTeam() {
@@ -330,13 +379,14 @@ function portalGetStaffProfile(staffId) {
 }
 
 function portalGetRehearsals() {
-  requirePortalCapability_("Calendar.View");
-  return RehearsalService.getAll();
+  const user = requirePortalCapability_("Calendar.View");
+  return filterEventsForUser_(TimelineService.getTimelineEvents({ rehearsalsOnly: true }), user);
 }
 
 function portalRefreshRehearsals() {
-  requirePortalCapability_("Calendar.View");
-  return RehearsalService.refresh();
+  const user = requirePortalCapability_("Calendar.View");
+  RehearsalService.refresh();
+  return filterEventsForUser_(TimelineService.getTimelineEvents({ rehearsalsOnly: true }), user);
 }
 
 function portalGetCalendarData() {

@@ -8,6 +8,7 @@ const AttendanceService = (() => {
   const EVENTS_CACHE_SECONDS = 5 * 60;
   const PARTICIPANT_HISTORY_CACHE_SECONDS = 2 * 60;
   const ERROR_CACHE_SECONDS = 30;
+  const BACKOFF_SECONDS = 20;
   const CACHE_PREFIX = "SPEC_CENTRAL_ATTENDANCE_API_V1";
 
   function getWebAppUrl() {
@@ -174,12 +175,32 @@ const AttendanceService = (() => {
     };
   }
 
+  function getServiceHealth() {
+    const cache = CacheService.getScriptCache();
+    let metadata = {};
+    try { metadata = JSON.parse(cache.get(`${CACHE_PREFIX}:health-metadata`) || "{}"); } catch (err) {}
+    const summary = getSummary();
+    return {
+      name: "Attendance API",
+      status: summary.ok ? "Healthy" : summary.status === "Waiting" ? "Not Configured" : "Degraded",
+      lastAttempted: metadata.lastAttempted || summary.generatedAt || "",
+      lastSuccessful: metadata.lastSuccessful || "",
+      responseMs: Number(metadata.responseMs) || 0,
+      cacheAge: metadata.lastSuccessful ? Math.max(0, Math.round((Date.now() - new Date(metadata.lastSuccessful).getTime()) / 1000)) + "s" : "Unknown",
+      recordCount: summary.ok && summary.data ? Number(summary.data.totalEvents) || 0 : 0,
+      error: summary.error || "",
+      apiUrlConfigured: !!getWebAppUrl(),
+      iframeUrlConfigured: !!getWebAppUrl()
+    };
+  }
+
   function requestPublicApi_(action, parameters, successCacheSeconds) {
     const url = getWebAppUrl();
     if (!url) return waitingResult_(action);
 
     const cache = CacheService.getScriptCache();
     const cacheKey = buildCacheKey_(action, parameters);
+    const backoffKey = `${CACHE_PREFIX}:backoff:${action}`;
     const cached = cache.get(cacheKey);
 
     if (cached) {
@@ -190,7 +211,13 @@ const AttendanceService = (() => {
       }
     }
 
+    const backoff = cache.get(backoffKey);
+    if (backoff) {
+      try { return JSON.parse(backoff); } catch (err) { cache.remove(backoffKey); }
+    }
+
     let result;
+    const started = Date.now();
     try {
       const query = Object.assign({ api: "1", action }, parameters || {});
       const response = UrlFetchApp.fetch(buildApiUrl_(url, query), {
@@ -221,6 +248,14 @@ const AttendanceService = (() => {
         Logger.log("AttendanceService cache failed: " + (err && err.message ? err.message : err));
       }
     }
+    const now = new Date().toISOString();
+    const metadata = { lastAttempted: now, lastSuccessful: result.ok ? now : "", responseMs: Date.now() - started, status: result.ok ? "Healthy" : "Degraded", error: result.error || "" };
+    try {
+      if (!result.ok) cache.put(backoffKey, JSON.stringify(result), BACKOFF_SECONDS);
+      const previous = JSON.parse(cache.get(`${CACHE_PREFIX}:health-metadata`) || "{}");
+      if (!metadata.lastSuccessful) metadata.lastSuccessful = previous.lastSuccessful || "";
+      cache.put(`${CACHE_PREFIX}:health-metadata`, JSON.stringify(metadata), 6 * 60 * 60);
+    } catch (err) {}
 
     return result;
   }
@@ -369,6 +404,7 @@ const AttendanceService = (() => {
     getEvent,
     getParticipantHistory,
     getHealth,
+    getServiceHealth,
     invalidate
   };
 })();

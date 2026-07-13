@@ -291,10 +291,7 @@
         var avatar = '<div class="avatar">' + App.escapeHtml(icon) + '</div>';
 
         if (result.resultType === "participant") {
-          var photo = App.getParticipantPhotoUrl(result.participant, false, 120);
-          avatar = '<div class="avatar">' + (photo
-            ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(icon) + '</span>'
-            : App.escapeHtml(icon)) + '</div>';
+          avatar = '<div class="avatar">' + App.secureAvatarHtml("participant", result.participant.id || result.participant.studentKey, result.title, "card") + '</div>';
         }
 
         return '<button class="resultCard resultCard--' + App.escapeHtml(result.resultType || "item") + '" type="button" onclick="App.openResult(' + index + ')">' +

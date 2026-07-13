@@ -206,7 +206,7 @@ ParticipantService.getAll = function () {
   photoId: getCell(row, indexes.photoId),
   photoUrl: getCell(row, indexes.photoUrl),
 
-  region: getCell(row, indexes.region),
+  region: getCell(row, indexes.region) || getCell(row, indexes.directorate),
   directorate: getCell(row, indexes.directorate),
   gender: normaliseGender(getCell(row, indexes.gender)),
   notes: getCell(row, indexes.notes),
@@ -572,4 +572,25 @@ ParticipantService.getPortalData = function () {
     schools: this.getActiveSchoolsData(participants, groups),
     photos
   };
+};
+
+/**
+ * Returns the lightweight discipline totals used by the dashboard.
+ * The full participant payload remains lazy and is not sent to the browser.
+ */
+ParticipantService.getProductionOverview = function (participants) {
+  const categories = {};
+  (participants || this.getAll()).forEach(participant => {
+    if (!String(participant.firstName || "").trim() && !String(participant.lastName || "").trim()) return;
+    const source = [].concat(participant.categories || [], participant.discipline || participant.category || []).join(",");
+    const seen = {};
+    String(source).split(/[,;\n|]+/).map(value => value.trim()).filter(Boolean).forEach(name => {
+      const key = name.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      categories[key] = categories[key] || { name, participants: 0 };
+      categories[key].participants++;
+    });
+  });
+  return Object.keys(categories).map(key => categories[key]);
 };

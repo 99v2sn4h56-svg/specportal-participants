@@ -149,11 +149,12 @@ const UserContextService = (() => {
 
   function writeCaches_(context) { const json = JSON.stringify(context); try { CacheService.getUserCache().put(userKey_(context.email), json, CACHE_SECONDS); } catch (err) {} try { CacheService.getScriptCache().put(scriptKey_(context.email), json, CACHE_SECONDS); } catch (err) {} }
   function readCache_(cache, key) { try { const value = cache.get(key); return value ? JSON.parse(value) : null; } catch (err) { return null; } }
-  function readMemory_(email) { const item = memory_[email]; return item && item.expires > Date.now() ? clone_(item.value) : null; }
-  function remember_(context) { if (context.email) memory_[context.email] = { value: clone_(context), expires: Date.now() + CACHE_SECONDS * 1000 }; return clone_(context); }
+  function readMemory_(email) { const item = memory_[email]; return item && item.epoch === staffEpoch_() && item.expires > Date.now() ? clone_(item.value) : null; }
+  function remember_(context) { if (context.email) memory_[context.email] = { value: clone_(context), epoch: staffEpoch_(), expires: Date.now() + CACHE_SECONDS * 1000 }; return clone_(context); }
   function withCachePerformance_(context, layer, started) { const copy = clone_(context); copy.performance = Object.assign({}, copy.performance, { lastRequestMs: Date.now() - started, cache: layer, cacheHit: true, cacheHits: Number(copy.performance && copy.performance.cacheHits || 0) + 1 }); return copy; }
-  function scriptKey_(email) { return `SPEC_USER_CONTEXT_${normaliseIdentity_(email).slice(0, 80)}`; }
-  function userKey_(email) { return `${USER_CACHE_KEY}_${normaliseIdentity_(email).slice(0, 80)}`; }
+  function staffEpoch_() { try { return CacheService.getScriptCache().get("SC_STAFF_EPOCH") || "0"; } catch (err) { return "0"; } }
+  function scriptKey_(email) { return `SPEC_USER_CONTEXT_${staffEpoch_()}_${normaliseIdentity_(email).slice(0, 80)}`; }
+  function userKey_(email) { return `${USER_CACHE_KEY}_${staffEpoch_()}_${normaliseIdentity_(email).slice(0, 80)}`; }
   function check_(name, ok, detail, informational) { return { name, status: ok ? "Passed" : informational ? "Informational" : "Failed", ok: !!ok, detail }; }
   function displayNameFromEmail_(email) { const local = String(email || "").split("@")[0]; return local.split(/[._-]+/).filter(Boolean).map(value => value.charAt(0).toUpperCase() + value.slice(1)).join(" ") || "Authenticated user"; }
   function splitName_(name) { const parts = String(name || "").trim().split(/\s+/).filter(Boolean); return { firstName: parts[0] || "", surname: parts.slice(1).join(" ") }; }

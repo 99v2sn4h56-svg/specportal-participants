@@ -6,6 +6,11 @@
         groups: [],
         schools: [],
         photos: {},
+        secureImages: {},
+        secureImageQueue: {},
+        secureImageTimer: null,
+        secureImageObserver: null,
+        productionOverview: null,
         staff: {},
         staffTeam: [],
         staffDirectoryData: null,
@@ -35,6 +40,7 @@
         selectedEventWorkspaceSection: "overview",
         profileMutationPending: false,
         projectData: null,
+        productionExceptions: null,
         projectView: "board",
         mediaData: null,
         mediaView: "gantt",
@@ -185,6 +191,7 @@
         App.registerCoreServices();
         App.bindApplicationEvents();
         App.registerDefaultSearchProviders();
+        App.initSecureImages();
       },
 
       restoreSidebarState: function () {
@@ -381,8 +388,7 @@
           ["staff", "Staff", "portalGetStaffProductionTeam"],
           ["announcements", "Announcements", ""],
           ["operations", "Operations", "portalGetOperationsData"],
-          ["mediaTimeline", "Media", "portalGetMediaTimelineData"],
-          ["photos", "Profile Photos", "portalGetStudentPhotos"]
+          ["mediaTimeline", "Media", "portalGetMediaTimelineData"]
         ].forEach(function (service) {
           App.registerService(service[0], {
             label: service[1],
@@ -453,7 +459,7 @@
         var breadcrumb = document.getElementById("topBarBreadcrumb");
         var contextStatus = document.getElementById("topBarContextStatus");
         if (breadcrumb) breadcrumb.textContent = page === "operations" ? "Spec Central / Operations / " + App.toTitle(App.state.operationsView || "dashboard") : "Spec Central / " + config.title;
-        if (contextStatus) contextStatus.textContent = page === "administration" ? "Read only" : (App.state.systemStatus[page] && App.state.systemStatus[page].status || "Live");
+        if (contextStatus) contextStatus.textContent = page === "administration" ? "Controlled" : (App.state.systemStatus[page] && App.state.systemStatus[page].status || "Live");
 
         Array.prototype.forEach.call(document.querySelectorAll("[data-nav-page]"), function (button) {
           button.classList.toggle("active", button.getAttribute("data-nav-page") === page);
@@ -593,15 +599,6 @@
             App.renderDashboardPage();
             App.renderParticipantStatus();
             if (App.state.currentPage === "participants" && App.renderParticipantExplorer) App.renderParticipantExplorer();
-            if (Object.keys(App.state.photos || {}).length) {
-              App.state.participants.forEach(function (participant) {
-                var photoUrl = App.getParticipantPhotoUrl(participant, true);
-                if (photoUrl) participant.photoUrl = photoUrl;
-              });
-              App.refreshParticipantViews();
-            } else {
-              App.loadPhotoData();
-            }
           })
           .catch(function (error) {
             App.state.ready = !!(App.state.participants && App.state.participants.length);
@@ -622,18 +619,18 @@
         return App.loadPortalData();
       },
 
-      loadPhotoData: function () {
-        App.services.request("photos", "portalGetStudentPhotos", { cacheMs: 120000, timeoutMs: 45000 })
-          .then(function (photos) {
-            App.state.photos = photos || {};
-            App.state.participants.forEach(function (participant) {
-              var photoUrl = App.getParticipantPhotoUrl(participant, true);
-              if (photoUrl) participant.photoUrl = photoUrl;
-            });
-            App.refreshParticipantViews();
+      loadProductionOverview: function (forceRefresh) {
+        if (App.state.productionOverview && !forceRefresh) return Promise.resolve(App.state.productionOverview);
+        return App.services.request("productionOverview", "portalGetProductionOverview", { cacheMs: 10 * 60 * 1000, timeoutMs: 30000, forceRefresh: !!forceRefresh })
+          .then(function (data) {
+            App.state.productionOverview = data || { categories: [] };
+            if (App.state.currentPage === "dashboard") App.renderProductionOverview();
+            return App.state.productionOverview;
           })
           .catch(function (error) {
-            console.warn("Spec Central photos could not be loaded", error);
+            App.state.productionOverview = { categories: [], error: App.getErrorMessage(error) };
+            if (App.state.currentPage === "dashboard") App.renderProductionOverview();
+            return App.state.productionOverview;
           });
       },
 
@@ -662,8 +659,7 @@
         var welcome = document.getElementById("topBarWelcome");
         var role = document.getElementById("topBarUserRole");
         var initials = ((App.state.staff.firstName || "S").charAt(0) + (App.state.staff.surname || "C").charAt(0)).toUpperCase();
-        var photo = App.state.staff.photo ? App.normalisePhotoUrl(App.state.staff.photo, 160) : "";
-        if (topAvatar) { topAvatar.innerHTML = photo ? '<img src="' + App.escapeHtml(photo) + '" alt="">' : App.escapeHtml(initials); topAvatar.title = "Open my profile"; }
+        if (topAvatar) { topAvatar.innerHTML = App.secureAvatarHtml("staff", App.state.staff.staffId || App.state.staff.email, App.state.staff.displayName || initials, "card"); topAvatar.title = "Open my profile"; }
         if (welcome) welcome.textContent = "Welcome " + (App.state.staff.firstName || "there") + "!";
         if (role) role.textContent = App.state.viewingAsRole || App.state.staff.role || "Staff";
         App.renderViewingAsControl();
@@ -683,11 +679,10 @@
         var drawer = document.getElementById("myProfileDrawer");
         if (!drawer) return;
         var value = function (input) { return App.escapeHtml(input || ""); };
-        var photo = profile.photo ? App.normalisePhotoUrl(profile.photo, 240) : "";
         var initials = ((profile.firstName || "S").charAt(0) + (profile.surname || "C").charAt(0)).toUpperCase();
-        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">My account</span><h3>Profile</h3></div><button type="button" onclick="App.closeMyProfile()" aria-label="Close profile">×</button></div><div class="drawerBody"><div class="myProfileSummary"><div class="myProfileAvatar">' + (photo ? '<img src="' + value(photo) + '" alt="">' : value(initials)) + '</div><div><strong>' + value(profile.displayName || [profile.firstName, profile.surname].filter(Boolean).join(" ")) + '</strong><span>' + value(profile.email) + '</span><small>' + value([profile.role, profile.department].filter(Boolean).join(" · ")) + '</small></div></div><div class="myProfileForm">' +
+        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">My account</span><h3>Profile</h3></div><button type="button" onclick="App.closeMyProfile()" aria-label="Close profile">×</button></div><div class="drawerBody"><div class="myProfileSummary"><div class="myProfileAvatar">' + App.secureAvatarHtml("staff", profile.staffId || profile.email, profile.displayName || initials, "profile") + '</div><div><strong>' + value(profile.displayName || [profile.firstName, profile.surname].filter(Boolean).join(" ")) + '</strong><span>' + value(profile.email) + '</span><small>' + value([profile.role, profile.department].filter(Boolean).join(" · ")) + '</small></div></div><div class="myProfileForm">' +
           '<label><span>Display name</span><input id="myProfileDisplayName" maxlength="100" value="' + value(profile.displayName) + '"></label>' +
-          '<label><span>Display picture URL</span><input id="myProfilePhoto" type="url" maxlength="500" placeholder="Google Drive sharing link or HTTPS image URL" value="' + value(profile.photo) + '"></label>' +
+          '<label><span>Replace display picture</span><input id="myProfilePhoto" type="url" maxlength="500" placeholder="Leave blank to keep the current picture" value=""></label>' +
           '<label><span>Mobile phone</span><input id="myProfileMobile" type="tel" maxlength="40" value="' + value(profile.mobile) + '"></label>' +
           '<label><span>Associated school</span><input id="myProfileSchool" maxlength="160" value="' + value(profile.school) + '"></label>' +
           '<label><span>Type of work</span><input id="myProfileTypeOfWork" maxlength="120" placeholder="For example: The Arts Unit, teacher, contractor" value="' + value(profile.typeOfWork) + '"></label>' +
@@ -938,29 +933,14 @@
         if (!el) return;
         if (!App.hasPermission("Participants.View")) { if (el.parentElement) el.parentElement.hidden = true; return; }
         if (el.parentElement) el.parentElement.hidden = false;
-        if (!App.state.ready) {
+        if (!App.state.productionOverview) {
           el.innerHTML = App.loadingState("Loading production categories");
-          App.ensurePortalDataLoaded().then(function () { if (App.state.currentPage === "dashboard") App.renderProductionOverview(); });
+          App.loadProductionOverview(false);
           return;
         }
-        var categories = {};
-        (App.state.participants || []).forEach(function (participant) {
-          var discipline = App.getParticipantDiscipline(participant) || App.getParticipantCategory(participant) || "";
-          var names = (App.participantArray ? App.participantArray(discipline) : String(discipline).split(/[,;\n|]+/)).map(function (value) { return String(value || "").trim(); }).filter(Boolean);
-          var seen = {};
-          names.forEach(function (name) {
-            var key = name.toLowerCase();
-            if (seen[key]) return;
-            seen[key] = true;
-            categories[key] = categories[key] || { name: name, participants: 0 };
-            categories[key].participants++;
-          });
-        });
+        if (App.state.productionOverview.error) { el.innerHTML = App.emptyState("Production categories unavailable", App.state.productionOverview.error); return; }
         var priority = ["Aboriginal Dance Ensemble", "Boys Hip Hop", "Featured Dance", "Featured Drama", "Featured Vocalists", "Backing Vocalists", "Signing Choir", "Combined Choir", "Orchestra", "Stage Band", "Circus Arts", "D'Arts", "Public Speaking", "Student Hosts", "Student Production Team"];
-        var rows = Object.keys(categories).map(function (key) {
-          var category = categories[key];
-          return category;
-        }).sort(function (a, b) { var ai = priority.indexOf(a.name), bi = priority.indexOf(b.name); if (ai < 0) ai = 999; if (bi < 0) bi = 999; return ai - bi || a.name.localeCompare(b.name); });
+        var rows = (App.state.productionOverview.categories || []).slice().sort(function (a, b) { var ai = priority.indexOf(a.name), bi = priority.indexOf(b.name); if (ai < 0) ai = 999; if (bi < 0) bi = 999; return ai - bi || a.name.localeCompare(b.name); });
         el.innerHTML = rows.length ? rows.map(function (category, index) { return '<button class="productionTile productionTone' + (index % 8) + '" type="button" onclick="App.openParticipantsForCategory(\'' + App.escapeJs(category.name) + '\')"><span class="productionTileName">' + App.escapeHtml(category.name) + '</span><span class="productionTileCount"><strong>' + category.participants + '</strong><small>participants</small></span></button>'; }).join("") : App.emptyState("No production categories available", "Participant categories will appear when the live database is available.");
       },
 
@@ -1783,6 +1763,16 @@
           }
           return;
         }
+        if (view === "exceptions") {
+          if (!App.state.productionExceptions) {
+            el.innerHTML = App.loadingState("Scanning production exceptions");
+            App.loadProductionExceptions();
+          } else {
+            if (source) source.textContent = "Read-only production exception register · " + App.formatAdministrationTimestamp(App.state.productionExceptions.generatedAt);
+            el.innerHTML = App.renderProductionExceptions(App.state.productionExceptions);
+          }
+          return;
+        }
 
         if (!App.state.projectData) {
           el.innerHTML = App.loadingState("Loading Operations workspace");
@@ -2089,6 +2079,22 @@
         }).join("") + '</div>';
       },
 
+      loadProductionExceptions: function (forceRefresh) {
+        return App.services.request("productionExceptions", "portalGetProductionExceptions", { cacheMs: 120000, timeoutMs: 60000, forceRefresh: !!forceRefresh })
+          .then(function (data) { App.state.productionExceptions = data || { records: [], summary: {} }; if (App.state.currentPage === "operations" && App.state.operationsView === "exceptions") App.renderOperationsPage(); })
+          .catch(function (error) { App.state.productionExceptions = { records: [], summary: {}, error: App.getErrorMessage(error), generatedAt: new Date().toISOString() }; if (App.state.currentPage === "operations") App.renderOperationsPage(); });
+      },
+
+      renderProductionExceptions: function (data) {
+        if (data.error) return App.errorState("Exception scan unavailable", data.error);
+        var summary = data.summary || {}, records = data.records || [];
+        var metrics = [[summary.total || 0, "Total"], [summary.critical || 0, "Critical"], [summary.high || 0, "High"], [summary.medium || 0, "Medium"], [summary.low || 0, "Low"]];
+        var cards = records.length ? records.map(function (item) {
+          return '<article class="productionException severity' + App.escapeHtml(item.severity) + '"><div><span class="statusChip">' + App.escapeHtml(item.severity) + '</span><small>' + App.escapeHtml(item.source) + '</small></div><strong>' + App.escapeHtml(item.type) + '</strong><p>' + App.escapeHtml(item.title) + '</p><small>' + App.escapeHtml(item.recommendedAction) + '</small></article>';
+        }).join("") : App.emptyState("No production exceptions", "The current live sources passed this read-only scan.");
+        return '<div class="operationsWorkspaceHeader"><div><span class="scProfileKicker">Read only</span><h3>Production Exceptions</h3><p>Warnings are derived from live canonical services. No workbook data is changed.</p></div><button class="quickLink compact" type="button" onclick="App.loadProductionExceptions(true)">Refresh scan</button></div><div class="operationsMetricGrid">' + metrics.map(function (item) { return App.renderOperationsMetric(item[0], item[1], "Exception register"); }).join("") + '</div><div class="productionExceptionGrid">' + cards + '</div>';
+      },
+
       loadOperationsData: function (forceRefresh) {
         return App.services.request("operations", "portalGetOperationsData", { cacheMs: 120000, timeoutMs: 30000, forceRefresh: !!forceRefresh })
           .then(function (data) {
@@ -2254,7 +2260,7 @@
         }
         var data = App.state.administrationData;
         var source = document.getElementById("administrationSource");
-        if (source) source.textContent = "Read-only platform view · " + App.formatAdministrationTimestamp(data.generatedAt);
+        if (source) source.textContent = "Platform diagnostics are read-only; authorised role assignments are audited · " + App.formatAdministrationTimestamp(data.generatedAt);
         App.renderAdministrationSummary();
         var views = ["users", "authentication", "permissions", "modules", "sources", "workflows", "jobs", "rules", "notifications", "audit", "health", "registry"];
         Array.prototype.forEach.call(document.querySelectorAll(".administrationTabs button"), function (button, index) {
@@ -2352,14 +2358,30 @@
       renderAdministrationPermissions: function () {
         var permissions = App.state.administrationData.permissions || { capabilities: [], matrix: [] };
         var rows = App.filterAdministrationRows(permissions.matrix || []);
+        var canManage = !App.state.viewingAsRole && App.hasActualPermission("Permissions.Manage");
+        var currentEmail = String((App.state.staff || {}).email || "").toLowerCase();
+        var roles = ["No Access"].concat(Object.keys(permissions.roles || {}));
         App.state.administrationDetailItems = rows;
         if (!rows.length) return '<div class="empty">No permission records match.</div>';
-        return '<div class="permissionLegend"><span>✓ Granted</span><span>○ Inherited</span><span>— Unavailable</span></div><div class="adminTableWrap"><table class="adminTable permissionMatrix"><thead><tr><th>User</th><th>Role</th><th>Scope</th>' +
+        return '<div class="permissionLegend"><span>✓ Direct grant</span><span>○ Inherited from role</span><span>— Unavailable</span>' + (canManage ? '<strong>Change a role to update access. Capability cells remain derived.</strong>' : '') + '</div><div class="adminTableWrap"><table class="adminTable permissionMatrix"><thead><tr><th>User</th><th>SpecCentral Role</th><th>Scope</th>' +
           permissions.capabilities.map(function (capability) { return '<th title="' + App.escapeHtml(capability) + '">' + App.escapeHtml(capability) + '</th>'; }).join("") +
           '</tr></thead><tbody>' + rows.map(function (row, index) {
-            return '<tr><td><button type="button" onclick="App.openAdministrationDetail(' + index + ',\'permission\')">' + App.escapeHtml(row.name) + '</button></td><td>' + App.escapeHtml(row.role) + '</td><td>' + App.escapeHtml(row.scope && row.scope.type || "production") + '</td>' +
+            var editable = canManage && row.email && String(row.email).toLowerCase() !== currentEmail;
+            var roleControl = editable ? '<select class="permissionRoleSelect" aria-label="SpecCentral role for ' + App.escapeHtml(row.name) + '" data-original="' + App.escapeHtml(row.role) + '" onchange="App.updateAdministrationRole(\'' + App.escapeJs(row.email) + '\',this)">' + roles.map(function (role) { return '<option value="' + App.escapeHtml(role) + '"' + (String(row.role).toLowerCase() === role.toLowerCase() ? ' selected' : '') + '>' + App.escapeHtml(role) + '</option>'; }).join("") + '</select>' : '<span>' + App.escapeHtml(row.role) + '</span>';
+            return '<tr><td><button type="button" onclick="App.openAdministrationDetail(' + index + ',\'permission\')">' + App.escapeHtml(row.name) + '</button></td><td>' + roleControl + '</td><td>' + App.escapeHtml(row.scope && row.scope.type || "production") + '</td>' +
               permissions.capabilities.map(function (capability) { var value = row.grants[capability]; return '<td class="permissionCell ' + App.escapeHtml(String(value).toLowerCase()) + '" title="' + App.escapeHtml(value) + '">' + (value === "Granted" ? "✓" : value === "Inherited" ? "○" : "—") + '</td>'; }).join("") + '</tr>';
           }).join("") + '</tbody></table></div>';
+      },
+
+      updateAdministrationRole: function (email, select) {
+        if (!select || !email || App.state.viewingAsRole || !App.hasActualPermission("Permissions.Manage")) return;
+        var role = select.value, original = select.dataset.original || "No Access";
+        if (role === original) return;
+        if (!window.confirm("Assign " + role + " to " + email + "?")) { select.value = original; return; }
+        select.disabled = true;
+        App.services.request("staffAccessRole:" + email + ":" + Date.now(), "portalUpdateStaffAccessRole", { args: [{ email: email, role: role }], noCache: true, timeoutMs: 60000 })
+          .then(function () { App.notify("SpecCentral role updated for " + email + "."); App.invalidateClientModule("administration"); App.state.administrationData = null; return App.loadAdministrationData(true); })
+          .catch(function (error) { select.value = original; select.disabled = false; App.notify("Role could not be updated: " + App.getErrorMessage(error)); });
       },
 
       renderAdministrationModules: function () {

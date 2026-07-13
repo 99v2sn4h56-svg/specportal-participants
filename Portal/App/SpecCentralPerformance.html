@@ -133,7 +133,7 @@
 
       prefetchLikelyData: function () {
         var run = function () {
-          if (App.state.currentPage === "dashboard") { if (App.hasPermission("Participants.View")) App.ensurePortalDataLoaded(); if (App.hasPermission("Calendar.View") && !App.state.calendarData) App.loadCalendarData(false); }
+          if (App.state.currentPage === "dashboard") { if (App.hasPermission("Participants.View")) App.loadProductionOverview(false); if (App.hasPermission("Calendar.View") && !App.state.calendarData) App.loadCalendarData(false); }
           else if (App.state.currentPage === "participants" && !App.state.calendarData) App.loadCalendarData(false);
           else if (App.state.currentPage === "operations" && App.state.operationsView !== "events") App.loadEventManagerLanding(false);
         };

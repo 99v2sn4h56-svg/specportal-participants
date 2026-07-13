@@ -24,6 +24,7 @@ const TimelineService = (() => {
     }
 
     let events = rehearsals.map(normaliseTimelineEvent_).filter(event => event.status !== "Archived");
+    if (!canViewOperationalEvents_()) events = events.filter(event => event.eventType === "Rehearsal");
     if (opts.rehearsalsOnly) events = events.filter(event => event.eventType === "Rehearsal");
     if (opts.upcomingOnly) {
       const todayKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
@@ -100,7 +101,7 @@ const TimelineService = (() => {
   }
 
   function canViewOperationalEvents_() {
-    return UserContextService.hasCapability("Calendar.View");
+    return UserContextService.hasCapability("Calendar.Operational.View");
   }
 
   return {

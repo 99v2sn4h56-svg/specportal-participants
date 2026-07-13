@@ -66,15 +66,12 @@
         if (!panel) return;
         panel.hidden = false;
 
-        var photo = App.getParticipantPhotoUrl(participant, false, 480);
         var name = App.getParticipantName(participant) || "Unnamed participant";
         var school = App.getParticipantSchool(participant);
         var category = App.getParticipantCategory(participant);
         var categoryLine = [category, App.getParticipantCategoryDetail(participant)].filter(Boolean).join(" - ");
         var subtitle = [school, App.getParticipantYear(participant) ? "Year " + App.getParticipantYear(participant) : ""].filter(Boolean).join(" · ");
-        var avatar = '<div class="scProfileAvatar">' + (photo
-          ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(App.getInitials(name)) + '</span>'
-          : App.escapeHtml(App.getInitials(name))) + '</div>';
+        var avatar = '<div class="scProfileAvatar">' + App.secureAvatarHtml("participant", participant.id || participant.studentKey, name, "profile") + '</div>';
         App.recordRecentlyViewed("participant", name, participant.id || participant.studentKey, school);
         if (App.state.currentPage !== "dashboard") App.setWorkspaceBreadcrumb(["Participants", name]);
 
@@ -669,7 +666,6 @@
       },
 
       renderParticipantListItem: function (participant) {
-        var photo = App.getParticipantPhotoUrl(participant, false, 120);
         var name = App.getParticipantName(participant) || "Unnamed participant";
         var meta = [
           App.getParticipantSchool(participant),
@@ -679,9 +675,7 @@
         ].filter(Boolean).join(" · ");
         return '<div class="scProfileLine">' +
           '<div class="resultTop">' +
-            '<div class="avatar">' + (photo
-              ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(App.getInitials(name)) + '</span>'
-              : App.escapeHtml(App.getInitials(name))) + '</div>' +
+            '<div class="avatar">' + App.secureAvatarHtml("participant", participant.id || participant.studentKey, name, "card") + '</div>' +
             '<div><strong>' + App.escapeHtml(name) + '</strong>' + App.escapeHtml(meta) + '</div>' +
           '</div>' +
         '</div>';

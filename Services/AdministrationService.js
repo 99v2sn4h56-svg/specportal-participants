@@ -85,6 +85,10 @@ const AdministrationService = (() => {
       health_("Attendance", () => AttendanceService.getSummary(), result => result && result.ok, result => result && result.data && result.data.totalEvents),
       health_("Timeline", () => TimelineService.getTimelineEvents(), Array.isArray, result => result.length),
       health_("Participants", () => ParticipantService.getAll(), Array.isArray, result => result.length),
+      health_("Staff", () => StaffService.getAll(), Array.isArray, result => result.length),
+      health_("Production Overview", () => portalGetProductionOverview(), result => result && result.ok !== false && Array.isArray(result.categories), result => result.categories.length),
+      safeHealth_("Headshot delivery", () => SecureImageService.getHealth()),
+      safeHealth_("Attendance API", () => AttendanceService.getServiceHealth()),
       health_("Calendar", () => TimelineService.getCalendarData(), result => result && Array.isArray(result.events), result => result.events.length),
       staticHealth_("Dashboard", "Registered", "DashboardService"),
       staticHealth_("Search", "Registered", "PlatformSearchService"),
@@ -134,6 +138,15 @@ const AdministrationService = (() => {
 
   function staticHealth_(name, status, dependencies) {
     return { name, status, cache: "N/A", responseMs: 0, entityCount: 0, entityLabel: "entities", lastRefresh: new Date().toISOString(), errors: "", dependencies };
+  }
+
+  function safeHealth_(name, callback) {
+    try {
+      const value = callback() || {};
+      return { name, status: value.status || "Unknown", cache: value.cacheAge || "Service managed", responseMs: value.responseMs || 0, entityCount: value.recordCount || 0, entityLabel: "records", lastRefresh: value.lastAttempted || new Date().toISOString(), errors: value.error || "", dependencies: name };
+    } catch (err) {
+      return { name, status: "Unavailable", cache: "Unknown", responseMs: 0, entityCount: 0, entityLabel: "records", lastRefresh: new Date().toISOString(), errors: err && err.message ? err.message : String(err), dependencies: name };
+    }
   }
 
   function readCapabilityFor_(id) {

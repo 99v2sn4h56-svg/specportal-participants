@@ -8,12 +8,15 @@ const StableIdMigrationService = (() => {
 
   function dryRun() {
     requireAdmin_();
+    const timeline = inspectSheet_(getTimelineSheet_(), timelineDefinition_());
     return {
       ok: true,
       mode: "dry-run",
       generatedAt: new Date().toISOString(),
-      timeline: inspectSheet_(getTimelineSheet_(), timelineDefinition_()),
-      groups: inspectSheet_(ParticipantService.getGroupsSheet(), groupDefinition_())
+      timeline,
+      groups: inspectSheet_(ParticipantService.getGroupsSheet(), groupDefinition_()),
+      impact: { attendance: "Persistent Event IDs strengthen Timeline-to-Attendance matching; existing Session IDs and sheet-name fallbacks remain unchanged.", eventManager: "Persistent IDs prevent routes from changing when event text is edited.", browserRoutes: "Saved links remain compatible through legacy and derived ID fallbacks during migration." },
+      migrationPlan: { backup: "Create a timestamped copy of the Timeline workbook before any write-enabled run.", idFormat: "EVT- followed by 20 uppercase UUID characters.", collisions: "Abort on existing duplicates; generated IDs are checked against every used ID.", rollback: "Restore only the Event ID column from the backup and invalidate Timeline caches.", verification: "Repeat dry-run, compare row counts, validate Attendance links and open representative Event Manager routes.", sequencing: "Resolve blockers, backup, enable migration property temporarily, apply, verify, disable the property, then deploy." }
     };
   }
 
@@ -67,13 +70,18 @@ const StableIdMigrationService = (() => {
     let existingIds = 0;
     let missingIds = 0;
     let incompleteIdentityRows = 0;
+    let archivedRows = 0;
+    const malformedIds = [];
+    const statusColumnIndex = EntityModelService.findHeaderIndex(headers, ["Status", "Event Status"]);
 
     rows.forEach((row, offset) => {
       if (!definition.hasEntity(row, headers)) return;
       populatedRows++;
+      if (statusColumnIndex >= 0 && /^archived$/i.test(String(row[statusColumnIndex] || "").trim())) archivedRows++;
       const id = idColumnIndex >= 0 ? String(row[idColumnIndex] || "").trim() : "";
       if (id) {
         existingIds++;
+        if (!new RegExp("^" + definition.prefix + "-[A-Z0-9]{8,40}$", "i").test(id)) malformedIds.push({ id, row: headerRowIndex + offset + 2 });
         const key = id.toLowerCase();
         if (seen[key]) duplicateIds[id] = (duplicateIds[id] || [seen[key]]).concat(headerRowIndex + offset + 2);
         else seen[key] = headerRowIndex + offset + 2;
@@ -95,6 +103,11 @@ const StableIdMigrationService = (() => {
       existingIds,
       missingIds,
       incompleteIdentityRows,
+      archivedRows,
+      persistentIds: existingIds,
+      derivedIds: missingIds,
+      cannotGenerateConfidently: incompleteIdentityRows,
+      malformedIds,
       duplicateIds: duplicates,
       blockers: duplicates.map(item => `${definition.idHeading} ${item.id} is duplicated on rows ${item.rows.join(", ")}.`),
       proposedAction: missingIds
