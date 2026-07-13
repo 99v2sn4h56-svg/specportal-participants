@@ -1297,6 +1297,13 @@
             launch.disabled = false;
             launch.textContent = "Open Attendance";
           }
+          var qrLaunch = document.getElementById("attendanceQrLaunch");
+          if (qrLaunch) {
+            qrLaunch.disabled = !App.state.selectedAttendanceSessionId;
+            qrLaunch.title = App.state.selectedAttendanceSessionId
+              ? "Show the student check-in QR for " + (App.state.selectedAttendanceEventName || "this event")
+              : "Select an attendance event first";
+          }
           var attendanceTarget = App.buildAttendanceDeepLinkUrl(App.state.selectedAttendanceSessionId);
           if (frame.dataset.attendanceTarget !== attendanceTarget) {
             App.loadAttendanceFrameTarget(attendanceTarget, App.state.selectedAttendanceEventName);
@@ -1507,7 +1514,10 @@
           encodedSessionId + '\'),decodeURIComponent(\'' + encodedEventName + '\'),false)">Open roll →</button>' +
           '<button class="quickLink compact" type="button" aria-label="' + App.escapeHtml(accessibleName + " in a new tab") +
           '" onclick="App.openAttendanceEvent(decodeURIComponent(\'' + encodedSessionId + '\'),decodeURIComponent(\'' +
-          encodedEventName + '\'),true)">New tab ↗</button></div></article>';
+          encodedEventName + '\'),true)">New tab ↗</button>' +
+          '<button class="quickLink compact" type="button" aria-label="Show student check-in QR for ' + App.escapeHtml(eventName) +
+          '" onclick="App.openAttendanceQr(decodeURIComponent(\'' + encodedSessionId + '\'),decodeURIComponent(\'' +
+          encodedEventName + '\'))">Check-in QR</button></div></article>';
       },
 
       encodeAttendanceInlineValue: function (value) {
@@ -1526,6 +1536,50 @@
         } catch (error) {
           return baseUrl + (baseUrl.indexOf("?") >= 0 ? "&" : "?") +
             "sessionId=" + encodeURIComponent(String(sessionId));
+        }
+      },
+
+      buildAttendanceCheckinUrl: function (sessionId) {
+        var baseUrl = String(App.state.attendanceUrl || "");
+        if (!baseUrl || !sessionId) return "";
+        try {
+          var url = new URL(baseUrl, window.location.href);
+          url.searchParams.set("page", "student");
+          url.searchParams.set("sessionId", String(sessionId));
+          return url.toString();
+        } catch (error) {
+          return baseUrl + (baseUrl.indexOf("?") >= 0 ? "&" : "?") +
+            "page=student&sessionId=" + encodeURIComponent(String(sessionId));
+        }
+      },
+
+      openAttendanceQr: function (sessionId, eventName) {
+        var safeSessionId = String(sessionId || App.state.selectedAttendanceSessionId || "").trim();
+        var safeEventName = String(eventName || App.state.selectedAttendanceEventName || "Attendance event");
+        var drawer = document.getElementById("attendanceQrDrawer");
+        var checkinUrl = App.buildAttendanceCheckinUrl(safeSessionId);
+        if (!drawer || !checkinUrl) {
+          App.notify("Select an Attendance event before opening its check-in QR code.");
+          return;
+        }
+        App.state.selectedAttendanceSessionId = safeSessionId;
+        App.state.selectedAttendanceEventName = safeEventName;
+        var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=16&data=" + encodeURIComponent(checkinUrl);
+        drawer.hidden = false;
+        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">Student self check-in</span><h3>' +
+          App.escapeHtml(safeEventName) + '</h3></div><button type="button" onclick="App.closeAttendanceQr()" aria-label="Close QR code">×</button></div>' +
+          '<div class="drawerBody attendanceQrBody"><p>Students can scan this code to open the existing check-in page with this event selected.</p>' +
+          '<img src="' + App.escapeHtml(qrUrl) + '" alt="QR code for student check-in to ' + App.escapeHtml(safeEventName) + '">' +
+          '<p class="moduleMeta">The link contains only the Attendance Session ID. Students still select their category and name before checking in.</p></div>' +
+          '<div class="drawerActions"><button class="quickLink primaryAction" type="button" onclick="window.open(\'' +
+          App.escapeJs(checkinUrl) + '\',\'_blank\')">Open check-in page ↗</button><button class="quickLink" type="button" onclick="App.closeAttendanceQr()">Close</button></div>';
+      },
+
+      closeAttendanceQr: function () {
+        var drawer = document.getElementById("attendanceQrDrawer");
+        if (drawer) {
+          drawer.hidden = true;
+          drawer.innerHTML = "";
         }
       },
 
