@@ -12,6 +12,9 @@ const RelationshipService = (() => {
     { from: "TimelineEvent", relation: "occursAt", to: "Venue", via: "venueId" },
     { from: "Rehearsal", relation: "creates", to: "AttendanceSession", resolver: "date/name/location compatibility match" },
     { from: "AttendanceSession", relation: "records", to: "AttendanceRecord", via: "sessionId" },
+    { from: "StaffMember", relation: "belongsTo", to: "Department", via: "departments" },
+    { from: "StaffMember", relation: "assignedTo", to: "TimelineEvent", resolver: "staff identity or Staff Event Allocation" },
+    { from: "StaffMember", relation: "worksOn", to: "Task", resolver: "assignedUser" },
     { from: "Production", relation: "contains", to: "Segment", via: "productionId" }
   ];
 

@@ -304,7 +304,29 @@ function portalGetPortalData() {
 
 function portalGetStaffProductionTeam() {
   requirePortalCapability_("Operations.View");
-  return PerformanceCacheService.getOrLoad("staff:all", 5 * 60, () => StaffService.getAll()).map(staff => ({ id: staff.id || "", staffId: staff.staffId || "", name: staff.name || staff.displayName || "Staff member", displayName: staff.displayName || staff.name || "Staff member", role: staff.role || "", department: staff.department || staff.team || "", status: staff.status || "Active" }));
+  return StaffDirectoryService.getDirectoryData().staff;
+}
+
+function portalGetStaffDirectory() {
+  const user = requirePortalCapability_("Operations.View");
+  const epoch = CacheService.getScriptCache().get("SC_STAFF_EPOCH") || "0";
+  return PerformanceCacheService.getOrLoadUser(
+    PerformanceCacheService.userProjectionKey(`staff-directory:${epoch}`, user),
+    5 * 60,
+    () => StaffDirectoryService.getDirectoryData()
+  );
+}
+
+function portalGetStaffProfile(staffId) {
+  const user = requirePortalCapability_("Operations.View");
+  const safeId = String(staffId || "").trim();
+  if (!safeId || safeId.length > 180) throw new Error("A valid Staff ID is required.");
+  const epoch = CacheService.getScriptCache().get("SC_STAFF_EPOCH") || "0";
+  return PerformanceCacheService.getOrLoadUser(
+    PerformanceCacheService.userProjectionKey(`staff-profile:${epoch}:${safeId}`, user),
+    2 * 60,
+    () => StaffDirectoryService.getProfile(safeId)
+  );
 }
 
 function portalGetRehearsals() {

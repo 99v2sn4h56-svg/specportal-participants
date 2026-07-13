@@ -22,10 +22,12 @@ const ProjectManagementService = (() => {
     }));
     const user = UserContextService.getCurrent();
     const users = StaffService.getAll().map(staff => ({
+      id: staff.id || "",
+      staffId: staff.staffId || "",
       name: staff.name || staff.displayName || "",
       email: staff.email || "",
       department: staff.department || staff.team || "",
-      role: staff.role || "Production Team Member",
+      role: staff.productionRole || staff.role || "Production Team Member",
       status: staff.status || "Active"
     }));
     const timelineEvents = TimelineService.getTimelineEvents();

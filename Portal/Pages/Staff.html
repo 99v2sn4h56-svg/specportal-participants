@@ -1,14 +1,119 @@
 <template id="page-staff">
-  <div class="grid">
-    <section class="panel span7">
-      <h3 class="sectionTitle">Staff Production Team</h3>
-      <div id="staffProfileSummary" class="empty">Staff context is loading...</div>
+  <div class="staffDirectory">
+    <section class="panel staffDirectoryHeader">
+      <div>
+        <span class="scProfileKicker">Staff Production Team</span>
+        <h3>Staff Directory & Contact Centre</h3>
+        <p>Live staff identities, production roles, contact details and operational relationships.</p>
+      </div>
+      <div class="staffDirectorySearchRow">
+        <input id="staffDirectorySearch" class="participantSearch" type="search" placeholder="Search name, email, phone, role, team, department or Staff ID…" autocomplete="off" oninput="App.queueStaffDirectory()">
+        <button class="quickLink compact" type="button" onclick="App.refreshStaffDirectory()">Refresh Staff</button>
+      </div>
+      <div id="staffDirectoryFilters" class="staffDirectoryFilters"></div>
     </section>
-
-    <section class="panel span5">
-      <h3 class="sectionTitle">Effective Capabilities</h3>
-      <div id="staffCapabilities" class="adminBadgeList"><span class="moduleMeta">Loading capabilities...</span></div>
-      <button class="quickLink compact" type="button" data-permission="Administration.View" onclick="App.navigate('administration')">Open Administration →</button>
+    <div id="staffDirectorySummary" class="staffDirectorySummary" aria-live="polite"></div>
+    <section class="panel staffDirectoryResultsPanel">
+      <div class="staffDirectoryToolbar"><span id="staffDirectoryStatus">Loading Staff Production Team…</span><button id="staffDirectoryClear" class="quickLink compact" type="button" onclick="App.clearStaffDirectoryFilters()">Clear filters</button></div>
+      <div id="staffDirectoryResults" class="staffContactGrid"></div>
+      <div id="staffDirectoryPagination" class="participantPagination"></div>
     </section>
   </div>
 </template>
+
+<script>
+  Object.assign(App, {
+    loadStaffDirectory: function (forceRefresh) {
+      if (App.state.staffDirectoryData && !forceRefresh) return Promise.resolve(App.state.staffDirectoryData);
+      App.state.loading.staffDirectory = true;
+      return App.services.request("staffDirectory", "portalGetStaffDirectory", { cacheMs: 5 * 60 * 1000, timeoutMs: 60000, forceRefresh: !!forceRefresh })
+        .then(function (data) { App.state.staffDirectoryData = data || { staff: [], facets: {}, summary: {} }; App.state.staffTeam = App.state.staffDirectoryData.staff || []; return App.state.staffDirectoryData; })
+        .catch(function (error) { if (!App.state.staffDirectoryData) App.state.staffDirectoryData = { staff: [], facets: {}, summary: {}, error: App.getErrorMessage(error) }; App.notify("Staff Directory could not be loaded: " + App.getErrorMessage(error)); return App.state.staffDirectoryData; })
+        .finally(function () { App.state.loading.staffDirectory = false; if (App.state.currentPage === "staff") App.renderStaffPage(); });
+    },
+
+    renderStaffPage: function () {
+      var results = document.getElementById("staffDirectoryResults");
+      if (!results) return;
+      if (!App.state.staffDirectoryData) { results.innerHTML = App.loadingState("Loading Staff Directory"); App.loadStaffDirectory(false); return; }
+      var data = App.state.staffDirectoryData, staff = App.getFilteredStaffDirectory(), size = 60, pages = Math.max(1, Math.ceil(staff.length / size)), page = Math.min(App.state.staffDirectoryPage || 1, pages), visible = staff.slice((page - 1) * size, page * size); App.state.staffDirectoryPage = page;
+      var search = document.getElementById("staffDirectorySearch"); if (search && search.value !== (App.state.staffDirectorySearch || "")) search.value = App.state.staffDirectorySearch || "";
+      App.renderStaffDirectoryFilters(data.facets || {});
+      App.renderStaffDirectorySummary(staff);
+      var status = document.getElementById("staffDirectoryStatus"); if (status) status.textContent = staff.length + " of " + (data.staff || []).length + " staff · " + (data.source || "Staff Production Team");
+      if (data.error) { results.innerHTML = App.emptyState("Staff Directory unavailable", data.error); return; }
+      results.innerHTML = visible.length ? visible.map(App.renderStaffContactCard).join("") : App.emptyState("No staff match these filters", "Clear or adjust the active Staff filters.");
+      var pagination = document.getElementById("staffDirectoryPagination"); if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeStaffDirectoryPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeStaffDirectoryPage(1)">Next</button>';
+    },
+
+    queueStaffDirectory: function () { clearTimeout(App.state.staffDirectorySearchTimer); App.state.staffDirectorySearchTimer = setTimeout(function () { App.state.staffDirectorySearch = String((document.getElementById("staffDirectorySearch") || {}).value || ""); App.state.staffDirectoryPage = 1; App.persistModuleState(); App.renderStaffPage(); }, 120); },
+    getFilteredStaffDirectory: function () {
+      var query = String(App.state.staffDirectorySearch || "").trim().toLowerCase(), filters = App.state.staffDirectoryFilters || {};
+      return ((App.state.staffDirectoryData || {}).staff || []).filter(function (staff) {
+        var text = [staff.name, staff.preferredName, staff.email, staff.phone, staff.staffId, staff.department, staff.role, staff.employmentType, staff.school, staff.organisation, staff.status, staff.accessStatus, staff.permissionLevel, (staff.departments || []).join(" "), (staff.productionRoles || []).join(" "), (staff.teams || []).join(" "), (staff.categoryResponsibilities || []).join(" ")].join(" ").toLowerCase();
+        if (query && text.indexOf(query) < 0) return false;
+        var matches = function (field, values) { return !filters[field] || (values || []).map(String).includes(filters[field]); };
+        return matches("department", staff.departments || [staff.department]) && matches("role", staff.productionRoles || [staff.role]) && matches("team", staff.teams || [staff.team]) && matches("employment", [staff.employmentType]) && matches("status", [staff.status]) && matches("access", [staff.accessStatus]) && matches("permissionLevel", [staff.permissionLevel]) && matches("category", staff.categoryResponsibilities || []);
+      }).sort(function (a, b) { return String(a.name || "").localeCompare(String(b.name || "")); });
+    },
+
+    renderStaffDirectoryFilters: function (facets) {
+      var el = document.getElementById("staffDirectoryFilters"); if (!el) return;
+      var fields = [["department", "Department", facets.departments], ["role", "Production role", facets.roles], ["team", "Team", facets.teams], ["employment", "Employment", facets.employment], ["status", "Status", facets.statuses], ["access", "SpecCentral access", facets.access], ["permissionLevel", "Permission level", facets.permissionLevels], ["category", "Category responsibility", facets.categories]];
+      el.innerHTML = fields.map(function (field) { var selected = (App.state.staffDirectoryFilters || {})[field[0]] || ""; return '<label><span>' + App.escapeHtml(field[1]) + '</span><select class="filterSelect" onchange="App.setStaffDirectoryFilter(\'' + field[0] + '\',this.value)"><option value="">All</option>' + (field[2] || []).map(function (value) { return '<option' + (selected === value ? ' selected' : '') + '>' + App.escapeHtml(value) + '</option>'; }).join("") + '</select></label>'; }).join("");
+    },
+    setStaffDirectoryFilter: function (key, value) { App.state.staffDirectoryFilters = App.state.staffDirectoryFilters || {}; if (value) App.state.staffDirectoryFilters[key] = value; else delete App.state.staffDirectoryFilters[key]; App.state.staffDirectoryPage = 1; App.persistModuleState(); App.renderStaffPage(); },
+    clearStaffDirectoryFilters: function () { App.state.staffDirectorySearch = ""; App.state.staffDirectoryFilters = {}; App.state.staffDirectoryPage = 1; App.persistModuleState(); App.renderStaffPage(); },
+    changeStaffDirectoryPage: function (delta) { App.state.staffDirectoryPage = Math.max(1, (App.state.staffDirectoryPage || 1) + delta); App.persistModuleState(); App.renderStaffPage(); var panel = document.querySelector(".staffDirectoryResultsPanel"); window.scrollTo({ top: Math.max(0, (panel ? panel.offsetTop : 0) - 90), behavior: "smooth" }); },
+    refreshStaffDirectory: function () { App.invalidateClientModule("staff"); App.state.staffDirectoryData = null; return App.services.request("staffPageRefresh:" + Date.now(), "portalRefreshPageData", { args: ["staff"], noCache: true, forceRefresh: true, timeoutMs: 120000 }).catch(function (error) { App.notify("Staff refresh was degraded: " + App.getErrorMessage(error)); }).then(function () { return App.loadStaffDirectory(true); }).finally(App.markPageRefreshed); },
+
+    renderStaffDirectorySummary: function (staff) {
+      var el = document.getElementById("staffDirectorySummary"); if (!el) return;
+      var departments = new Set(staff.flatMap(function (item) { return item.departments || []; }).filter(Boolean)).size;
+      var values = [[staff.length, "Staff"], [staff.filter(function (item) { return /^active$/i.test(item.status); }).length, "Active"], [departments, "Departments"], [staff.filter(function (item) { return item.specCentralAccess; }).length, "SpecCentral users"], [staff.filter(function (item) { return item.email || item.phone; }).length, "Contactable"]];
+      el.innerHTML = values.map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
+    },
+
+    renderStaffContactCard: function (staff) {
+      var name = staff.name || "Staff member", photo = staff.photo ? App.normalisePhotoUrl(staff.photo, 240) : "";
+      var avatar = photo ? '<img src="' + App.escapeHtml(photo) + '" alt="" loading="lazy" onerror="App.showAvatarFallback(this)">' : '<span>' + App.escapeHtml(App.getInitials(name)) + '</span>';
+      var badges = (staff.badges || []).slice(0, 3).map(function (badge) { return '<b>' + App.escapeHtml(badge) + '</b>'; }).join("");
+      var email = staff.email ? '<a href="mailto:' + App.escapeHtml(staff.email) + '" onclick="event.stopPropagation()">Email</a>' : '';
+      var phone = staff.phone ? '<a href="tel:' + App.escapeHtml(String(staff.phone).replace(/[^+0-9]/g, "")) + '" onclick="event.stopPropagation()">Call</a>' : '';
+      return '<article class="staffContactCard"><button class="staffCardMain" type="button" onclick="App.openStaffProfile(\'' + App.escapeJs(staff.id || staff.staffId || staff.email) + '\')" aria-label="Open Staff profile for ' + App.escapeHtml(name) + '"><span class="staffCardAvatar">' + avatar + '</span><span class="staffCardIdentity"><strong>' + App.escapeHtml(name) + '</strong><small>' + App.escapeHtml([staff.productionRole, staff.department].filter(Boolean).join(" · ") || "Staff Production Team") + '</small><em>' + App.escapeHtml(staff.email || staff.phone || "Contact details unavailable") + '</em></span></button><div class="staffCardBadges">' + badges + '</div><div class="staffCardActions">' + email + phone + '<button type="button" onclick="App.openStaffProfile(\'' + App.escapeJs(staff.id || staff.staffId || staff.email) + '\')">Profile →</button></div></article>';
+    },
+
+    openStaffProfile: function (staffId, options) {
+      if (!staffId) return;
+      App.state.selectedStaffId = staffId;
+      App.persistModuleState();
+      if (!(options && options.routeDriven)) App.updateBrowserRoute(false);
+      var panel = document.getElementById("staffProfilePanel"); if (!panel) return;
+      panel.hidden = false; panel.innerHTML = App.loadingState("Loading Staff profile");
+      return App.services.request("staffProfile:" + staffId, "portalGetStaffProfile", { args: [staffId], cacheMs: 2 * 60 * 1000, timeoutMs: 60000 })
+        .then(function (response) { App.state.selectedStaffProfile = response.profile || {}; App.renderStaffProfile(response.profile || {}); })
+        .catch(function (error) { panel.innerHTML = App.emptyState("Staff profile unavailable", App.getErrorMessage(error)); });
+    },
+
+    renderStaffProfile: function (staff) {
+      var panel = document.getElementById("staffProfilePanel"); if (!panel) return;
+      var name = staff.name || "Staff member", photo = staff.photo ? App.normalisePhotoUrl(staff.photo, 480) : "";
+      var avatar = '<div class="scProfileAvatar">' + (photo ? '<img src="' + App.escapeHtml(photo) + '" alt="" onerror="App.showAvatarFallback(this)"><span class="avatarFallbackInline">' + App.escapeHtml(App.getInitials(name)) + '</span>' : App.escapeHtml(App.getInitials(name))) + '</div>';
+      var list = function (items, empty) { return (items || []).length ? '<div class="staffProfileList">' + items.map(function (item) { var body = '<strong>' + App.escapeHtml(item.title || item.event || item.name || item.action || String(item)) + '</strong><span>' + App.escapeHtml([item.date, item.start, item.time, item.venue, item.location, item.status, item.role, item.occurredAt].filter(Boolean).join(" · ")) + '</span>'; return item.id && item.eventType ? '<button type="button" onclick="App.openCommandResult(\'event\',\'' + App.escapeJs(item.id) + '\',\'' + App.escapeJs(item.title) + '\')">' + body + '</button>' : '<div>' + body + '</div>'; }).join("") + '</div>' : App.emptyState(empty, "This relationship is ready when authoritative links become available."); };
+      var fields = function (rows) { return '<div class="staffProfileFields">' + rows.filter(function (row) { return row[1]; }).map(function (row) { return '<div><span>' + App.escapeHtml(row[0]) + '</span><strong>' + App.escapeHtml(Array.isArray(row[1]) ? row[1].join(", ") : row[1]) + '</strong></div>'; }).join("") + '</div>'; };
+      var admin = staff.administration || null;
+      panel.innerHTML = '<button class="participantProfileClose" type="button" onclick="App.closeStaffProfile()" aria-label="Close Staff profile">×</button><div class="scProfileCard"><div class="scProfileHero staff">' + avatar + '<div><span class="scProfileKicker">Staff Passport</span><h2>' + App.escapeHtml(name) + '</h2><p>' + App.escapeHtml([staff.productionRole, staff.department, staff.status].filter(Boolean).join(" · ")) + '</p><div class="staffProfileActions">' + (staff.email ? '<a href="mailto:' + App.escapeHtml(staff.email) + '">Email</a>' : '') + (staff.phone ? '<a href="tel:' + App.escapeHtml(String(staff.phone).replace(/[^+0-9]/g, "")) + '">Call</a>' : '') + '</div></div></div>' +
+        '<div class="staffProfileSections"><details open><summary>Overview</summary>' + fields([["Preferred name", staff.preferredName], ["Staff ID", staff.staffId], ["Status", staff.status], ["Employment", staff.employmentType], ["School", staff.school], ["Organisation", staff.organisation], ["Supervisor", staff.supervisor]]) + '</details>' +
+        '<details open><summary>Contact details</summary>' + fields([["Email", staff.email], ["Phone", staff.phone]]) + '</details>' +
+        '<details><summary>Production roles & teams</summary>' + fields([["Production roles", staff.productionRoles], ["Departments", staff.departments], ["Teams", staff.teams], ["Category responsibility", staff.categoryResponsibilities], ["Groups", staff.assignedGroups], ["Role description", staff.roleDescription], ["Experience", staff.experience], ["Availability", staff.availability]]) + '</details>' +
+        '<details><summary>Assigned events (' + (staff.eventAllocations || []).length + ')</summary>' + list(staff.eventAllocations, "No Staff Event Allocation rows matched") + '</details>' +
+        '<details><summary>Assigned Timeline events (' + (staff.timelineEvents || []).length + ')</summary>' + list(staff.timelineEvents, "No Timeline events matched") + '</details>' +
+        '<details><summary>Current projects (' + (staff.currentProjects || []).length + ')</summary>' + list(staff.currentProjects, "No projects or tasks matched") + '</details>' +
+        '<details><summary>Notes</summary>' + (staff.notes ? '<p>' + App.escapeHtml(staff.notes) + '</p>' : App.emptyState("No Staff notes", "Notes remain read-only.")) + '</details>' +
+        '<details><summary>Activity</summary>' + list(staff.activity, "Activity feed not connected yet") + '</details>' +
+        (admin ? '<details><summary>Permissions & scope</summary>' + fields([["SpecCentral role", admin.inheritedRole], ["Effective capabilities", admin.effectivePermissions], ["Inherited capabilities", admin.inheritedPermissions], ["Direct permissions", admin.directPermissions], ["Scope type", admin.scope && admin.scope.type], ["Scope values", admin.scope && admin.scope.values]]) + '</details><details><summary>Emergency contact</summary>' + fields([["Name", admin.emergencyContact && admin.emergencyContact.name], ["Relationship", admin.emergencyContact && admin.emergencyContact.relationship], ["Phone", admin.emergencyContact && admin.emergencyContact.phone], ["Email", admin.emergencyContact && admin.emergencyContact.email]]) + '</details><details><summary>Audit</summary>' + list(admin.audit, "No Staff audit records") + '</details>' : '') + '</div></div>';
+      App.recordRecentlyViewed("staff", name, staff.id || staff.staffId || staff.email, [staff.department, staff.productionRole].filter(Boolean).join(" · "));
+    },
+    closeStaffProfile: function () { var panel = document.getElementById("staffProfilePanel"); if (panel) { panel.hidden = true; panel.innerHTML = ""; } App.state.selectedStaffId = ""; App.state.selectedStaffProfile = null; App.persistModuleState(); App.updateBrowserRoute(false); }
+  });
+</script>

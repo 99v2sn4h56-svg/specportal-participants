@@ -17,7 +17,7 @@ const PlatformSearchService = (() => {
     ParticipantService.getActiveSchoolsData(participants, groups)
       .forEach(item => add_(results, text, "school", item.id, item.schoolName, [item.directorate]));
     groups.forEach(item => add_(results, text, "group", item.id, item.groupName || item.item, [item.school, item.category, item.teacherName]));
-    if (canViewStaff) StaffService.getAll().forEach(item => add_(results, text, "staff", item.id, item.name || item.email, [item.department, item.role]));
+    if (canViewStaff) StaffService.getAll().forEach(item => add_(results, text, "staff", item.id, item.displayName || item.name || item.email, [item.preferredName, item.email, item.mobile, item.staffId, item.department, item.productionRole, item.specCentralRole, item.employment, item.school, item.organisation, (item.teams || []).join(" "), (item.categoryResponsibilities || []).join(" ")]));
     timeline.forEach(item => add_(results, text, item.eventType === "Rehearsal" ? "rehearsal" : "event", item.id, item.title, [item.date, item.venue, item.area, item.eventType, (item.staff || []).join(" ")]));
     uniqueBy_(participants.map(item => ({ id: EntityModelService.stableId("TCH", item.teacherEmail || item.teacherName), title: item.teacherName || item.teacherEmail, meta: [item.teacherEmail, item.school].filter(Boolean) })), "id")
       .forEach(item => add_(results, text, "teacher", item.id, item.title, item.meta));

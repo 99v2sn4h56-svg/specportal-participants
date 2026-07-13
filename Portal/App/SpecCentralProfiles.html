@@ -49,6 +49,12 @@
       },
 
       openStaff: function (staff) {
+        if (!staff) return;
+        if (App.openStaffProfile && (staff.id || staff.staffId || staff.email)) {
+          App.navigate("staff");
+          setTimeout(function () { App.openStaffProfile(staff.id || staff.staffId || staff.email); }, 0);
+          return;
+        }
         App.state.selectedStaff = staff;
         App.events.emit("staff:selected", staff);
         App.recordRecentlyViewed("staff", staff.displayName || staff.name || staff.email || String(staff || "Staff"));

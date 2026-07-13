@@ -8,6 +8,12 @@
         photos: {},
         staff: {},
         staffTeam: [],
+        staffDirectoryData: null,
+        staffDirectorySearch: "",
+        staffDirectoryFilters: {},
+        staffDirectoryPage: 1,
+        selectedStaffId: "",
+        selectedStaffProfile: null,
         announcements: [],
         notifications: [],
         tasks: [],
@@ -124,8 +130,9 @@
         },
         staff: {
           title: "Staff",
-          description: "Staff identity, role, team and effective platform access.",
-          template: "page-staff"
+          description: "Staff Directory, contacts, production roles and operational relationships.",
+          template: "page-staff",
+          permission: "Operations.View"
         },
         operations: {
           title: "Operations",
@@ -422,10 +429,6 @@
         if (App.state.currentPage) App.saveCurrentScrollPosition();
         App.closeMobileNavigation(false);
         if (page === "projectManagement") page = "operations";
-        if (page === "staff") {
-          if (App.hasPermission("operations.view")) { App.state.operationsView = "users"; page = "operations"; }
-          else { App.notify("Staff operations require Operations access."); page = "dashboard"; }
-        }
         var config = App.pages[page] || App.pages.dashboard;
         var template = document.getElementById(config.template);
         var outlet = document.getElementById("appContent");
@@ -1979,9 +1982,8 @@
       openOperationsStaff: function (index) {
         var staff = ((App.state.projectData || {}).users || [])[index];
         if (!staff) return;
-        App.recordRecentlyViewed("staff", staff.name || staff.email || "Staff member", staff.id || staff.email, [staff.department, staff.role].filter(Boolean).join(" · "));
-        App.setWorkspaceBreadcrumb(["Operations", "Staff", staff.name || "Staff member"]);
-        App.notify([staff.name, staff.role, staff.department, staff.status].filter(Boolean).join(" · "));
+        App.navigate("staff");
+        setTimeout(function () { App.openStaffProfile(staff.id || staff.staffId || staff.email); }, 0);
       },
 
       renderOperationsEvents: function (events) {
@@ -2467,23 +2469,6 @@
         return String(value || "")
           .replace(/([A-Z])/g, " $1")
           .replace(/^./, function (char) { return char.toUpperCase(); });
-      },
-
-      renderStaffPage: function () {
-        var el = document.getElementById("staffProfileSummary");
-        if (!el) return;
-
-        var staff = App.state.staff || {};
-        el.innerHTML =
-          '<div class="profileLine"><strong>Email</strong><br>' + App.escapeHtml(staff.email || "Authentication required") + '</div>' +
-          '<div class="profileLine"><strong>Display name</strong><br>' + App.escapeHtml(staff.displayName || "Authenticated user") + '</div>' +
-          '<div class="profileLine"><strong>Role</strong><br>' + App.escapeHtml(staff.role || "Staff") + '</div>' +
-          '<div class="profileLine"><strong>Staff team records</strong><br>' + App.escapeHtml((App.state.staffTeam || []).length) + '</div>' +
-          '<div class="profileLine"><strong>Source</strong><br>' + App.escapeHtml(staff.source || "Source unavailable") + '</div>';
-        var capabilities = document.getElementById("staffCapabilities");
-        if (capabilities) capabilities.innerHTML = (staff.capabilities || []).length
-          ? staff.capabilities.map(function (capability) { return '<span class="adminBadge">' + App.escapeHtml(capability) + '</span>'; }).join("")
-          : '<span class="moduleMeta">No capabilities were returned.</span>';
       },
 
       openAttendance: function () {

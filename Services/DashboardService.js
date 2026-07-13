@@ -2,9 +2,9 @@ const DashboardService = (() => {
   function getContext() {
     const started = Date.now();
     const staff = safeCall_("UserContextService.getCurrent", () => UserContextService.getCurrent(), {});
-    const staffTeam = staff.isMatched ? safeCall_("StaffService.getAll", () => StaffService.getAll()
-      .filter(item => staff.isOperations || !staff.department || String(item.department || item.team || "").toLowerCase() === String(staff.department).toLowerCase())
-      .map(toSafeStaff_), []) : [];
+    // The full directory is route-lazy through StaffDirectoryService. Keeping it
+    // out of bootstrap avoids serialising hundreds of contacts on every visit.
+    const staffTeam = [];
     const timeline = UserContextService.hasCapability("Calendar.View") ? safeCall_("TimelineService.getDashboardSummary", () => TimelineService.getDashboardSummary(), {}) : {};
     const attendance = UserContextService.hasCapability("Attendance.View") ? {
       url: safeCall_("AttendanceService.getWebAppUrl", () => AttendanceService.getWebAppUrl(), ""),
@@ -22,7 +22,7 @@ const DashboardService = (() => {
       staffTeam,
       timelineStatus: timeline.status || "",
       timelineLastRefreshed: timeline.lastRefreshed || "",
-      staffStatus: staff.isMatched ? (staffTeam.length ? "Connected" : "Profile matched") : staff.status || "No Staff Profile Found",
+      staffStatus: staff.isMatched ? "Profile matched · Directory lazy loaded" : staff.status || "No Staff Profile Found",
       attendanceUrl: attendance.url || "",
       attendanceStatus: attendance.status || "Waiting",
       attendanceSource: attendance.source || "",
@@ -41,7 +41,7 @@ const DashboardService = (() => {
         dashboard: "Connected",
         participants: "Loaded separately through ParticipantService",
         staff: staff && staff.isMatched ? "Connected" : staff.status || "No Staff Profile Found",
-        staffTeam: staffTeam.length ? "Connected" : "Unavailable or empty",
+        staffTeam: "Lazy loaded on Staff route",
         timeline: timeline.status || "Waiting",
         attendance: attendance.status || "Waiting",
         announcements: announcements.length ? "Connected" : "No active announcements",
@@ -55,7 +55,6 @@ const DashboardService = (() => {
     return response;
   }
 
-  function toSafeStaff_(staff) { return { id: staff.id || "", name: staff.name || staff.displayName || "Staff member", displayName: staff.displayName || staff.name || "Staff member", role: staff.role || "", department: staff.department || staff.team || "", status: staff.status || "Active" }; }
   function toSafeActivity_(item) { return { id: item.id || "", action: item.action || "Platform activity", actor: item.actor || "", occurredAt: item.occurredAt || "", entity: item.entity ? { type: item.entity.type || "", id: item.entity.id || "" } : null }; }
 
   function getDashboardProfile_(staff) {

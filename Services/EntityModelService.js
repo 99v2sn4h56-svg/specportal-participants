@@ -2,7 +2,7 @@
 const EntityModelService = (() => {
   const TYPES = Object.freeze({
     PARTICIPANT: "Participant", SCHOOL: "School", TEACHER: "Teacher", STAFF: "StaffMember",
-    USER: "User", GROUP: "Group", ITEM: "Item", CATEGORY: "Category", SEGMENT: "Segment",
+    USER: "User", GROUP: "Group", ITEM: "Item", CATEGORY: "Category", SEGMENT: "Segment", DEPARTMENT: "Department",
     VENUE: "Venue", TIMELINE_EVENT: "TimelineEvent", CALENDAR_EVENT: "CalendarEvent",
     REHEARSAL: "Rehearsal", OPERATIONAL_EVENT: "OperationalEvent",
     ATTENDANCE_SESSION: "AttendanceSession", SUPPORT_PLAN: "SupportPlan",

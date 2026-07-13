@@ -15,11 +15,12 @@
     <button class="navItem" type="button" title="Media" data-icon="M" data-nav-page="mediaTimeline" data-permission="mediaTimeline.view" onclick="App.navigate('mediaTimeline')"><span>Media</span></button>
 
     <div class="navSectionLabel" data-permission="operations.view">Management</div>
+    <button class="navItem" type="button" title="Staff" data-icon="S" data-nav-page="staff" data-permission="Operations.View" onclick="App.navigate('staff')"><span>Staff</span></button>
     <div class="navGroup" data-permission="operations.view">
       <button class="navItem navGroupToggle" type="button" title="Operations" data-icon="O" data-nav-page="operations" onclick="App.toggleOperationsNav()"><span>Operations</span><b>⌄</b></button>
       <div id="operationsNavChildren" class="navChildren">
         <button type="button" onclick="App.openOperationsView('overview')">Operations</button>
-        <button type="button" onclick="App.openOperationsView('users')">Staff</button>
+        <button type="button" onclick="App.navigate('staff')">Staff Directory</button>
         <button type="button" onclick="App.openOperationsView('projects')">Projects</button>
         <button type="button" onclick="App.openOperationsView('timeline')">Timeline</button>
         <button type="button" onclick="App.openOperationsView('events')">Event Manager</button>

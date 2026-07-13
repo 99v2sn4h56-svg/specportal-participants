@@ -209,11 +209,11 @@
           search: function (query) {
             return (App.state.staffTeam || []).map(function (staff) {
               var title = staff.displayName || staff.name || staff.email;
-              var score = App.getSearchScore([title, staff.email, staff.role, staff.department, staff.team].join(" "), query);
+              var score = App.getSearchScore([title, staff.preferredName, staff.email, staff.phone, staff.staffId, staff.productionRole, staff.specCentralRole, staff.department, staff.team, staff.employmentType, staff.school, staff.organisation, (staff.teams || []).join(" "), (staff.categoryResponsibilities || []).join(" ")].join(" "), query);
               return {
                 resultType: "staff",
                 title: title,
-                meta: [staff.role, staff.department || staff.team, staff.email].filter(Boolean).join(" - "),
+                meta: [staff.productionRole || staff.role, staff.department || staff.team, staff.email].filter(Boolean).join(" - "),
                 staff: staff,
                 score: score
               };
