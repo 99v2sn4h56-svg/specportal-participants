@@ -89,6 +89,7 @@ ParticipantService.getSchoolsMasterSheet = function () {
  * Returns every participant as an array of objects.
  */
 ParticipantService.getAll = function () {
+  return PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => {
 
   const sheet = this.getIndividualsSheet();
 
@@ -237,6 +238,7 @@ ParticipantService.getAll = function () {
     return EntityModelService.participant(participant);
 
   }).filter(participant => String(participant.firstName || participant.lastName || participant.name || "").trim());
+  });
 
 };
 
@@ -300,6 +302,7 @@ ParticipantService.search = function (query) {
  * Returns every group entry as an array of objects.
  */
 ParticipantService.getGroups = function () {
+  return PerformanceCacheService.getOrLoad("participants:groups", 10 * 60, () => {
   const sheet = this.getGroupsSheet();
   if (!sheet) return [];
 
@@ -369,12 +372,14 @@ ParticipantService.getGroups = function () {
       secondTeacherIsSpecAlumni: row[secondTeacherAlumniIndex] || "",
       secondTeacherSpecRoles: row[secondTeacherAlumniRoleIndex] || ""
     }));
+  });
 };
 
 /**
  * Returns the schools master data used by Spec Portal.
  */
 ParticipantService.getSchoolsMasterData = function () {
+  return PerformanceCacheService.getOrLoad("participants:schools", 10 * 60, () => {
   const sheet = this.getSchoolsMasterSheet();
   if (!sheet) return [];
 
@@ -390,6 +395,7 @@ ParticipantService.getSchoolsMasterData = function () {
       directorate: row[31] || ""
     }))
     .filter(school => school.schoolName);
+  });
 };
 
 function normaliseSchoolNameKey_(value) {

@@ -5,13 +5,14 @@ const PlatformSearchService = (() => {
     const limit = Math.min(Number(options && options.limit) || 50, 100);
     if (text.length < 2) return [];
     const results = [];
+    const user = UserContextService.getCurrent();
     const canViewParticipants = UserContextService.hasCapability("Participants.View");
     const canViewCalendar = UserContextService.hasCapability("Calendar.View");
     const canViewAttendance = UserContextService.hasCapability("Attendance.View");
     const canViewStaff = UserContextService.hasCapability("Operations.View");
-    const participants = canViewParticipants ? ParticipantService.getAll() : [];
-    const groups = canViewParticipants ? ParticipantService.getGroups() : [];
-    const timeline = canViewCalendar ? TimelineService.getCalendarData().events : [];
+    const participants = canViewParticipants ? filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => ParticipantService.getAll()), user) : [];
+    const groups = canViewParticipants ? filterGroupsForUser_(PerformanceCacheService.getOrLoad("participants:groups", 10 * 60, () => ParticipantService.getGroups()), user) : [];
+    const timeline = canViewCalendar ? filterEventsForUser_(TimelineService.getCalendarData().events || [], user) : [];
     participants.forEach(item => add_(results, text, "participant", item.id, item.name, [item.school, item.item, item.category, item.teacherName]));
     ParticipantService.getActiveSchoolsData(participants, groups)
       .forEach(item => add_(results, text, "school", item.id, item.schoolName, [item.directorate]));

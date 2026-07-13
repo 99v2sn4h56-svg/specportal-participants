@@ -1,11 +1,13 @@
   <script>
     Object.assign(App, {
-      openParticipant: function (participant) {
+      openParticipant: function (participant, options) {
         if (!participant) return;
         App.state.selectedParticipant = participant;
         App.events.emit("participant:selected", participant);
         App.recordRecentlyViewed("participant", App.getParticipantName(participant), participant.id || participant.studentKey, App.getParticipantSchool(participant));
         App.renderParticipantProfile(participant);
+        App.persistModuleState();
+        if (!(options && options.routeDriven)) App.updateBrowserRoute(false);
       },
 
       openSchool: function (school) {
@@ -123,6 +125,7 @@
         var panel = document.getElementById("participantProfilePanel");
         if (panel) { panel.hidden = true; panel.innerHTML = ""; }
         App.state.selectedParticipant = null;
+        App.updateBrowserRoute(false);
       },
 
       loadParticipantRehearsalSchedule: function (participant) {

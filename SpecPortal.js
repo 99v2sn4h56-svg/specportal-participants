@@ -86,7 +86,31 @@ function portalGetOperationsConsole() {
 }
 
 function portalGetAdministrationData() {
-  return AdministrationService.getData();
+  const user = UserContextService.getCurrent();
+  requirePortalCapability_("Administration.View");
+  return PerformanceCacheService.getOrLoadUser(
+    PerformanceCacheService.userProjectionKey("administration", user),
+    5 * 60,
+    () => AdministrationService.getData()
+  );
+}
+
+function portalSyncData(request) {
+  return DataSyncService.sync(request || {});
+}
+
+function portalRefreshPageData(module) {
+  return DataSyncService.refreshPage(String(module || "dashboard").toLowerCase());
+}
+
+function portalGetPerformanceDiagnostics() {
+  requirePortalCapability_("Administration.View");
+  return {
+    generatedAt: new Date().toISOString(),
+    cache: { client: "permission-scoped in-memory", server: "compressed script/user CacheService", participantSeconds: 600, timelineSeconds: 300, staffSeconds: 300, dashboardSeconds: 120, attendanceSummarySeconds: 120 },
+    sync: DataSyncService.getArchitecture(),
+    identity: UserContextService.getDiagnostics()
+  };
 }
 
 function portalGetUserContextDiagnostics() {
@@ -124,6 +148,59 @@ function requirePortalCapability_(capability) {
   return UserContextService.requireCapability(capability);
 }
 
+function filterParticipantsForUser_(participants, user) {
+  const scope = user && user.scope || { type: "production", values: [] };
+  if (!scope.type || scope.type === "production" || user.isAdmin || user.isOperations) return participants || [];
+  const allowed = (scope.values || []).map(value => String(value || "").toLowerCase()).filter(Boolean);
+  if (!allowed.length) return [];
+  return (participants || []).filter(participant => {
+    const candidates = scope.type === "category" ? [participant.category, participant.discipline, participant.subDiscipline]
+      : scope.type === "item" ? [participant.item]
+      : scope.type === "school" ? [participant.school]
+      : scope.type === "department" ? [participant.directorate]
+      : [];
+    return scopeValuesMatch_(candidates, allowed);
+  });
+}
+
+function filterGroupsForUser_(groups, user) {
+  const scope = user && user.scope || { type: "production", values: [] };
+  if (!scope.type || scope.type === "production" || user.isAdmin || user.isOperations) return groups || [];
+  const allowed = (scope.values || []).map(value => String(value || "").toLowerCase()).filter(Boolean);
+  return (groups || []).filter(group => {
+    const candidates = scope.type === "category" ? [group.category, group.discipline]
+      : scope.type === "item" ? [group.item, group.groupName]
+      : scope.type === "school" ? [group.school]
+      : scope.type === "department" ? [group.directorate, group.department]
+      : [];
+    return scopeValuesMatch_(candidates, allowed);
+  });
+}
+
+function filterEventsForUser_(events, user) {
+  const scope = user && user.scope || { type: "production", values: [] };
+  if (!scope.type || scope.type === "production" || user.isAdmin || user.isOperations) return events || [];
+  const allowed = (scope.values || []).map(value => String(value || "").toLowerCase()).filter(Boolean);
+  if (!allowed.length) return [];
+  return (events || []).filter(event => {
+    const categories = [].concat(event.categories || event.category || [], event.studentGroups || [], event.schoolGroups || []);
+    const candidates = scope.type === "category" ? categories.concat([event.area, event.discipline, event.subDiscipline])
+      : scope.type === "item" ? [event.item].concat(event.studentGroups || [])
+      : scope.type === "school" ? [].concat(event.schools || [], event.schoolGroups || [])
+      : scope.type === "department" ? [event.department, event.area]
+      : [];
+    return scopeValuesMatch_(candidates, allowed);
+  });
+}
+
+function scopeValuesMatch_(candidates, allowed) {
+  return (candidates || [])
+    .flatMap(value => Array.isArray(value) ? value : String(value || "").split(/[,;\n]+/))
+    .map(value => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .some(value => allowed.includes(value));
+}
+
 function portalApplyStableIdMigration(request) {
   return StableIdMigrationService.apply(request);
 }
@@ -131,7 +208,9 @@ function portalApplyStableIdMigration(request) {
 function portalPlatformSearch(query, options) {
   const context = UserContextService.getCurrent();
   if (!context.email) throw new Error("Authentication is required.");
-  return PlatformSearchService.search(query, options);
+  const searchEpoch = CacheService.getScriptCache().get("SC_SEARCH_EPOCH") || "0";
+  const key = PerformanceCacheService.userProjectionKey(`search:${searchEpoch}:${String(query || "").toLowerCase()}:${Number(options && options.limit) || 50}`, context);
+  return PerformanceCacheService.getOrLoadUser(key, 60, () => PlatformSearchService.search(query, options));
 }
 
 function portalGetRelationship(request) {
@@ -159,7 +238,12 @@ function toSafeEventReference_(event) {
 }
 
 function portalGetSpecCentralConfig() {
-  return DashboardService.getContext();
+  const user = UserContextService.getCurrent();
+  return PerformanceCacheService.getOrLoadUser(
+    PerformanceCacheService.userProjectionKey("dashboard", user),
+    2 * 60,
+    () => DashboardService.getContext()
+  );
 }
 
 function portalSearchParticipants(query) {
@@ -168,8 +252,8 @@ function portalSearchParticipants(query) {
 }
 
 function portalGetAllParticipants() {
-  requirePortalCapability_("Participants.View");
-  return ParticipantService.getAll();
+  const user = requirePortalCapability_("Participants.View");
+  return filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => ParticipantService.getAll()), user);
 }
 
 function portalGetAllGroups() {
@@ -203,13 +287,24 @@ function portalRefreshPhotoCache() {
 }
 
 function portalGetPortalData() {
-  requirePortalCapability_("Participants.View");
-  return ParticipantService.getPortalData();
+  const user = requirePortalCapability_("Participants.View");
+  const canonical = PerformanceCacheService.getOrLoad("participants:portal", 10 * 60, () => ParticipantService.getPortalData());
+  const participants = filterParticipantsForUser_(canonical.participants || [], user);
+  const groups = filterGroupsForUser_(canonical.groups || [], user);
+  const schools = new Set(participants.concat(groups).map(item => String(item.school || "").toLowerCase()).filter(Boolean));
+  const scope = user.scope || { type: "production", values: [] };
+  const canUseCanonicalPhotos = !scope.type || scope.type === "production" || user.isAdmin || user.isOperations;
+  return {
+    participants,
+    groups,
+    schools: canUseCanonicalPhotos ? (canonical.schools || []) : (canonical.schools || []).filter(item => schools.has(String(item.schoolName || item.name || "").toLowerCase())),
+    photos: canUseCanonicalPhotos ? canonical.photos || {} : {}
+  };
 }
 
 function portalGetStaffProductionTeam() {
   requirePortalCapability_("Operations.View");
-  return StaffService.getAll().map(staff => ({ id: staff.id || "", staffId: staff.staffId || "", name: staff.name || staff.displayName || "Staff member", displayName: staff.displayName || staff.name || "Staff member", role: staff.role || "", department: staff.department || staff.team || "", status: staff.status || "Active" }));
+  return PerformanceCacheService.getOrLoad("staff:all", 5 * 60, () => StaffService.getAll()).map(staff => ({ id: staff.id || "", staffId: staff.staffId || "", name: staff.name || staff.displayName || "Staff member", displayName: staff.displayName || staff.name || "Staff member", role: staff.role || "", department: staff.department || staff.team || "", status: staff.status || "Active" }));
 }
 
 function portalGetRehearsals() {
@@ -223,8 +318,15 @@ function portalRefreshRehearsals() {
 }
 
 function portalGetCalendarData() {
-  requirePortalCapability_("Calendar.View");
-  return TimelineService.getCalendarData();
+  const user = requirePortalCapability_("Calendar.View");
+  return PerformanceCacheService.getOrLoadUser(
+    PerformanceCacheService.userProjectionKey("calendar", user),
+    3 * 60,
+    () => {
+      const data = TimelineService.getCalendarData();
+      return Object.assign({}, data, { events: filterEventsForUser_(data.events || [], user) });
+    }
+  );
 }
 
 function portalGetEventManagerLanding() {

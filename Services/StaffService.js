@@ -11,6 +11,7 @@ const StaffService = (() => {
 
   function getAll() {
     if (staffCache_) return staffCache_;
+    return PerformanceCacheService.getOrLoad("staff:all", 5 * 60, () => {
 
     try {
       const sourceConfig = SourceRegistryService.getSourceConfig("staff");
@@ -57,9 +58,10 @@ const StaffService = (() => {
       Logger.log("StaffService.getAll failed: " + (err && err.message ? err.message : err));
       return [];
     }
+    });
   }
 
-  function refresh() { staffCache_ = null; return getAll(); }
+  function refresh() { staffCache_ = null; PerformanceCacheService.remove("staff:all"); return getAll(); }
 
   function mapStaffRow_(row, indexes) {
     const firstName = getCell_(row, indexes.firstName);

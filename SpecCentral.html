@@ -20,10 +20,12 @@
   <aside id="eventWorkspaceDrawer" class="administrationDrawer eventWorkspaceDrawer" hidden aria-live="polite"></aside>
   <aside id="myProfileDrawer" class="administrationDrawer myProfileDrawer" hidden aria-live="polite"></aside>
   <aside id="attendanceQrDrawer" class="experienceDrawer attendanceQrDrawer" hidden aria-live="polite"></aside>
+  <aside id="syncDataDrawer" class="experienceDrawer syncDataDrawer" hidden aria-live="polite"></aside>
   <aside id="participantProfilePanel" class="administrationDrawer participantProfileDrawer" hidden aria-live="polite"></aside>
 
   <?!= HtmlService.createHtmlOutputFromFile('Portal/App/SpecCentralApp').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/App/SpecCentralUtilities').getContent(); ?>
+  <?!= HtmlService.createHtmlOutputFromFile('Portal/App/SpecCentralPerformance').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/App/SpecCentralProfiles').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/App/SpecCentralSearch').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/App/SpecCentralExperience').getContent(); ?>

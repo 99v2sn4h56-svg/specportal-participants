@@ -45,6 +45,12 @@ const AttendanceService = (() => {
     return requestPublicApi_("events", {}, EVENTS_CACHE_SECONDS);
   }
 
+  function invalidate() {
+    const cache = CacheService.getScriptCache();
+    cache.remove(buildCacheKey_("summary", {}));
+    cache.remove(buildCacheKey_("events", {}));
+  }
+
   function getEvent(sessionIdOrSheetName) {
     const identifier = String(sessionIdOrSheetName || "").trim();
     if (!identifier) return failureResult_("event", "Session ID or Sheet Name is required.");
@@ -362,6 +368,7 @@ const AttendanceService = (() => {
     getEvents,
     getEvent,
     getParticipantHistory,
-    getHealth
+    getHealth,
+    invalidate
   };
 })();

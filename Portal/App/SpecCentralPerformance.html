@@ -1,0 +1,181 @@
+<script>
+  (function () {
+    var originalRequest = App.services.request;
+    var CACHE_VERSION = "SC-PERF-001";
+    var TTL = { config: 120000, portalData: 600000, calendar: 180000, attendanceSummary: 120000, attendanceEvents: 300000, eventManagerLanding: 180000, operations: 120000, administration: 300000, staffTeam: 300000 };
+
+    Object.assign(App, {
+      initPerformance: function () {
+        App.state.sharedClientCache = {};
+        App.state.performanceMetrics = [];
+        App.state.pageContainers = {};
+        App.restoreModuleState();
+        window.addEventListener("hashchange", function () {
+          if (App.state.suppressHashRoute) return;
+          App.navigateRoute(location.hash, { fromBrowser: true });
+        });
+        window.addEventListener("beforeunload", function () { App.persistModuleState(); App.saveCurrentScrollPosition(); });
+        document.addEventListener("input", App.queueModuleStatePersist, true);
+        document.addEventListener("change", App.queueModuleStatePersist, true);
+      },
+
+      permissionCacheSignature: function () {
+        return [App.state.staff && App.state.staff.email || "anonymous", App.state.viewingAsRole || App.state.staff && App.state.staff.role || "", (App.state.viewingAsCapabilities || App.state.permissions || []).slice().sort().join(",")].join("|");
+      },
+
+      clientCacheKey: function (key) { return String(key || "") + "|" + App.permissionCacheSignature(); },
+      getClientCacheEntry: function (key) { return App.state.sharedClientCache[App.clientCacheKey(key)] || null; },
+      getClientCacheAge: function (key) { var entry = App.getClientCacheEntry(key); return entry ? Math.max(0, Date.now() - entry.loadedAt) : null; },
+      setClientCacheEntry: function (key, data, ttl, status) { var now = Date.now(); return App.state.sharedClientCache[App.clientCacheKey(key)] = { data: data, loadedAt: now, expiresAt: now + Math.max(0, Number(ttl) || 0), status: status || "fresh", sourceVersion: CACHE_VERSION }; },
+      invalidateClientCache: function (key) { delete App.state.sharedClientCache[App.clientCacheKey(key)]; delete App.state.serviceCache[key]; delete App.state.cacheTimestamps[key]; },
+      clearClientCache: function () { App.state.sharedClientCache = {}; App.state.serviceCache = {}; App.state.cacheTimestamps = {}; App.state.inFlightRequests = {}; },
+      clearPermissionScopedCaches: function () { App.state.sharedClientCache = {}; App.state.serviceCache = {}; App.state.cacheTimestamps = {}; App.state.inFlightRequests = {}; App.state.loadedServices = {}; App.state.participants = []; App.state.groups = []; App.state.schools = []; App.state.ready = false; App.state.calendarData = null; App.state.calendarControlsRestored = false; App.state.attendanceSummary = null; App.state.attendanceEvents = []; App.state.attendanceLoaded = false; App.state.eventManagerData = null; App.state.administrationData = null; Object.keys(App.state.pageContainers || {}).forEach(function (key) { var node = App.state.pageContainers[key]; if (node && node.parentNode) node.parentNode.removeChild(node); }); App.state.pageContainers = {}; },
+      invalidateClientModule: function (module) { var map = { participants: ["portalData", "photos", "platformSearch"], timeline: ["calendar", "eventManagerLanding", "eventWorkspace"], attendance: ["attendanceSummary", "attendanceEvents"], staff: ["staffTeam", "identity", "config"], search: ["platformSearch"], dashboard: ["config"], administration: ["administration", "authorizationModel"] }; var prefixes = map[module] || [module]; Object.keys(App.state.sharedClientCache || {}).forEach(function (cacheKey) { if (prefixes.some(function (prefix) { return cacheKey.indexOf(prefix) === 0; })) delete App.state.sharedClientCache[cacheKey]; }); prefixes.forEach(App.invalidateClientCache); },
+
+      activatePersistentPage: function (page, template, outlet) {
+        while (outlet.firstChild) outlet.removeChild(outlet.firstChild);
+        var container = App.state.pageContainers[page];
+        var firstRender = false;
+        if (!container) {
+          container = document.createElement("div");
+          container.className = "persistentPage";
+          container.dataset.page = page;
+          container.innerHTML = template ? template.innerHTML : App.errorState("Workspace unavailable", "This module is not registered in the current shell.");
+          App.state.pageContainers[page] = container;
+          firstRender = true;
+        }
+        outlet.appendChild(container);
+        container.hidden = false;
+        return { container: container, firstRender: firstRender };
+      },
+
+      routeForState: function (page) {
+        if (page === "dashboard") return "#home";
+        if (page === "operations") {
+          var routes = { timeline: "timeline", events: "event-manager", users: "staff", projects: "projects", overview: "" };
+          var suffix = routes[App.state.operationsView || "overview"] || "";
+          if (App.state.selectedEventWorkspaceId && App.state.operationsView === "events" && App.isSafeRouteId(App.state.selectedEventWorkspaceId)) suffix += "/" + encodeURIComponent(App.state.selectedEventWorkspaceId);
+          return "#operations" + (suffix ? "/" + suffix : "");
+        }
+        if (page === "participants" && App.state.selectedParticipant) {
+          var participantId = App.state.selectedParticipant.id || "";
+          if (App.isSafeRouteId(participantId)) return "#participants/profile/" + encodeURIComponent(participantId);
+        }
+        return "#" + page;
+      },
+
+      isSafeRouteId: function (value) { return /^[A-Za-z0-9_-]{1,120}$/.test(String(value || "")); },
+      parseRoute: function (hash) {
+        var parts = String(hash || "#home").replace(/^#/, "").split("/").filter(Boolean).map(decodeURIComponent);
+        var root = parts[0] || "home";
+        if (root === "home") return { page: "dashboard" };
+        if (["participants", "calendar", "attendance", "operations", "administration", "rehearsals", "mediaTimeline", "settings"].indexOf(root) < 0) return { page: "dashboard", invalid: true };
+        if (root === "operations") {
+          var views = { timeline: "timeline", "event-manager": "events", staff: "users", projects: "projects" };
+          return { page: "operations", operationsView: views[parts[1]] || "overview", eventId: parts[1] === "event-manager" && App.isSafeRouteId(parts[2]) ? parts[2] : "" };
+        }
+        return { page: root, participantId: root === "participants" && parts[1] === "profile" && App.isSafeRouteId(parts[2]) ? parts[2] : "" };
+      },
+
+      navigateRoute: function (hash, options) {
+        var route = App.parseRoute(hash);
+        if (route.page === "participants" && !route.participantId) { App.state.selectedParticipant = null; var participantDrawer = document.getElementById("participantProfilePanel"); if (participantDrawer) { participantDrawer.hidden = true; participantDrawer.innerHTML = ""; } }
+        if (route.page === "operations" && !route.eventId) { App.state.selectedEventWorkspaceId = ""; var eventDrawer = document.getElementById("eventWorkspaceDrawer"); if (eventDrawer) { eventDrawer.hidden = true; eventDrawer.innerHTML = ""; } }
+        if (route.operationsView) App.state.operationsView = route.operationsView;
+        App.navigate(route.page, { fromBrowser: true, replace: options && options.replace, route: route });
+        if (route.participantId) App.ensurePortalDataLoaded().then(function () { var participant = (App.state.participants || []).find(function (item) { return String(item.id || "") === route.participantId; }); if (participant) App.openParticipant(participant, { routeDriven: true }); });
+        if (route.eventId) setTimeout(function () { App.openEventWorkspace(route.eventId); }, 0);
+        if (route.invalid) { App.updateBrowserRoute(true); App.notify("That route was not recognised. Home has been opened."); }
+      },
+
+      updateBrowserRoute: function (replace) {
+        var hash = App.routeForState(App.state.currentPage);
+        if (location.hash === hash) return;
+        App.state.suppressHashRoute = true;
+        if (replace) history.replaceState({ route: hash }, "", hash); else history.pushState({ route: hash }, "", hash);
+        setTimeout(function () { App.state.suppressHashRoute = false; }, 0);
+      },
+
+      persistModuleState: function () {
+        var state = {
+          participants: { search: App.state.participantExplorerSearch || "", filters: App.state.participantExplorerFilters || {}, sort: App.state.participantExplorerSort || {}, page: App.state.participantExplorerPage || 1, pageSize: App.state.participantExplorerPageSize || 0, savedView: App.state.participantExplorerSavedView || "all" },
+          calendar: { date: App.state.calendarDate instanceof Date ? App.state.calendarDate.toISOString() : App.state.calendarDate, view: App.state.calendarView, search: String((document.getElementById("calendarSearch") || {}).value || App.state.calendarFilters && App.state.calendarFilters.search || ""), type: String((document.getElementById("calendarTypeFilter") || {}).value || App.state.calendarFilters && App.state.calendarFilters.type || ""), venue: String((document.getElementById("calendarVenueFilter") || {}).value || App.state.calendarFilters && App.state.calendarFilters.venue || ""), selectedEventId: App.state.selectedCalendarEvent && (App.state.selectedCalendarEvent.id || App.state.selectedCalendarEvent.eventId) || "" },
+          attendance: { sessionId: App.state.selectedAttendanceSessionId || "", eventName: App.state.selectedAttendanceEventName || "", filter: App.state.attendanceEventFilter, search: App.state.attendanceEventSearch },
+          eventManager: { search: App.state.eventManagerSearch, range: App.state.eventManagerRange, filters: App.state.eventManagerFilters, view: App.state.eventManagerView, eventId: App.state.selectedEventWorkspaceId, section: App.state.selectedEventWorkspaceSection },
+          administration: { view: App.state.administrationView, search: App.state.administrationSearch || "", status: App.state.administrationStatus || "", sort: App.state.administrationSort || "name" },
+          operationsView: App.state.operationsView || "overview",
+          scroll: App.state.routeScroll || {}
+        };
+        try { sessionStorage.setItem("specCentralModuleStateV1", JSON.stringify(state)); } catch (err) {}
+      },
+
+      queueModuleStatePersist: function () { clearTimeout(App.state.moduleStatePersistTimer); App.state.moduleStatePersistTimer = setTimeout(App.persistModuleState, 150); },
+
+      restoreModuleState: function () {
+        var saved = {}; try { saved = JSON.parse(sessionStorage.getItem("specCentralModuleStateV1") || "{}"); } catch (err) {}
+        var participants = saved.participants || {}, calendar = saved.calendar || {}, attendance = saved.attendance || {}, events = saved.eventManager || {}, administration = saved.administration || {};
+        App.state.participantExplorerSearch = participants.search || ""; App.state.participantExplorerFilters = participants.filters || {}; App.state.participantExplorerSort = participants.sort || { key: "name", direction: "asc" }; App.state.participantExplorerPage = participants.page || 1; App.state.participantExplorerPageSize = participants.pageSize || 0; App.state.participantExplorerSavedView = participants.savedView || "all";
+        if (calendar.date) { var date = new Date(calendar.date); if (!isNaN(date.getTime())) App.state.calendarDate = date; } App.state.calendarView = calendar.view || App.state.calendarView; App.state.calendarFilters = { search: calendar.search || "", type: calendar.type || "", venue: calendar.venue || "" }; App.state.selectedCalendarEventId = calendar.selectedEventId || "";
+        App.state.selectedAttendanceSessionId = attendance.sessionId || ""; App.state.selectedAttendanceEventName = attendance.eventName || ""; App.state.attendanceEventFilter = attendance.filter || App.state.attendanceEventFilter; App.state.attendanceEventSearch = attendance.search || "";
+        App.state.eventManagerSearch = events.search || ""; App.state.eventManagerRange = events.range || App.state.eventManagerRange; App.state.eventManagerFilters = events.filters || {}; App.state.eventManagerView = events.view || App.state.eventManagerView; App.state.selectedEventWorkspaceId = events.eventId || ""; App.state.selectedEventWorkspaceSection = events.section || "overview";
+        App.state.administrationView = administration.view || App.state.administrationView; App.state.administrationSearch = administration.search || ""; App.state.administrationStatus = administration.status || ""; App.state.administrationSort = administration.sort || "name"; App.state.operationsView = saved.operationsView || App.state.operationsView; App.state.routeScroll = saved.scroll || {};
+      },
+
+      restorePageControls: function (page) { if (page === "administration") { var adminSearch = document.getElementById("administrationSearch"), adminStatus = document.getElementById("administrationStatusFilter"), adminSort = document.getElementById("administrationSort"); if (adminSearch) adminSearch.value = App.state.administrationSearch || ""; if (adminStatus) adminStatus.value = App.state.administrationStatus || ""; if (adminSort) adminSort.value = App.state.administrationSort || "name"; return; } if (page !== "calendar" || App.state.calendarControlsRestored) return; var filters = App.state.calendarFilters || {}; var search = document.getElementById("calendarSearch"), type = document.getElementById("calendarTypeFilter"), venue = document.getElementById("calendarVenueFilter"); if (!type || type.dataset.ready !== "true" || !venue || venue.dataset.ready !== "true") return; if (search) search.value = filters.search || ""; if (filters.type) type.value = filters.type; if (filters.venue) venue.value = filters.venue; App.state.calendarControlsRestored = true; },
+
+      saveCurrentScrollPosition: function () { App.state.routeScroll = App.state.routeScroll || {}; App.state.routeScroll[App.routeForState(App.state.currentPage)] = window.scrollY || 0; App.persistModuleState(); },
+      restoreCurrentScrollPosition: function () { var position = (App.state.routeScroll || {})[App.routeForState(App.state.currentPage)] || 0; requestAnimationFrame(function () { window.scrollTo(0, position); }); },
+
+      prefetchLikelyData: function () {
+        var run = function () {
+          if (App.state.currentPage === "dashboard") { if (App.hasPermission("Participants.View")) App.ensurePortalDataLoaded(); if (App.hasPermission("Calendar.View") && !App.state.calendarData) App.loadCalendarData(false); }
+          else if (App.state.currentPage === "participants" && !App.state.calendarData) App.loadCalendarData(false);
+          else if (App.state.currentPage === "operations" && App.state.operationsView !== "events") App.loadEventManagerLanding(false);
+        };
+        if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 }); else setTimeout(run, 800);
+      },
+
+      maybeRevalidateCurrentPage: function () {
+        var page = App.state.currentPage, key = page === "participants" ? "portalData" : page === "calendar" || page === "rehearsals" ? "calendar" : page === "attendance" ? "attendanceSummary" : page === "administration" ? "administration" : page === "operations" && App.state.operationsView === "events" ? "eventManagerLanding" : page === "operations" ? "operations" : page === "dashboard" ? "config" : "";
+        if (!key) return;
+        var entry = App.getClientCacheEntry(key);
+        if (entry && entry.expiresAt > Date.now()) return;
+        var hasVisibleData = page === "participants" ? App.state.ready : page === "calendar" || page === "rehearsals" ? !!App.state.calendarData : page === "attendance" ? !!App.state.attendanceSummary : page === "administration" ? !!App.state.administrationData : page === "operations" && App.state.operationsView === "events" ? !!App.state.eventManagerData : page === "operations" ? !!App.state.projectData : page === "dashboard" ? !!App.state.dashboardContext : false;
+        if (!hasVisibleData) return;
+        App.showPageRefreshState(true);
+        var refresh = page === "participants" ? App.loadPortalData(true) : page === "calendar" || page === "rehearsals" ? App.loadCalendarData(true) : page === "attendance" ? App.loadAttendanceData(true) : page === "administration" ? App.loadAdministrationData(true) : page === "operations" && App.state.operationsView === "events" ? App.loadEventManagerLanding(true) : page === "operations" ? App.loadOperationsData(true) : App.loadConfig(true);
+        Promise.resolve(refresh).finally(function () { App.showPageRefreshState(false); });
+      },
+
+      refreshCurrentPage: function () {
+        var page = App.state.currentPage, module = page === "operations" ? (App.state.operationsView === "events" ? "timeline" : page) : page;
+        if (module === "calendar" || module === "rehearsals") module = "timeline";
+        if (module === "operations") module = "dashboard";
+        App.invalidateClientModule(module);
+        App.showPageRefreshState(true);
+        return App.services.request("pageRefresh:" + module + ":" + Date.now(), "portalRefreshPageData", { args: [module], forceRefresh: true, noCache: true, timeoutMs: 120000 }).catch(function (error) { App.notify("Source refresh was degraded: " + App.getErrorMessage(error)); }).then(function () { var refresh = page === "participants" ? App.loadPortalData(true) : page === "calendar" || page === "rehearsals" ? App.loadCalendarData(true) : page === "attendance" ? App.loadAttendanceData(true) : page === "operations" && App.state.operationsView === "events" ? App.loadEventManagerLanding(true) : page === "operations" ? App.loadOperationsData(true) : page === "administration" ? App.loadAdministrationData(true) : App.loadConfig(true); return Promise.resolve(refresh); }).finally(function () { App.showPageRefreshState(false); App.markPageRefreshed(); App.persistModuleState(); });
+      },
+
+      showPageRefreshState: function (active) { var button = document.getElementById("pageRefreshAction"); if (button) { button.disabled = !!active; button.textContent = active ? "Refreshing…" : "Refresh"; } },
+      markPageRefreshed: function () { var timestamp = document.getElementById("pageRefreshTimestamp"); if (timestamp) timestamp.textContent = "Updated " + App.formatTime(new Date()); },
+      renderSyncControl: function () { var button = document.getElementById("syncDataButton"); if (button) button.hidden = !!App.state.viewingAsRole || !App.hasActualPermission("Data.Sync"); },
+      openSyncData: function () { if (App.state.viewingAsRole || !App.hasActualPermission("Data.Sync")) return; var drawer = document.getElementById("syncDataDrawer"); if (!drawer) return; drawer.hidden = false; var modulePermissions = { participants: "Participants.View", timeline: "Calendar.View", attendance: "Attendance.View", staff: "Operations.View", search: "Participants.View", dashboard: "", administration: "Administration.View" }, modules = Object.keys(modulePermissions).filter(function (module) { return !modulePermissions[module] || App.hasActualPermission(modulePermissions[module]); }), recent = (App.state.performanceMetrics || []).slice(-8).reverse(); drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">Read-only cache refresh</span><h3>Sync Data</h3></div><button type="button" onclick="App.closeSyncData()" aria-label="Close Sync Data">×</button></div><div class="drawerBody"><p class="moduleMeta">Refresh cached source data without changing any spreadsheet records.</p><div class="syncModuleGrid">' + modules.map(function (module) { return '<button type="button" onclick="App.runDataSync([\'' + module + '\'])">Sync ' + App.toTitle(module) + '</button>'; }).join("") + '</div><div id="syncDataResults"></div>' + (App.hasActualPermission("Administration.View") ? '<details class="performanceDiagnostics"><summary>Performance diagnostics</summary><div id="serverPerformanceDiagnostics">Loading server diagnostics…</div>' + (recent.length ? recent.map(function (metric) { return '<div><strong>' + App.escapeHtml(metric.name) + '</strong><span>' + metric.durationMs + 'ms</span></div>'; }).join("") : '<p>No client timings recorded yet.</p>') + '</details>' : '') + '</div><div class="drawerActions"><button class="quickLink primaryAction" type="button" onclick="App.runDataSync([])">Sync All Data</button><button class="quickLink" type="button" onclick="App.closeSyncData()">Close</button></div>'; if (App.hasActualPermission("Administration.View")) App.loadPerformanceDiagnostics(); },
+      loadPerformanceDiagnostics: function () { return App.services.request("performanceDiagnostics", "portalGetPerformanceDiagnostics", { cacheMs: 30000, timeoutMs: 45000 }).then(function (data) { var target = document.getElementById("serverPerformanceDiagnostics"); if (!target) return; var identity = data && data.identity || {}, cache = data && data.cache || {}; target.innerHTML = '<div><strong>Server cache</strong><span>' + App.escapeHtml(cache.server || "Unknown") + '</span></div><div><strong>Identity lookup</strong><span>' + Number(identity.lookupTimeMs || 0) + 'ms</span></div><div><strong>Sync mode</strong><span>Read only</span></div>'; }).catch(function (error) { var target = document.getElementById("serverPerformanceDiagnostics"); if (target) target.textContent = "Diagnostics unavailable: " + App.getErrorMessage(error); }); },
+      closeSyncData: function () { var drawer = document.getElementById("syncDataDrawer"); if (drawer) { drawer.hidden = true; drawer.innerHTML = ""; } },
+      runDataSync: function (modules) { if (App.state.viewingAsRole || !App.hasActualPermission("Data.Sync")) return; var results = document.getElementById("syncDataResults"); if (results) results.innerHTML = App.loadingState("Refreshing data caches"); var started = performance.now(); return App.services.request("masterSync:" + Date.now(), "portalSyncData", { args: [{ modules: modules || [] }], forceRefresh: true, timeoutMs: 180000, noCache: true }).then(function (response) { (modules && modules.length ? modules : ["participants", "timeline", "attendance", "staff", "search", "dashboard", "administration"]).forEach(App.invalidateClientModule); if (results) results.innerHTML = '<div class="syncResultList">' + (response.results || []).map(function (item) { return '<div><strong>' + App.escapeHtml(item.source) + '</strong><span class="statusChip ' + App.escapeHtml(String(item.status).toLowerCase()) + '">' + App.escapeHtml(item.status) + '</span><small>' + item.records + ' records · ' + item.durationMs + 'ms' + ((item.warnings || []).length ? ' · ' + App.escapeHtml(item.warnings.join(', ')) : '') + '</small></div>'; }).join("") + '</div>'; App.recordPerformance("master-sync", started, { modules: modules || [], durationMs: response.durationMs }); return App.refreshCurrentPage(); }).catch(function (error) { if (results) results.innerHTML = App.errorState("Sync incomplete", App.getErrorMessage(error)); }); },
+      recordPerformance: function (name, started, detail) { var metric = { name: name, durationMs: Math.round(performance.now() - started), at: new Date().toISOString(), detail: detail || {} }; App.state.performanceMetrics.push(metric); if (App.state.performanceMetrics.length > 100) App.state.performanceMetrics.shift(); return metric; }
+    });
+
+    App.services.request = function (key, serverFunction, options) {
+      options = options || {};
+      var scopedKey = App.clientCacheKey(key), ttl = options.cacheMs !== undefined ? options.cacheMs : (TTL[key] || 0), cached = App.state.sharedClientCache[scopedKey], now = Date.now();
+      if (!options.forceRefresh && !options.noCache && cached && cached.expiresAt > now) { cached.status = "hit"; App.setServiceStatus(key, "Cached", App.formatTime(new Date(cached.loadedAt))); App.recordPerformance("request:" + key, performance.now(), { cache: "hit", cacheAgeMs: now - cached.loadedAt, payloadBytes: App.estimatePayloadSize(cached.data) }); return Promise.resolve(cached.data); }
+      if (App.state.inFlightRequests[scopedKey]) return App.state.inFlightRequests[scopedKey];
+      var signature = App.permissionCacheSignature(), started = performance.now();
+      var request = originalRequest.call(App.services, key, serverFunction, Object.assign({}, options, { cacheMs: 0, forceRefresh: true }));
+      App.state.inFlightRequests[scopedKey] = request.then(function (data) { if (signature === App.permissionCacheSignature() && !options.noCache) App.setClientCacheEntry(key, data, ttl, "fresh"); App.recordPerformance("request:" + key, started, { cache: "miss", payloadBytes: App.estimatePayloadSize(data) }); return data; }).catch(function (error) { if (cached && options.allowStaleOnError !== false) { cached.status = "stale-fallback"; App.setServiceStatus(key, "Degraded", App.formatTime(new Date(cached.loadedAt))); App.recordPerformance("request:" + key, started, { cache: "stale-fallback" }); return cached.data; } throw error; }).finally(function () { delete App.state.inFlightRequests[scopedKey]; });
+      return App.state.inFlightRequests[scopedKey];
+    };
+    App.estimatePayloadSize = function (value) { try { return new Blob([JSON.stringify(value)]).size; } catch (err) { return 0; } };
+  })();
+</script>

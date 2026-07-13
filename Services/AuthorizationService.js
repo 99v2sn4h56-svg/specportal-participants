@@ -8,14 +8,14 @@ const AuthorizationService = (() => {
     "Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark",
     "Calendar.View", "Calendar.Operational.View", "Calendar.Edit", "Timeline.Edit",
     "Reports.Export", "Communications.Send", "Settings.Admin", "Operations.View",
-    "Operations.Admin", "Administration.View", "Users.Manage", "Permissions.Manage", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View", "Audit.View", "AI.View"
+    "Operations.Admin", "Administration.View", "Users.Manage", "Permissions.Manage", "Data.Sync", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View", "Audit.View", "AI.View"
   ];
 
   const ROLES = {
     "System Administrator": CAPABILITIES.slice(),
     "Executive": ["Participants.View", "Attendance.View", "Calendar.View", "Calendar.Operational.View", "Reports.Export", "Operations.View"],
-    "Operations Manager": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Calendar.Edit", "Timeline.Edit", "Reports.Export", "Communications.Send", "Operations.View", "Operations.Admin", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View"],
-    "Department Manager": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Reports.Export", "Operations.View"],
+    "Operations Manager": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Calendar.Edit", "Timeline.Edit", "Reports.Export", "Communications.Send", "Operations.View", "Operations.Admin", "Data.Sync", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View"],
+    "Department Manager": ["Participants.View", "Participants.Edit", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View", "Reports.Export", "Operations.View", "Data.Sync"],
     "Production Team Leader": ["Participants.View", "Attendance.View", "Attendance.Mark", "Calendar.View", "Calendar.Operational.View"],
     "Production Team Member": ["Participants.View", "Attendance.View", "Attendance.Mark", "Calendar.View"],
     "Teacher": ["Participants.View", "Attendance.View", "Calendar.View"],

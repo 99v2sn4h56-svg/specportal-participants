@@ -1818,6 +1818,8 @@
     body.sidebarCollapsed .topBarSidebarToggle { transform:rotate(180deg); background:#edf3ff; }
     .workspaceSearch { width:100%; justify-self:center; min-height:48px; border-radius:18px; font-size:13px; }
     .workspaceUserArea { display:flex; align-items:center; justify-content:flex-end; gap:10px; min-width:0; }
+    .syncDataButton { width:40px; height:40px; display:grid; place-items:center; flex:0 0 40px; border:1px solid var(--border); border-radius:13px; color:var(--blue); background:#fff; font-size:20px; font-weight:800; }
+    .syncDataButton[hidden] { display:none; }
     .topBarUserAvatar { width:40px; height:40px; display:grid; place-items:center; flex:0 0 40px; overflow:hidden; border-radius:13px; color:var(--navy); background:var(--yellow); font-size:11px; font-weight:900; }
     .topBarUserAvatar img { width:100%; height:100%; object-fit:cover; }
     .topBarUserAvatar:hover { transform:translateY(-1px); box-shadow:0 8px 18px rgba(6,29,61,.14); }
@@ -1831,6 +1833,18 @@
     .viewingAsBadge { padding:6px 24px; color:#fff; background:linear-gradient(90deg,var(--purple),#8f3f9f); font-size:9px; font-weight:900; letter-spacing:.1em; text-align:center; }
     .viewingAsBadge[hidden] { display:none; }
     .workspaceContextRow { display:flex; align-items:end; justify-content:space-between; gap:16px; padding:12px 24px 14px; border-top:1px solid rgba(228,234,243,.75); background:rgba(255,255,255,.7); }
+    .pageContextActions { display:flex; align-items:center; gap:8px; }
+    .pageRefreshTimestamp { color:var(--muted); font-size:9px; font-weight:700; white-space:nowrap; }
+    .persistentPage { min-width:0; }
+    .syncDataDrawer { width:min(620px,100%); }
+    .syncModuleGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .syncModuleGrid button { min-height:44px; border:1px solid var(--border); border-radius:12px; color:var(--blue); background:#f7faff; font-weight:800; }
+    .syncResultList { display:grid; gap:8px; margin-top:14px; }
+    .syncResultList > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px 10px; padding:11px; border:1px solid var(--border); border-radius:12px; }
+    .syncResultList small { grid-column:1/-1; color:var(--muted); }
+    .performanceDiagnostics { margin-top:14px; border:1px solid var(--border); border-radius:12px; padding:10px; }
+    .performanceDiagnostics summary { color:var(--blue); cursor:pointer; font-weight:800; }
+    .performanceDiagnostics > div { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:11px; }
     .workspaceContextRow .pageTitle { font-size:23px; }
     @media (max-width:1200px) { .operationsMetricGrid { grid-template-columns:repeat(3,minmax(150px,1fr)); } .operationsDashboardGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section:first-child { grid-column:1/-1; } .participantExplorerHeader { grid-template-columns:1fr; } .participantDropdownFilters { grid-template-columns:repeat(4,minmax(130px,1fr)); } }
     @media (max-width:1250px) { .workspaceTopRow { grid-template-columns:64px minmax(280px,1fr) auto; gap:14px; } .workspaceWelcome { display:none; } }
@@ -1895,6 +1909,7 @@
       .workspaceUserArea { min-width:0; }
       .workspaceUserArea { display:grid; grid-template-columns:40px 40px; align-items:center; }
       .topBarUserAvatar { grid-column:1; grid-row:1; }
+      .syncDataButton { display:none!important; }
       .notificationTrigger { grid-column:2; grid-row:1; }
       .viewAsControl { min-width:0; max-width:128px; }
       .viewAsControl { grid-column:1/-1; grid-row:2; }
@@ -2019,6 +2034,7 @@
       .calendarToolbar .toolbarActions { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .participantExplorerTable td { grid-template-columns:88px minmax(0,1fr); }
       .commandQuickActions, .attendanceHeaderActions, .scProfileStats, .administrationSummary { grid-template-columns:1fr; }
+      .syncModuleGrid { grid-template-columns:1fr; }
       .attendanceStatusChip { grid-column:auto; }
       .myProfileSummary { grid-template-columns:58px minmax(0,1fr); }
       .myProfileAvatar { width:58px; height:58px; }
