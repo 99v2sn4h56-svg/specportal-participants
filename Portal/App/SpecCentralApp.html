@@ -1394,15 +1394,13 @@
       },
 
       renderAttendanceLiveData: function () {
-        var loading = document.getElementById("attendanceLoading");
         var content = document.getElementById("attendanceLiveContent");
         var cards = document.getElementById("attendanceSummaryCards");
         var counts = document.getElementById("attendanceStatusCounts");
         var eventsList = document.getElementById("attendanceEventList");
-        if (!loading || !content || !cards || !counts || !eventsList) return;
+        if (!content || !cards || !counts || !eventsList) return;
 
         var summary = App.state.attendanceSummary;
-        loading.style.display = App.state.loading.attendanceSummary && !summary ? "block" : "none";
 
         if (!summary) {
           content.style.display = "none";

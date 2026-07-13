@@ -25,6 +25,7 @@ const StaffDirectoryService = (() => {
     if (!staff) throw new Error("Staff profile was not found.");
     const admin = AuthorizationService.hasCapability(user, "Administration.View");
     const events = staffEvents_(staff);
+    const assignedEvents = mergeAssignedEvents_(events, staff.eventAllocations || []);
     const tasks = staffTasks_(staff);
     const result = Object.assign(directoryRecord_(staff), {
       preferredName: staff.preferredName || "",
@@ -42,7 +43,7 @@ const StaffDirectoryService = (() => {
       teams: unique_(staff.teams || staff.departments || [staff.department]),
       categoryResponsibilities: unique_(staff.categoryResponsibilities || staff.assignedItems),
       assignedGroups: unique_(staff.assignedGroups),
-      assignedEvents: events,
+      assignedEvents,
       timelineEvents: events,
       eventAllocations: staff.eventAllocations || [],
       currentProjects: tasks,
@@ -98,6 +99,34 @@ const StaffDirectoryService = (() => {
       const values = [].concat(event.staff || [], event.id || [], event.eventId || [], event.title || [], event.event || []).map(EntityModelService.normaliseKey);
       return identities.some(identity => values.includes(identity));
     }).map(event => ({ id: event.id || event.eventId || "", title: event.title || event.event || "Event", date: event.date || "", dateKey: event.dateKey || "", start: event.start || "", finish: event.finish || "", venue: event.venue || "", area: event.area || "", eventType: event.eventType || "Event", status: event.status || "" })), []);
+  }
+
+  function mergeAssignedEvents_(timelineEvents, allocations) {
+    const merged = {};
+    const add = event => {
+      const value = Object.assign({}, event || {});
+      value.title = value.title || value.event || "Event";
+      value.time = value.time || [value.start, value.finish].filter(Boolean).join(" – ");
+      value.venue = value.venue || value.location || "";
+      const key = [value.title, value.date, value.venue].map(EntityModelService.normaliseKey).join("|");
+      if (!key.replace(/\|/g, "")) return;
+      merged[key] = Object.assign({}, merged[key] || {}, value);
+    };
+    (allocations || []).forEach(allocation => add({
+      title: allocation.event || "Event",
+      date: allocation.date || "",
+      time: allocation.time || "",
+      venue: allocation.location || "",
+      role: allocation.role || "",
+      department: allocation.department || "",
+      eventType: "Staff allocation"
+    }));
+    (timelineEvents || []).forEach(add);
+    return Object.keys(merged).map(key => merged[key]).sort((a, b) => {
+      const aDate = Date.parse(a.dateKey || a.date || "") || Number.MAX_SAFE_INTEGER;
+      const bDate = Date.parse(b.dateKey || b.date || "") || Number.MAX_SAFE_INTEGER;
+      return aDate - bDate || String(a.title || "").localeCompare(String(b.title || ""));
+    });
   }
 
   function staffTasks_(staff) {
