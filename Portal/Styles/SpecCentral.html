@@ -1592,8 +1592,11 @@
     /* SC-UX-001 refined application shell and operations centre */
     .appShell { min-height:100vh; grid-template-columns:280px minmax(0,1fr); transition:grid-template-columns .2s ease; }
     .appSidebar { top:0; height:100vh; padding:14px; }
-    .sidebarBrand { min-height:82px; display:grid; place-items:center; margin:0 0 8px; }
-    .sidebarLogo { width:150px; height:76px; object-fit:contain; filter:drop-shadow(0 5px 10px rgba(0,0,0,.2)); }
+    .sidebarBrand { min-height:142px; display:grid; place-items:center; margin:0 0 8px; }
+    .sidebarHome { display:grid; place-items:center; border:0; border-radius:20px; padding:4px; background:transparent; cursor:pointer; }
+    .sidebarHome:hover { background:rgba(255,255,255,.07); transform:translateY(-1px); }
+    .sidebarHome:focus-visible { outline:3px solid var(--yellow); outline-offset:3px; }
+    .sidebarLogo { width:240px; height:132px; object-fit:contain; filter:drop-shadow(0 7px 14px rgba(0,0,0,.22)); }
     .sidebarLogoFallback { display:none; width:52px; height:52px; place-items:center; border-radius:15px; color:var(--navy); background:var(--yellow); font-weight:900; }
     body.sidebarCollapsed .appShell { grid-template-columns:82px minmax(0,1fr); }
     body.sidebarCollapsed .appSidebar { display:block; padding:12px 9px; }
@@ -1610,6 +1613,7 @@
     .navChildren button:disabled { cursor:not-allowed; opacity:.35; }
     body.sidebarCollapsed .navSectionLabel, body.sidebarCollapsed .navItem span, body.sidebarCollapsed .navGroupToggle b, body.sidebarCollapsed .navChildren { display:none; }
     body.sidebarCollapsed .sidebarBrand { min-height:58px; }
+    body.sidebarCollapsed .sidebarHome { padding:0; }
     body.sidebarCollapsed .sidebarLogo { width:58px; height:52px; }
     body.sidebarCollapsed .navItem { justify-content:center; padding-left:5px; padding-right:5px; }
     body.sidebarCollapsed .navItem::before { width:32px; height:32px; flex-basis:32px; }
