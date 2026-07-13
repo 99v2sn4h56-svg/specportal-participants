@@ -1,6 +1,10 @@
 <template id="page-participants">
   <div class="participantExplorer">
     <section class="panel participantExplorerHeader">
+      <div class="participantModeToggle" role="tablist" aria-label="Participant data type">
+        <button id="participantModeIndividuals" type="button" role="tab" onclick="App.setParticipantExplorerMode('individuals')">Individuals</button>
+        <button id="participantModeGroups" type="button" role="tab" onclick="App.setParticipantExplorerMode('groups')">School Groups</button>
+      </div>
       <div class="participantExplorerActions">
         <input id="participantSearch" class="participantSearch" type="search" placeholder="Search name, school, item, teacher, ID, email or group…" autocomplete="off" oninput="App.queueParticipantExplorer()">
         <select id="participantSavedView" class="filterSelect" onchange="App.applyParticipantSavedView(this.value)" aria-label="Saved view"></select>
@@ -15,7 +19,7 @@
 
     <div class="participantExplorerBody">
       <section class="panel participantTablePanel">
-        <div class="participantTableToolbar"><div id="participantStatus" class="status">Loading participant data…</div><div id="participantActiveFilters" class="participantActiveFilters"></div></div>
+        <div class="participantTableToolbar"><div id="participantStatus" class="status">Loading participant data…</div><div class="participantTableActions"><div id="participantActiveFilters" class="participantActiveFilters"></div><button id="participantCopyEmails" class="quickLink compact participantCopyEmails" type="button" onclick="App.copyParticipantExplorerEmails()">Copy family emails</button></div></div>
         <div id="participantResults" class="participantDatabase"></div>
         <div id="participantPagination" class="participantPagination"></div>
       </section>
@@ -51,6 +55,15 @@
       }
       try {
         App.initialiseParticipantExplorer();
+        var groupMode = App.state.participantExplorerMode === "groups";
+        root.classList.toggle("groupMode", groupMode);
+        App.renderParticipantModeToggle();
+        if (groupMode) {
+          var groups = App.getFilteredParticipantGroups();
+          App.renderParticipantGroupStats(groups);
+          App.renderParticipantGroupTable(groups);
+          return;
+        }
         var filtered = App.getFilteredParticipants();
         App.renderParticipantSavedViews();
         App.renderParticipantExplorerStats(filtered);
@@ -73,12 +86,36 @@
         App.state.participantExplorerPage = App.state.participantExplorerPage || 1;
         App.state.participantExplorerSort = App.state.participantExplorerSort || { key: "name", direction: "asc" };
         App.state.participantExplorerLayout = localStorage.getItem("specParticipantLayout") || "default";
+        App.state.participantExplorerMode = localStorage.getItem("specParticipantExplorerMode") || "individuals";
         try { App.state.participantHiddenColumns = JSON.parse(localStorage.getItem("specParticipantHiddenColumns") || "[]"); } catch (error) { App.state.participantHiddenColumns = []; }
         App.state.participantExplorerInitialised = true;
       }
       var search = document.getElementById("participantSearch");
       if (search && search.value !== (App.state.participantExplorerSearch || "")) search.value = App.state.participantExplorerSearch || "";
       var layout = document.getElementById("participantLayout"); if (layout) layout.value = App.state.participantExplorerLayout;
+      var searchPlaceholder = App.state.participantExplorerMode === "groups" ? "Search school, group, item, category or teacher…" : "Search name, school, item, teacher, ID, email or group…";
+      if (search) search.placeholder = searchPlaceholder;
+    },
+
+    renderParticipantModeToggle: function () {
+      var mode = App.state.participantExplorerMode || "individuals";
+      [["participantModeIndividuals", "individuals"], ["participantModeGroups", "groups"]].forEach(function (entry) {
+        var button = document.getElementById(entry[0]), active = mode === entry[1];
+        if (!button) return;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        button.setAttribute("tabindex", active ? "0" : "-1");
+      });
+      var copy = document.getElementById("participantCopyEmails");
+      if (copy) copy.textContent = mode === "groups" ? "Copy teacher emails" : "Copy family emails";
+    },
+
+    setParticipantExplorerMode: function (mode) {
+      App.state.participantExplorerMode = mode === "groups" ? "groups" : "individuals";
+      App.state.participantExplorerSearch = "";
+      App.state.participantExplorerPage = 1;
+      localStorage.setItem("specParticipantExplorerMode", App.state.participantExplorerMode);
+      App.renderParticipantExplorer();
     },
 
     queueParticipantExplorer: function () {
@@ -120,6 +157,27 @@
       return list.sort(function (a, b) { var av = sort.key === "rehearsal" ? App.getParticipantNextRehearsal(a) : App.getParticipantExplorerValues(a)[sort.key] || "", bv = sort.key === "rehearsal" ? App.getParticipantNextRehearsal(b) : App.getParticipantExplorerValues(b)[sort.key] || ""; var result = String(av).localeCompare(String(bv), undefined, { numeric: true }); return sort.direction === "desc" ? -result : result; });
     },
 
+    getFilteredParticipantGroups: function () {
+      var query = String(App.state.participantExplorerSearch || "").trim().toLowerCase();
+      return (App.state.groups || []).filter(function (group) {
+        var values = App.getParticipantGroupValues(group);
+        return values.hasData && (!query || values.search.indexOf(query) >= 0);
+      }).sort(function (a, b) {
+        var av = App.getParticipantGroupValues(a), bv = App.getParticipantGroupValues(b);
+        return av.school.localeCompare(bv.school) || av.title.localeCompare(bv.title);
+      });
+    },
+
+    getParticipantGroupValues: function (group) {
+      var item = App.normaliseItemTitle(group.item || ""), groupName = String(group.groupName || "").trim();
+      var title = groupName || item || String(group.category || "Unnamed group");
+      var teachers = [group.teacherName, group.secondTeacherName].filter(Boolean).join(", ");
+      var emails = [group.teacherEmail, group.secondTeacherEmail].filter(Boolean).join("; ");
+      var count = App.getGroupStudentCount(group) || "0";
+      var values = [group.school, title, item, group.category, group.segment, teachers, emails];
+      return { title: title, item: item, school: String(group.school || ""), category: String(group.category || ""), segment: String(group.segment || ""), students: String(count), teachers: teachers, emails: emails, hasData: values.some(Boolean), search: values.filter(Boolean).join(" ").toLowerCase() };
+    },
+
     getParticipantExplorerValues: function (participant) {
       var name = App.getParticipantName(participant), school = App.getParticipantSchool(participant), categories = App.getParticipantCategories(participant), category = categories.join(", "), item = App.getParticipantItem(participant), teacher = App.getParticipantTeacherName(participant) || App.getParticipantTeacherEmail(participant);
       var production = categories.concat([App.getParticipantCategoryDetail(participant), item, participant.schoolGroup]).filter(Boolean).join(" ").toLowerCase();
@@ -156,13 +214,59 @@
       el.innerHTML = stats.filter(function (item) { return Number(item[0]) > 0 || ["Total Participants", "Schools", "Categories"].includes(item[1]); }).map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
     },
 
-    getParticipantColumns: function (includeHidden) { var layouts = { default: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Year"], ["region", "Region"], ["attendance", "Attendance"], ["rehearsal", "Upcoming rehearsal"], ["status", "Status"], ["notes", "Notes"]], compact: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Year"], ["notes", "Notes"], ["status", "Status"]], production: [["name", "Name"], ["category", "Category"], ["item", "Item"], ["year", "Year"], ["schoolGroup", "Group"], ["teacher", "Teacher"], ["rehearsal", "Upcoming rehearsal"], ["attendance", "Attendance"], ["notes", "Notes"]] }; var columns = layouts[App.state.participantExplorerLayout] || layouts.default; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
-    renderParticipantTable: function (participants) { var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return; var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, pages = Math.max(1, Math.ceil(participants.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = participants.slice((page - 1) * size, page * size), columns = App.getParticipantColumns(); App.state.participantExplorerPage = page; App.state.participantExplorerPageSize = size; if (status) status.textContent = participants.length + " matching participants · page " + page + " of " + pages; el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable"><thead><tr>' + columns.map(function (column) { var sort = App.state.participantExplorerSort || {}; return '<th><button type="button" onclick="App.sortParticipantExplorer(\'' + column[0] + '\')">' + App.escapeHtml(column[1]) + (sort.key === column[0] ? (sort.direction === "asc" ? " ↑" : " ↓") : "") + '</button></th>'; }).join("") + '<th>Open</th></tr></thead><tbody>' + rows.map(function (participant, index) { var values = App.getParticipantExplorerValues(participant); return '<tr>' + columns.map(function (column) { return '<td data-label="' + App.escapeHtml(column[1]) + '">' + App.renderParticipantCell(participant, values, column[0]) + '</td>'; }).join("") + '<td data-label="Profile"><button class="participantOpenButton" type="button" onclick="App.openExplorerParticipant(' + ((page - 1) * size + index) + ')">Passport →</button></td></tr>'; }).join("") + '</tbody></table></div>' : App.emptyState("No participants match these filters", "Clear or adjust the active filters."); if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>'; App.state.participantExplorerCurrentRows = participants; },
+    renderParticipantGroupStats: function (groups) {
+      var el = document.getElementById("participantStats"); if (!el) return;
+      var schools = new Set(), categories = new Set(), students = 0;
+      groups.forEach(function (group) { if (group.school) schools.add(group.school); if (group.category) categories.add(group.category); students += App.parseParticipantCount(App.getGroupStudentCount(group)); });
+      el.innerHTML = [[groups.length, "School Groups"], [students, "Students represented"], [schools.size, "Schools"], [categories.size, "Categories"]].map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
+    },
+
+    getParticipantColumns: function (includeHidden) { var layouts = { default: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Year"], ["region", "Region"], ["notes", "Notes"]], compact: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Year"], ["notes", "Notes"]], production: [["name", "Name"], ["category", "Category"], ["item", "Item"], ["year", "Year"], ["schoolGroup", "Group"], ["teacher", "Teacher"], ["notes", "Notes"]] }; var columns = layouts[App.state.participantExplorerLayout] || layouts.default; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
+    renderParticipantTable: function (participants) { var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return; var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, pages = Math.max(1, Math.ceil(participants.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = participants.slice((page - 1) * size, page * size), columns = App.getParticipantColumns(); App.state.participantExplorerPage = page; App.state.participantExplorerPageSize = size; if (status) status.textContent = participants.length + " matching participants · page " + page + " of " + pages; el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable"><thead><tr>' + columns.map(function (column) { var sort = App.state.participantExplorerSort || {}; return '<th class="participantColumn participantColumn-' + column[0] + '"><button type="button" onclick="App.sortParticipantExplorer(\'' + column[0] + '\')">' + App.escapeHtml(column[1]) + (sort.key === column[0] ? (sort.direction === "asc" ? " ↑" : " ↓") : "") + '</button></th>'; }).join("") + '<th class="participantColumn participantColumn-open">Open</th></tr></thead><tbody>' + rows.map(function (participant, index) { var values = App.getParticipantExplorerValues(participant); return '<tr>' + columns.map(function (column) { return '<td class="participantColumn participantColumn-' + column[0] + '" data-label="' + App.escapeHtml(column[1]) + '">' + App.renderParticipantCell(participant, values, column[0]) + '</td>'; }).join("") + '<td class="participantColumn participantColumn-open" data-label="Profile"><button class="participantOpenButton" type="button" onclick="App.openExplorerParticipant(' + ((page - 1) * size + index) + ')">Passport →</button></td></tr>'; }).join("") + '</tbody></table></div>' : App.emptyState("No participants match these filters", "Clear or adjust the active filters."); if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>'; App.state.participantExplorerCurrentRows = participants; },
+    renderParticipantGroupTable: function (groups) {
+      var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return;
+      var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, pages = Math.max(1, Math.ceil(groups.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = groups.slice((page - 1) * size, page * size);
+      App.state.participantExplorerPage = page; App.state.participantExplorerCurrentGroups = groups;
+      if (status) status.textContent = groups.length + " school groups · page " + page + " of " + pages;
+      el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable participantGroupTable"><thead><tr><th>School</th><th>Group / Item</th><th>Category</th><th>Segment</th><th class="participantGroupColumn-students">Students</th><th>Teacher</th><th>Contact</th><th class="participantColumn-open">Open</th></tr></thead><tbody>' + rows.map(function (group, index) {
+        var values = App.getParticipantGroupValues(group), category = values.category ? '<span class="participantCategoryPills"><span class="categoryTone' + App.getParticipantCategoryTone(values.category) + '">' + App.escapeHtml(values.category) + '</span></span>' : '<span class="participantEmptyValue">—</span>';
+        return '<tr><td data-label="School"><strong>' + App.escapeHtml(values.school || "—") + '</strong></td><td data-label="Group / Item"><strong>' + App.escapeHtml(values.title) + '</strong>' + (values.item && values.item !== values.title ? '<small class="participantGroupItem">' + App.escapeHtml(values.item) + '</small>' : '') + '</td><td data-label="Category">' + category + '</td><td data-label="Segment">' + App.escapeHtml(values.segment || "—") + '</td><td class="participantGroupColumn-students" data-label="Students">' + App.escapeHtml(values.students) + '</td><td data-label="Teacher">' + App.escapeHtml(values.teachers || "—") + '</td><td data-label="Contact">' + App.escapeHtml(values.emails || "—") + '</td><td class="participantColumn-open" data-label="Profile"><button class="participantOpenButton" type="button" onclick="App.openExplorerGroup(' + ((page - 1) * size + index) + ')">Passport →</button></td></tr>';
+      }).join("") + '</tbody></table></div>' : App.emptyState("No school groups match this search", "Clear or adjust the search text.");
+      if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>';
+    },
     renderParticipantCell: function (participant, values, key) { if (key === "rehearsal") { var rehearsal = App.getParticipantNextRehearsal(participant); return '<span class="' + (rehearsal === "Not scheduled" ? "participantEmptyValue" : "") + '">' + App.escapeHtml(rehearsal) + '</span>'; } if (key === "name") return '<strong>' + App.escapeHtml(values.name) + '</strong>'; if (key === "category") return values.categories.length ? '<span class="participantCategoryPills">' + values.categories.map(function (category) { return '<button class="categoryTone' + App.getParticipantCategoryTone(category) + '" type="button" onclick="App.setParticipantExplorerFilter(\'category\',\'' + App.escapeJs(category) + '\')">' + App.escapeHtml(category) + '</button>'; }).join("") + '</span>' : '<span class="participantEmptyValue">—</span>'; var value = values[key] || ""; return '<span class="' + (!value ? "participantEmptyValue" : "") + '">' + App.escapeHtml(value || "—") + '</span>'; },
     getParticipantCategoryTone: function (category) { var hash = 0, text = String(category || "").toLowerCase(); for (var i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0; return Math.abs(hash) % 8; },
     openExplorerParticipant: function (index) { var participant = (App.state.participantExplorerCurrentRows || [])[index]; if (participant) App.openParticipant(participant); },
+    openExplorerGroup: function (index) { var group = (App.state.participantExplorerCurrentGroups || [])[index]; if (!group) return; App.openGroup(group); var panel = document.getElementById("participantProfilePanel"); if (panel) panel.hidden = false; },
     sortParticipantExplorer: function (key) { var sort = App.state.participantExplorerSort || {}; App.state.participantExplorerSort = { key: key, direction: sort.key === key && sort.direction === "asc" ? "desc" : "asc" }; App.renderParticipantExplorer(); },
     changeParticipantPage: function (delta) { App.state.participantExplorerPage = Math.max(1, (App.state.participantExplorerPage || 1) + delta); App.renderParticipantExplorer(); },
+    copyParticipantExplorerEmails: function () { if (App.state.participantExplorerMode === "groups") App.copyFilteredGroupTeacherEmails(); else App.copyFilteredParticipantFamilyEmails(); },
+    copyFilteredParticipantFamilyEmails: function () {
+      var emails = [], seen = {};
+      App.getFilteredParticipants().forEach(function (participant) {
+        [App.getParticipantStudentEmail(participant), App.getParticipantParentEmail(participant), App.getParticipantAdditionalParentEmail(participant)].forEach(function (value) {
+          String(value || "").split(/[;,\n]+/).forEach(function (email) {
+            var clean = email.trim(), key = clean.toLowerCase();
+            if (!clean || clean.indexOf("@") < 1 || seen[key]) return;
+            seen[key] = true;
+            emails.push(clean);
+          });
+        });
+      });
+      if (!emails.length) { App.notify("No family email addresses are available for the current participant results."); return; }
+      var text = emails.join("; ");
+      var copied = function () { App.notify(emails.length + " family email address" + (emails.length === 1 ? "" : "es") + " copied."); };
+      var fallback = function () { var input = document.createElement("textarea"); input.value = text; input.setAttribute("readonly", ""); input.style.position = "fixed"; input.style.opacity = "0"; document.body.appendChild(input); input.select(); document.execCommand("copy"); document.body.removeChild(input); copied(); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(copied).catch(fallback); else fallback();
+    },
+    copyFilteredGroupTeacherEmails: function () {
+      var emails = [], seen = {};
+      App.getFilteredParticipantGroups().forEach(function (group) { [group.teacherEmail, group.secondTeacherEmail].forEach(function (value) { String(value || "").split(/[;,\n]+/).forEach(function (email) { var clean = email.trim(), key = clean.toLowerCase(); if (!clean || clean.indexOf("@") < 1 || seen[key]) return; seen[key] = true; emails.push(clean); }); }); });
+      if (!emails.length) { App.notify("No teacher email addresses are available for the current school groups."); return; }
+      var text = emails.join("; "), copied = function () { App.notify(emails.length + " teacher email address" + (emails.length === 1 ? "" : "es") + " copied."); };
+      var fallback = function () { var input = document.createElement("textarea"); input.value = text; input.setAttribute("readonly", ""); input.style.position = "fixed"; input.style.opacity = "0"; document.body.appendChild(input); input.select(); document.execCommand("copy"); document.body.removeChild(input); copied(); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(copied).catch(fallback); else fallback();
+    },
     applyParticipantLayout: function (layout) { App.state.participantExplorerLayout = layout; localStorage.setItem("specParticipantLayout", layout); App.renderParticipantExplorer(); },
     toggleParticipantColumn: function (key, visible) { var hidden = App.state.participantHiddenColumns || []; hidden = hidden.filter(function (item) { return item !== key; }); if (!visible) hidden.push(key); App.state.participantHiddenColumns = hidden; localStorage.setItem("specParticipantHiddenColumns", JSON.stringify(hidden)); App.renderParticipantExplorer(); },
 
