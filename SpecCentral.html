@@ -9,6 +9,7 @@
 <body>
   <div class="appShell">
     <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Sidebar').getContent(); ?>
+    <button id="mobileNavScrim" class="mobileNavScrim" type="button" aria-label="Close navigation" onclick="App.closeMobileNavigation()"></button>
     <main class="appMain">
       <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/TopBar').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/Notifications').getContent(); ?>

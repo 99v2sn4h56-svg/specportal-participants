@@ -180,14 +180,31 @@
       restoreSidebarState: function () {
         var collapsed = App.safeLoadJson("specCentralSidebarCollapsed", false);
         document.body.classList.toggle("sidebarCollapsed", !!collapsed);
+        document.body.classList.remove("mobileSidebarOpen");
         App.state.operationsNavExpanded = App.safeLoadJson("specCentralOperationsNavExpanded", true);
         App.renderOperationsNavState();
       },
 
       toggleSidebar: function () {
+        if (window.matchMedia && window.matchMedia("(max-width: 1060px)").matches) {
+          var open = !document.body.classList.contains("mobileSidebarOpen");
+          document.body.classList.toggle("mobileSidebarOpen", open);
+          var toggle = document.querySelector(".topBarSidebarToggle");
+          if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+          if (open) setTimeout(function () { var first = document.querySelector(".appSidebar .navItem:not([hidden])"); if (first) first.focus(); }, 0);
+          return;
+        }
         var collapsed = !document.body.classList.contains("sidebarCollapsed");
         document.body.classList.toggle("sidebarCollapsed", collapsed);
         App.safeSaveJson("specCentralSidebarCollapsed", collapsed);
+      },
+
+      closeMobileNavigation: function (restoreFocus) {
+        var wasOpen = document.body.classList.contains("mobileSidebarOpen");
+        document.body.classList.remove("mobileSidebarOpen");
+        var toggle = document.querySelector(".topBarSidebarToggle");
+        if (toggle) toggle.setAttribute("aria-expanded", "false");
+        if (wasOpen && restoreFocus !== false && toggle) toggle.focus();
       },
 
       toggleOperationsNav: function () {
@@ -397,6 +414,7 @@
 
       navigate: function (page, options) {
         options = options || {};
+        App.closeMobileNavigation(false);
         if (page === "projectManagement") page = "operations";
         if (page === "participants" && !options.fromHistory && !options.context) {
           App.state.participantExplorerFilters = {};
@@ -1073,6 +1091,10 @@
       },
 
       renderCalendarPage: function () {
+        if (window.matchMedia && window.matchMedia("(max-width: 700px)").matches && !App.state.calendarMobileViewInitialised) {
+          App.state.calendarMobileViewInitialised = true;
+          if (App.state.calendarView === "month") App.state.calendarView = "agenda";
+        }
         if (!App.state.calendarData) {
           App.loadCalendarData();
           App.renderCalendarLoading();
@@ -1375,20 +1397,14 @@
 
       renderAttendanceLiveData: function () {
         var loading = document.getElementById("attendanceLoading");
-        var error = document.getElementById("attendanceError");
         var content = document.getElementById("attendanceLiveContent");
         var cards = document.getElementById("attendanceSummaryCards");
         var counts = document.getElementById("attendanceStatusCounts");
         var eventsList = document.getElementById("attendanceEventList");
-        if (!loading || !error || !content || !cards || !counts || !eventsList) return;
+        if (!loading || !content || !cards || !counts || !eventsList) return;
 
         var summary = App.state.attendanceSummary;
         loading.style.display = App.state.loading.attendanceSummary && !summary ? "block" : "none";
-        error.style.display = App.state.attendanceError ? "block" : "none";
-        error.innerHTML = App.state.attendanceError
-          ? '<strong>Attendance data is degraded</strong><br>' + App.escapeHtml(App.state.attendanceError) +
-            '<br><button class="quickLink compact" type="button" onclick="App.loadAttendanceData(true)">Retry</button>'
-          : "";
 
         if (!summary) {
           content.style.display = "none";

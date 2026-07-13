@@ -1836,4 +1836,180 @@
     @media (max-width:900px) { .dashboardBriefingHero, .dashboardPrimaryGrid, .dashboardSecondaryGrid, .timelineManagementGrid { grid-template-columns:1fr; } .participantExplorerBody { grid-template-columns:1fr; } .participantFilterPanel { position:static; max-height:none; } .participantDropdownFilters { grid-template-columns:repeat(3,minmax(130px,1fr)); } }
     @media (max-width:700px) { .operationsMetricGrid, .operationsEventGrid, .operationsDashboardGrid, .operationsFilterBar, .identitySummaryGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section, .operationsWide { grid-column:1/-1; } .pageBreadcrumb, .topBarStatus { display:none; } .workspaceTopRow { grid-template-columns:auto 1fr auto; padding:9px 14px; } .workspaceSearch { font-size:0; min-width:0; } .workspaceSearch::before { content:"Search workspace"; font-size:11px; } .workspaceContextRow { padding:10px 16px 12px; } .briefingList, .dashboardProjectGrid { grid-template-columns:1fr; } .participantExplorerActions { grid-template-columns:1fr 1fr; } .participantExplorerActions .participantSearch { grid-column:1/-1; } .participantDropdownFilters { grid-template-columns:repeat(2,minmax(130px,1fr)); } .productionOverviewGrid { grid-template-columns:1fr 1fr; } }
     @media (max-width:480px) { .operationsMetricGrid, .operationsEventGrid, .operationsFilterBar, .timelineEditorForm { grid-template-columns:1fr; } .timelineEditorForm label.span2 { grid-column:auto; } .dashboardBriefingHero { padding:18px; } .briefingIdentityRow { grid-template-columns:1fr; gap:3px; } .briefingIdentityRow strong { text-align:left; } .scheduleRow { grid-template-columns:58px minmax(0,1fr); } .dashboardTask { grid-template-columns:1fr; } .participantExplorerActions, .participantDropdownFilters, .productionOverviewGrid { grid-template-columns:1fr; } .participantExplorerActions .participantSearch { grid-column:auto; } }
+
+    /* Responsive application shell and touch design system. */
+    html, body { max-width:100%; overflow-x:hidden; }
+    button, a, input, select, textarea, summary { -webkit-tap-highlight-color:transparent; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible { outline:3px solid rgba(45,103,178,.28); outline-offset:2px; }
+    .mobileNavScrim { display:none; }
+
+    @media (max-width:1060px) {
+      .appShell, body.sidebarCollapsed .appShell { display:block; min-height:100vh; }
+      .appMain { width:100%; }
+      .appSidebar, body.sidebarCollapsed .appSidebar {
+        position:fixed; z-index:1003; inset:0 auto 0 0; width:min(330px,88vw); height:100dvh;
+        display:block; padding:18px; overflow-y:auto; overscroll-behavior:contain;
+        transform:translateX(-105%); transition:transform .22s ease; box-shadow:18px 0 50px rgba(6,29,61,.25);
+      }
+      body.mobileSidebarOpen .appSidebar { transform:translateX(0); }
+      .mobileNavScrim { position:fixed; z-index:1002; inset:0; width:100%; height:100%; border:0; background:rgba(6,29,61,.48); backdrop-filter:blur(3px); }
+      body.mobileSidebarOpen .mobileNavScrim { display:block; }
+      body.mobileSidebarOpen { overflow:hidden; }
+      .sidebarBrand { min-height:84px; margin-bottom:14px; }
+      .sidebarLogo, body.sidebarCollapsed .sidebarLogo { width:150px; height:78px; }
+      .sidebarNav { display:block; overflow:visible; }
+      .navSectionLabel { display:block!important; }
+      .navChildren { display:block!important; }
+      .navItem, body.sidebarCollapsed .navItem { width:100%; min-height:46px; display:flex; padding:11px 13px; margin-bottom:6px; }
+      .navItem span, body.sidebarCollapsed .navItem span { display:inline; }
+      .navGroupToggle b { display:inline; }
+      .topBar { position:sticky; top:0; z-index:50; }
+      .workspaceTopRow { grid-template-columns:44px minmax(0,1fr) auto; min-height:64px; padding:8px 14px; gap:9px; }
+      .topBarSidebarToggle { width:44px; height:44px; }
+      .workspaceSearch { min-height:44px; }
+      .workspaceUserArea { gap:7px; }
+      .workspaceWelcome { display:none; }
+      .viewAsControl { display:grid!important; min-width:120px; }
+      .viewAsControl select { width:100%; max-width:150px; min-height:40px; }
+      .workspaceContextRow { padding:10px 16px 12px; }
+      .pageOutlet { padding:18px; }
+      .grid { gap:12px; }
+      .panel { padding:15px; }
+      .administrationDrawer, .experienceDrawer, .participantProfileDrawer, .eventWorkspaceDrawer, .timelineEditorDrawer, .myProfileDrawer { width:min(680px,100%); max-width:100%; }
+      .drawerActions { position:sticky; bottom:-22px; padding:12px 0 max(12px,env(safe-area-inset-bottom)); background:linear-gradient(180deg,rgba(255,255,255,.82),#fff 24%); }
+      .eventManagerFilters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .eventManagerFilters > :first-child { grid-column:1/-1; }
+      .eventAdvancedFilters > div { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .calendarRange7 { grid-template-columns:repeat(7,minmax(190px,1fr)); max-width:100%; overflow-x:auto; scroll-snap-type:x proximity; }
+      .calendarRangeDay { scroll-snap-align:start; }
+      .tableWrap, .adminTableWrap, .ganttGrid { max-width:100%; overflow-x:auto; overscroll-behavior-inline:contain; }
+    }
+
+    @media (max-width:700px) {
+      body { font-size:14px; }
+      .workspaceTopRow { display:grid; grid-template-columns:44px minmax(0,1fr) auto; }
+      .workspaceSearch { font-size:0; padding:0 12px; }
+      .workspaceSearch::before { content:"Search"; font-size:12px; }
+      .workspaceUserArea { min-width:0; }
+      .workspaceUserArea { display:grid; grid-template-columns:40px 40px; align-items:center; }
+      .topBarUserAvatar { grid-column:1; grid-row:1; }
+      .notificationTrigger { grid-column:2; grid-row:1; }
+      .viewAsControl { min-width:0; max-width:128px; }
+      .viewAsControl { grid-column:1/-1; grid-row:2; }
+      .viewAsControl span { font-size:7px; }
+      .viewAsControl select { max-width:128px; padding:6px; font-size:9px; }
+      .topBarUserAvatar { width:40px; height:40px; flex-basis:40px; }
+      .notificationTrigger { width:40px; height:40px; }
+      .workspaceContextRow { align-items:flex-start; padding:9px 14px 11px; }
+      .workspaceContextRow .pageTitle { font-size:20px; }
+      .pageDescription { margin-top:4px; font-size:11px; }
+      .pageOutlet { padding:12px; }
+      .panel { padding:13px; border-radius:16px; }
+      .quickLink, .quickLink.compact, .filterSelect, .participantSearch, input, select, textarea { min-height:44px; }
+      .quickLink, .quickLink.compact { display:inline-flex; align-items:center; justify-content:center; padding:10px 12px; }
+      .filterRow, .toolbarActions, .viewTabs { width:100%; }
+      .filterRow > *, .toolbarActions > *, .viewTabs > * { flex:1 1 140px; }
+      .calendarToolbar { align-items:flex-start; flex-direction:column; }
+      .calendarToolbar .toolbarActions { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+      .calendarToolbar .quickLink { min-width:0; padding:9px 5px; font-size:10px; }
+      .calendarMonth { grid-template-columns:1fr; }
+      .calendarDay { min-height:auto; }
+      .calendarDay.muted:empty { display:none; }
+      .dateList { gap:8px; }
+      .dateItem { min-height:56px; }
+      .dashboardCommandCentre { gap:12px; }
+      .dashboardBriefingHero { gap:14px; padding:17px; }
+      .dashboardBriefingHero h2 { font-size:24px; }
+      .dashboardCountdown strong { font-size:32px; }
+      .dashboardPanelHeading { align-items:flex-start; gap:8px; }
+      .dashboardPanelHeading .quickLink { flex:0 0 auto; }
+      .dashboardPrimaryGrid { display:flex; flex-direction:column; }
+      .dashboardSchedulePanel { order:1; }
+      .dashboardTasksPanel { order:2; }
+      .dashboardSecondaryGrid { display:flex; flex-direction:column; }
+      .productionOverviewGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .productionTile { min-width:0; min-height:76px; padding:10px; }
+      .participantExplorer { gap:10px; }
+      .participantExplorerHeader { padding:12px; }
+      .participantExplorerActions, .participantDropdownFilters { grid-template-columns:1fr; }
+      .participantExplorerActions .participantSearch { grid-column:auto; }
+      .participantQuickFilters { flex-wrap:nowrap; margin-inline:-12px; padding:0 12px 5px; overflow-x:auto; scrollbar-width:none; }
+      .participantQuickFilters::-webkit-scrollbar { display:none; }
+      .filterChip { min-height:40px; flex:0 0 auto; padding:8px 12px; }
+      .participantFilterField, .participantActiveFilters button, .participantCategoryPills button, .participantOpenButton,
+      .productionTileCount small, .taskPriority, .operationsMetric small, .eventDateFilter, .eventFilterChips b,
+      .eventWarningBadge, .workspaceMemoryCard span { font-size:10px; }
+      .participantExplorerStats { grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+      .participantExplorerStats article { padding:10px; }
+      .participantExplorerStats strong { font-size:18px; }
+      .participantTablePanel { padding:10px; }
+      .participantTableToolbar { align-items:stretch; flex-direction:column; }
+      .participantActiveFilters { justify-content:flex-start; }
+      .participantTableWrap { overflow:visible; border:0; }
+      .participantExplorerTable, .participantExplorerTable tbody { display:block; width:100%; }
+      .participantExplorerTable thead { display:none; }
+      .participantExplorerTable tr { display:block; margin-bottom:10px; padding:12px; border:1px solid var(--border); border-radius:15px; background:#fff!important; box-shadow:0 5px 15px rgba(6,29,61,.05); }
+      .participantExplorerTable td { width:100%; max-width:none; min-height:36px; display:grid; grid-template-columns:105px minmax(0,1fr); align-items:start; gap:9px; overflow:visible; padding:7px 0; border-bottom:1px solid #edf1f6; white-space:normal; overflow-wrap:anywhere; }
+      .participantExplorerTable td::before { content:attr(data-label); color:var(--muted); font-size:9px; font-weight:800; text-transform:uppercase; }
+      .participantExplorerTable td:last-child { border-bottom:0; }
+      .participantOpenButton { min-height:42px; padding:9px 12px; }
+      .participantPagination { position:sticky; bottom:0; z-index:2; margin:0 -10px -10px; padding:10px; background:rgba(255,255,255,.94); backdrop-filter:blur(8px); }
+      .participantPagination button { min-height:42px; }
+      .scProfileHero { padding:20px 16px; }
+      .scProfileHero h2 { font-size:23px; }
+      .scProfileAvatar { width:92px; height:92px; }
+      .scProfileStats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .scProfileBody { padding:12px; }
+      .scProfileSection { padding:12px; }
+      .operationsMetricGrid, .operationsEventGrid, .operationsDashboardGrid, .operationsFilterBar, .identitySummaryGrid, .timelineManagementGrid { grid-template-columns:1fr; }
+      .operationsDashboardGrid > section, .operationsWide { grid-column:auto; }
+      .operationsEventCard, .eventManagerCard { grid-template-columns:58px minmax(0,1fr); }
+      .operationsEventCard > :last-child, .eventManagerCard > :last-child { grid-column:2; }
+      .eventManagerHeader, .operationsWorkspaceHeader, .operationsTitleRow { align-items:flex-start; flex-direction:column; }
+      .eventManagerFilters, .eventAdvancedFilters > div, .timelineEditorForm, .eventWorkspaceSummary { grid-template-columns:1fr; }
+      .eventManagerFilters > :first-child, .timelineEditorForm label.span2 { grid-column:auto; }
+      .eventWorkspaceTabs, .administrationTabs, .operationsTabs { margin-inline:-13px; padding-inline:13px; overflow-x:auto; scrollbar-width:none; }
+      .eventWorkspaceTabs::-webkit-scrollbar, .administrationTabs::-webkit-scrollbar, .operationsTabs::-webkit-scrollbar { display:none; }
+      .eventWorkspaceTabs button, .administrationTabs button, .operationsTabs button { min-height:42px; flex:0 0 auto; }
+      .eventWorkspaceDrawer .adminTable thead { display:none; }
+      .eventWorkspaceDrawer .adminTable, .eventWorkspaceDrawer .adminTable tbody, .eventWorkspaceDrawer .adminTable tr, .eventWorkspaceDrawer .adminTable td { display:block; width:100%; }
+      .eventWorkspaceDrawer .adminTable tr { margin-bottom:9px; padding:10px; border:1px solid var(--border); border-radius:13px; }
+      .eventWorkspaceDrawer .adminTable td { max-width:none; padding:5px 0; border:0; white-space:normal; overflow-wrap:anywhere; }
+      .administrationSummary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .administrationFilters { grid-template-columns:1fr; }
+      .adminTableWrap, .permissionMatrix, .tableWrap { max-width:calc(100vw - 50px); }
+      .administrationDrawer, .experienceDrawer, .participantProfileDrawer, .eventWorkspaceDrawer, .timelineEditorDrawer, .myProfileDrawer { height:100dvh; padding:16px; border-left:0; }
+      .commandCentre { align-items:end; padding:0; }
+      .commandPanel { width:100%; max-height:92dvh; border-radius:22px 22px 0 0; padding:15px; }
+      .commandQuickActions { grid-template-columns:1fr 1fr; }
+      .attendanceEmbed { padding:10px; min-height:0; }
+      .attendanceHero { align-items:stretch; flex-direction:column; }
+      .attendanceHeaderActions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .attendanceStatusChip { grid-column:1/-1; justify-self:start; }
+      .attendanceEmbed iframe { height:72dvh; min-height:520px; }
+      .attendanceSummaryGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .attendanceDataGrid .span4, .attendanceDataGrid .span8 { grid-column:1/-1; }
+      .attendanceOperationsPanel { height:auto; max-height:460px; }
+      .attendanceEventCard { align-items:stretch; flex-direction:column; }
+      .attendanceEventActions { justify-content:flex-start; }
+      .drawerHeader > button, .participantProfileClose { min-width:44px; min-height:44px; }
+    }
+
+    @media (max-width:430px) {
+      .workspaceTopRow { grid-template-columns:44px minmax(0,1fr) auto; padding-inline:9px; }
+      .workspaceSearch { min-width:44px; width:44px; justify-self:start; }
+      .workspaceSearch::before { content:"⌕"; font-size:20px; }
+      .viewAsControl { max-width:108px; }
+      .viewAsControl select { max-width:108px; }
+      .pageOutlet { padding:9px; }
+      .productionOverviewGrid, .participantExplorerStats, .attendanceSummaryGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .dashboardPanelHeading { flex-direction:column; }
+      .dashboardPanelHeading .quickLink { width:100%; }
+      .calendarToolbar .toolbarActions { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .participantExplorerTable td { grid-template-columns:88px minmax(0,1fr); }
+      .commandQuickActions, .attendanceHeaderActions, .scProfileStats, .administrationSummary { grid-template-columns:1fr; }
+      .attendanceStatusChip { grid-column:auto; }
+      .myProfileSummary { grid-template-columns:58px minmax(0,1fr); }
+      .myProfileAvatar { width:58px; height:58px; }
+    }
   </style>
