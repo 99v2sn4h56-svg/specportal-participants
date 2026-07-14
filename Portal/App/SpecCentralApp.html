@@ -84,7 +84,8 @@
         dashboardRenderTimer: null,
         operationsNavExpanded: true,
         dashboardProfile: "operations",
-        applicationVersion: "5",
+        applicationVersion: "11",
+        selectedFormDefinitionId: "",
         selectedParticipant: null,
         selectedSchool: null,
         selectedGroup: null,
@@ -138,6 +139,12 @@
           title: "Staff",
           description: "Staff Directory, contacts, production roles and operational relationships.",
           template: "page-staff",
+          permission: "Operations.View"
+        },
+        formBuilder: {
+          title: "Forms",
+          description: "Create, publish and review reusable forms and responses.",
+          template: "page-form-builder",
           permission: "Operations.View"
         },
         operations: {
@@ -490,6 +497,7 @@
         if (page === "administration") App.renderAdministrationPage();
         if (page === "mediaTimeline") App.renderMediaTimelinePage();
         if (page === "staff") App.renderStaffPage();
+        if (page === "formBuilder" && App.renderFormBuilderPage) App.renderFormBuilderPage();
         if (!options.fromBrowser || page !== requestedPage) App.updateBrowserRoute(!!options.replace || page !== requestedPage);
         App.persistModuleState();
         App.restoreCurrentScrollPosition();

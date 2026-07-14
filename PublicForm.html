@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{font-family:Poppins,Arial,sans-serif;color:#13233a;background:#edf3fb}*{box-sizing:border-box}body{margin:0}.publicHeader{background:#0d315d;color:#fff;padding:22px max(20px,calc((100vw - 860px)/2));border-bottom:5px solid #ffd61a}.publicHeader b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.13em;color:#ffd61a}.publicHeader strong{font-size:23px}.formPage{max-width:860px;margin:28px auto;padding:0 18px 70px}.formHero,.question,.submitPanel,.message{background:#fff;border:1px solid #dce5f1;border-radius:22px;padding:24px;box-shadow:0 8px 28px rgba(14,49,93,.07);margin-bottom:16px}.formHero h1{margin:0 0 8px;font-size:32px}.formHero p{color:#65748b;margin:0}.identity{margin-top:18px;padding:13px 16px;background:#eef7ff;border-radius:14px;font-size:13px}.question>label,.question>fieldset>legend{display:block;font-weight:700;margin-bottom:8px}.question small{display:block;color:#6d7a8f;margin-bottom:12px}.question input:not([type=checkbox]):not([type=radio]),.question select,.question textarea{width:100%;padding:13px 14px;border:1px solid #aebbd0;border-radius:13px;font:inherit;background:#fff}.question select[multiple]{min-height:120px}.options{display:grid;gap:8px}.options label{display:flex;align-items:center;gap:9px}.required{color:#c7192d}.textSection{border-left:6px solid #2369bd;background:#f8fbff}.textSection h2{margin:0 0 5px}.tableWrap{overflow:auto}.tableWrap table{border-collapse:collapse;width:100%}.tableWrap th,.tableWrap td{border:1px solid #dce5f1;padding:8px}.signature{border:2px dashed #9aabc3;border-radius:14px;width:100%;height:150px;touch-action:none;background:#fff}.signatureActions{margin-top:8px}.rankingScale{display:grid;gap:9px}.rankingScale>strong{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#63728a}.rankingScale>strong:last-child{text-align:right}.rankingTiles{display:grid;gap:9px}.rankingTiles button{display:flex;align-items:center;gap:12px;width:100%;border:1px solid #c4d1e3;border-radius:14px;background:#fff;padding:13px 15px;color:#13233a;font:700 14px Poppins;text-align:left;cursor:grab;box-shadow:0 4px 12px rgba(13,49,93,.06)}.rankingTiles button:hover{border-color:#2369bd;background:#f5f9ff}.rankingTiles button.dragging{opacity:.45;cursor:grabbing}.rankingTiles button span{color:#8b9bb1;letter-spacing:-3px}.submitPanel{display:flex;align-items:center;justify-content:space-between;gap:16px}.submitButton,.secondary{border:0;border-radius:999px;padding:13px 22px;font:700 14px Poppins;cursor:pointer}.submitButton{background:#0d315d;color:#fff}.secondary{background:#eaf1fa;color:#0d315d}.message{border-left:6px solid #2d8a55}.message.error{border-color:#c7192d}.hidden{display:none!important}@media(max-width:600px){.formHero h1{font-size:25px}.submitPanel{align-items:stretch;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <header class="publicHeader"><b>SpecCentral form</b><strong>The Arts Unit</strong></header>
+  <main id="formPage" class="formPage"></main>
+  <script>
+    const FORM = <?!= formJson ?>;
+    const escapeHtml = value => String(value == null ? "" : value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+    const uploadTypes = ["file_upload","photo_upload","video_upload"];
+    const page = document.getElementById("formPage");
+
+    function render() {
+      if (!FORM) { page.innerHTML = '<section class="message error"><h2>Form unavailable</h2><p>This form is not published or the link is no longer active.</p></section>'; return; }
+      const profile = FORM.user && FORM.user.profile || {};
+      const identity = FORM.user && FORM.user.email ? '<div class="identity">Signed in as <strong>' + escapeHtml(FORM.user.email) + '</strong>' + (profile.type ? ' · matched to ' + escapeHtml(profile.name) + ' (' + escapeHtml(profile.type) + ')' : '') + '</div>' : '';
+      page.innerHTML = '<section class="formHero"><h1>' + escapeHtml(FORM.name) + '</h1><p>' + escapeHtml(FORM.description) + '</p>' + identity + '</section><form id="responseForm">' + (FORM.questions || []).map(renderQuestion).join("") + '<section class="submitPanel"><span>Your response will be saved securely to the form owner’s selected Drive location.</span><button id="submitResponse" class="submitButton" type="submit">Submit response</button></section></form><section id="responseMessage" class="message hidden"></section>';
+      document.querySelectorAll("canvas.signature").forEach(bindSignature);
+      bindRankingLists();
+      document.getElementById("responseForm").addEventListener("submit", submit);
+    }
+
+    function renderQuestion(question, index) {
+      if (question.type === "text_section") return '<section class="question textSection"><h2>' + escapeHtml(question.label) + '</h2><p>' + escapeHtml(question.help) + '</p></section>';
+      const required = question.required ? ' required' : '';
+      const marker = question.required ? ' <span class="required">*</span>' : '';
+      let control = '';
+      if (question.type === "dropdown_single" || question.type === "conditional_section") control = '<select data-answer="' + escapeHtml(question.id) + '"' + required + '><option value="">Select…</option>' + (question.options || []).map(option => '<option>' + escapeHtml(option) + '</option>').join("") + '</select>';
+      else if (question.type === "dropdown_multi") control = '<select data-answer="' + escapeHtml(question.id) + '" multiple' + required + '>' + (question.options || []).map(option => '<option>' + escapeHtml(option) + '</option>').join("") + '</select>';
+      else if (question.type === "single_selection" || question.type === "checkbox") control = '<div class="options">' + (question.options || []).map(option => '<label><input data-answer="' + escapeHtml(question.id) + '" type="' + (question.type === "checkbox" ? "checkbox" : "radio") + '" name="answer-' + escapeHtml(question.id) + '" value="' + escapeHtml(option) + '"' + required + '> ' + escapeHtml(option) + '</label>').join("") + '</div>';
+      else if (question.type === "number") control = '<input data-answer="' + escapeHtml(question.id) + '" type="number" min="' + escapeHtml(question.min) + '" max="' + escapeHtml(question.max) + '" step="' + escapeHtml(question.step || 1) + '"' + required + '>';
+      else if (question.type === "large_text") control = '<textarea data-answer="' + escapeHtml(question.id) + '" rows="5"' + required + '></textarea>';
+      else if (question.type === "ranking") control = '<div class="rankingScale"><strong>' + escapeHtml(question.rankingTopLabel || "Highest preference") + '</strong><div class="rankingTiles" data-ranking-answer="' + escapeHtml(question.id) + '">' + (question.options || []).map(option => '<button type="button" draggable="true" data-ranking-value="' + escapeHtml(option) + '"><span>⋮⋮</span>' + escapeHtml(option) + '</button>').join("") + '</div><strong>' + escapeHtml(question.rankingBottomLabel || "Lowest preference") + '</strong></div>';
+      else if (question.type === "drive_link") control = '<input data-answer="' + escapeHtml(question.id) + '" type="url" placeholder="https://drive.google.com/…"' + required + '>';
+      else if (question.type === "signature") control = '<canvas class="signature" data-answer="' + escapeHtml(question.id) + '" width="760" height="150"></canvas><div class="signatureActions"><button class="secondary" type="button" onclick="clearSignature(this)">Clear signature</button></div>';
+      else if (question.type === "table") control = renderTable(question);
+      else if (uploadTypes.includes(question.type)) control = '<input data-file="' + escapeHtml(question.id) + '" type="file" ' + (question.type === "photo_upload" ? 'accept="image/*"' : question.type === "video_upload" ? 'accept="video/*"' : '') + required + '><small>Maximum ' + escapeHtml(question.maxSize || 25) + ' MB · filename: ' + escapeHtml(question.filePrefix || "original name") + '</small>';
+      else control = '<input data-answer="' + escapeHtml(question.id) + '"' + required + '>';
+      return '<section class="question" data-question="' + escapeHtml(question.id) + '"><label>' + (index + 1) + '. ' + escapeHtml(question.label) + marker + '</label><small>' + escapeHtml(question.help || "") + '</small>' + control + '</section>';
+    }
+
+    function renderTable(question) {
+      const rows = String(question.rows || "").split("\n").filter(Boolean), columns = String(question.columns || "").split("\n").filter(Boolean);
+      return '<div class="tableWrap"><table data-table-answer="' + escapeHtml(question.id) + '"><thead><tr><th></th>' + columns.map(column => '<th>' + escapeHtml(column) + '</th>').join("") + '</tr></thead><tbody>' + rows.map((row, r) => '<tr><th>' + escapeHtml(row) + '</th>' + columns.map((column, c) => '<td><input data-cell="' + r + ':' + c + '"></td>').join("") + '</tr>').join("") + '</tbody></table></div>';
+    }
+
+    function bindSignature(canvas) {
+      const ctx = canvas.getContext("2d"); ctx.lineWidth = 2; ctx.lineCap = "round"; let active = false;
+      const point = event => { const rect = canvas.getBoundingClientRect(), source = event.touches ? event.touches[0] : event; return {x:(source.clientX-rect.left)*(canvas.width/rect.width),y:(source.clientY-rect.top)*(canvas.height/rect.height)}; };
+      const start = event => { active = true; const p = point(event); ctx.beginPath(); ctx.moveTo(p.x,p.y); event.preventDefault(); };
+      const move = event => { if(!active)return; const p=point(event);ctx.lineTo(p.x,p.y);ctx.stroke();canvas.dataset.signed="1";event.preventDefault(); };
+      canvas.addEventListener("mousedown",start);canvas.addEventListener("mousemove",move);window.addEventListener("mouseup",()=>active=false);canvas.addEventListener("touchstart",start,{passive:false});canvas.addEventListener("touchmove",move,{passive:false});canvas.addEventListener("touchend",()=>active=false);
+    }
+    function clearSignature(button){const canvas=button.closest(".question").querySelector("canvas");canvas.getContext("2d").clearRect(0,0,canvas.width,canvas.height);delete canvas.dataset.signed;}
+    function bindRankingLists(){document.querySelectorAll('[data-ranking-answer]').forEach(list=>{let dragging=null;list.querySelectorAll('[draggable="true"]').forEach(tile=>{tile.addEventListener('dragstart',()=>{dragging=tile;tile.classList.add('dragging')});tile.addEventListener('dragend',()=>{tile.classList.remove('dragging');dragging=null})});list.addEventListener('dragover',event=>{event.preventDefault();if(!dragging)return;const target=event.target.closest('[draggable="true"]');if(!target||target===dragging)return;const rect=target.getBoundingClientRect();list.insertBefore(dragging,event.clientY<rect.top+rect.height/2?target:target.nextSibling)})})}
+
+    async function submit(event) {
+      event.preventDefault(); const button=document.getElementById("submitResponse"), message=document.getElementById("responseMessage"); button.disabled=true;button.textContent="Saving…";
+      try {
+        const answers = collectAnswers();
+        const files = await collectFiles();
+        google.script.run.withSuccessHandler(result => { document.getElementById("responseForm").classList.add("hidden");message.className="message";message.innerHTML='<h2>Response received</h2><p>'+escapeHtml(result.message)+'</p><small>Reference: '+escapeHtml(result.responseId)+'</small>';window.scrollTo({top:0,behavior:"smooth"}); }).withFailureHandler(error => {button.disabled=false;button.textContent="Submit response";message.className="message error";message.innerHTML='<h2>Could not submit</h2><p>'+escapeHtml(error.message||error)+'</p>';message.scrollIntoView({behavior:"smooth"});}).portalSubmitFormResponse({formId:FORM.id,answers,files,parentResponseId:FORM.workflowContext&&FORM.workflowContext.parentResponseId||"",workflowStepId:FORM.workflowContext&&FORM.workflowContext.workflowStepId||""});
+      } catch(error) {button.disabled=false;button.textContent="Submit response";message.className="message error";message.innerHTML='<h2>Could not submit</h2><p>'+escapeHtml(error.message||error)+'</p>';}
+    }
+
+    function collectAnswers(){const answers={};document.querySelectorAll("[data-answer]").forEach(input=>{const id=input.dataset.answer;if(input.tagName==="CANVAS"){answers[id]=input.dataset.signed?"Signature supplied":"";}else if(input.type==="checkbox"){answers[id]=answers[id]||[];if(input.checked)answers[id].push(input.value);}else if(input.type==="radio"){if(input.checked)answers[id]=input.value;}else if(input.multiple){answers[id]=Array.from(input.selectedOptions).map(option=>option.value);}else answers[id]=input.value;});document.querySelectorAll("[data-ranking-answer]").forEach(list=>{answers[list.dataset.rankingAnswer]=Array.from(list.querySelectorAll('[data-ranking-value]')).map(tile=>tile.dataset.rankingValue)});document.querySelectorAll("[data-table-answer]").forEach(table=>{const value={};table.querySelectorAll("[data-cell]").forEach(cell=>value[cell.dataset.cell]=cell.value);answers[table.dataset.tableAnswer]=value;});return answers;}
+    async function collectFiles(){const output=[];for(const input of document.querySelectorAll("[data-file]")){if(!input.files[0])continue;const question=(FORM.questions||[]).find(item=>item.id===input.dataset.file);const file=input.files[0],max=Number(question.maxSize||25)*1024*1024;if(file.size>max)throw new Error(question.label+" exceeds the "+question.maxSize+" MB limit.");const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});output.push({questionId:question.id,name:file.name,mimeType:file.type,data});}document.querySelectorAll("canvas.signature[data-signed='1']").forEach(canvas=>output.push({questionId:canvas.dataset.answer,name:"signature.png",mimeType:"image/png",data:canvas.toDataURL("image/png")}));return output;}
+    render();
+  </script>
+</body>
+</html>

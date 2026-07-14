@@ -16,6 +16,13 @@
 
     <div class="navSectionLabel" data-permission="operations.view">Management</div>
     <button class="navItem" type="button" title="Staff" data-icon="S" data-nav-page="staff" data-permission="Operations.View" onclick="App.navigate('staff')"><span>Staff</span></button>
+    <div class="navGroup" data-permission="Operations.View">
+      <button class="navItem navGroupToggle" type="button" title="Forms" data-icon="F" data-nav-page="formBuilder" onclick="App.navigate('formBuilder')"><span>Forms</span><b>⌄</b></button>
+      <div class="navChildren formsNavChildren">
+        <button type="button" onclick="App.navigate('formBuilder');setTimeout(function(){App.showFormsDashboard();},0)">Forms dashboard</button>
+        <button type="button" onclick="App.navigate('formBuilder');setTimeout(function(){App.openFormsResponses();},0)">Responses</button>
+      </div>
+    </div>
     <div class="navGroup" data-permission="operations.view">
       <button class="navItem navGroupToggle" type="button" title="Operations" data-icon="O" data-nav-page="operations" onclick="App.toggleOperationsNav()"><span>Operations</span><b>⌄</b></button>
       <div id="operationsNavChildren" class="navChildren">

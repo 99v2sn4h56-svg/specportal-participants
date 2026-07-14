@@ -19,6 +19,18 @@ function openSpecPortalHome() {
 
 function doGet(e) {
   const app = String((e && e.parameter && e.parameter.app) || "central").toLowerCase();
+  const formId = String((e && e.parameter && e.parameter.form) || "").trim();
+
+  if (formId) {
+    const template = HtmlService.createTemplateFromFile("PublicForm");
+    template.formJson = JSON.stringify(FormResponseService.getPublicDefinition(formId, {
+      parentResponseId: String((e && e.parameter && e.parameter.parentResponse) || ""),
+      workflowStepId: String((e && e.parameter && e.parameter.workflowStep) || "")
+    }));
+    return template.evaluate()
+      .setTitle("SpecCentral form")
+      .addMetaTag("viewport", "width=device-width, initial-scale=1");
+  }
 
   if (app === "mobile") {
     return openMobileSearchWebApp();
@@ -29,6 +41,40 @@ function doGet(e) {
     .evaluate()
     .setTitle("Spec Central")
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
+}
+
+function portalListFormDefinitions() {
+  requirePortalCapability_("Operations.View");
+  return FormResponseService.listDefinitions();
+}
+
+function portalGetFormsWorkspaceData(formId) {
+  requirePortalCapability_("Operations.View");
+  return FormResponseService.getWorkspaceData(String(formId || ""));
+}
+
+function portalSetFormStatus(formId, status) {
+  requirePortalCapability_("Operations.View");
+  return FormResponseService.setStatus(formId, status);
+}
+
+function portalSaveFormDefinition(form) {
+  requirePortalCapability_("Operations.View");
+  return FormResponseService.saveDefinition(form || {});
+}
+
+function portalPublishFormDefinition(form) {
+  requirePortalCapability_("Operations.View");
+  return FormResponseService.publishDefinition(form || {});
+}
+
+function portalSubmitFormResponse(request) {
+  return FormResponseService.submitResponse(request || {});
+}
+
+function portalGetProfileFormResponses(type, id, email) {
+  requirePortalCapability_("Participants.View");
+  return FormResponseService.responsesForProfile(type, id, email);
 }
 
 function openSpecPortalOnOpen_() {
@@ -371,11 +417,14 @@ function portalGetStaffProfile(staffId) {
   const safeId = String(staffId || "").trim();
   if (!safeId || safeId.length > 180) throw new Error("A valid Staff ID is required.");
   const epoch = CacheService.getScriptCache().get("SC_STAFF_EPOCH") || "0";
-  return PerformanceCacheService.getOrLoadUser(
+  const result = PerformanceCacheService.getOrLoadUser(
     PerformanceCacheService.userProjectionKey(`staff-profile:${epoch}:${safeId}`, user),
     2 * 60,
     () => StaffDirectoryService.getProfile(safeId)
   );
+  const profile = result && result.profile || {};
+  profile.formResponses = FormResponseService.responsesForProfile("staff", profile.id || profile.staffId || safeId, profile.email || "");
+  return result;
 }
 
 function portalGetRehearsals() {
