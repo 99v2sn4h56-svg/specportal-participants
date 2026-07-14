@@ -1,16 +1,17 @@
 <template id="page-participants">
   <div class="participantExplorer">
     <section class="panel participantExplorerHeader">
-      <div class="participantModeToggle" role="tablist" aria-label="Participant data type">
-        <button id="participantModeIndividuals" type="button" role="tab" onclick="App.setParticipantExplorerMode('individuals')">Individuals</button>
-        <button id="participantModeGroups" type="button" role="tab" onclick="App.setParticipantExplorerMode('groups')">School Groups</button>
-      </div>
-      <div class="participantExplorerActions">
-        <select id="participantLayout" class="filterSelect" onchange="App.applyParticipantLayout(this.value)" aria-label="Table layout"><option value="default">Default columns</option><option value="compact">Compact columns</option><option value="production">Production columns</option></select>
+      <div class="participantExplorerTopRow">
+        <div class="participantModeToggle" role="tablist" aria-label="Participant data type">
+          <button id="participantModeIndividuals" type="button" role="tab" onclick="App.setParticipantExplorerMode('individuals')">Individuals</button>
+          <button id="participantModeGroups" type="button" role="tab" onclick="App.setParticipantExplorerMode('groups')">School Groups</button>
+        </div>
         <button id="participantMobileFilterToggle" class="quickLink compact participantMobileFilterToggle" type="button" aria-expanded="false" onclick="App.toggleParticipantMobileFilters()">Filters</button>
       </div>
-      <div id="participantQuickFilters" class="participantQuickFilters"></div>
-      <div id="participantDropdownFilters" class="participantDropdownFilters"></div>
+      <div class="participantFilterControls">
+        <div id="participantQuickFilters" class="participantQuickFilters"></div>
+        <div id="participantDropdownFilters" class="participantDropdownFilters"></div>
+      </div>
     </section>
 
     <div id="participantStats" class="participantExplorerStats" aria-live="polite"></div>
@@ -18,8 +19,10 @@
     <div class="participantExplorerBody">
       <section class="panel participantTablePanel">
         <div class="participantTableToolbar"><div id="participantStatus" class="status">Loading participant data…</div><div class="participantTableActions"><div id="participantActiveFilters" class="participantActiveFilters"></div></div></div>
-        <div class="participantBulkActions"><button class="quickLink compact" type="button" onclick="App.exportParticipantExplorer()">Export all</button><button id="participantEmailAll" class="quickLink compact" type="button" onclick="App.copyParticipantExplorerAllEmails()">Email all families</button></div>
-        <input id="participantSearch" class="participantSearch participantTableSearch" type="search" placeholder="Search name, school, item, teacher, ID, email or group…" autocomplete="off" oninput="App.queueParticipantExplorer()">
+        <div class="participantSearchRow">
+          <input id="participantSearch" class="participantSearch participantTableSearch" type="search" placeholder="Search name, school, item, teacher, ID, email or group…" autocomplete="off" oninput="App.queueParticipantExplorer()">
+          <div class="participantBulkActions"><button class="quickLink compact" type="button" onclick="App.exportParticipantExplorer()">Export all</button><button id="participantEmailAll" class="quickLink compact" type="button" onclick="App.copyParticipantExplorerAllEmails()">Email all families</button></div>
+        </div>
         <div id="participantResults" class="participantDatabase"></div>
         <div id="participantPagination" class="participantPagination"></div>
       </section>
@@ -70,14 +73,13 @@
         App.state.participantExplorerFilters = App.state.participantExplorerFilters || {};
         App.state.participantExplorerPage = App.state.participantExplorerPage || 1;
         App.state.participantExplorerSort = App.state.participantExplorerSort || { key: "name", direction: "asc" };
-        App.state.participantExplorerLayout = localStorage.getItem("specParticipantLayout") || "default";
+        App.state.participantExplorerLayout = "default";
         App.state.participantExplorerMode = localStorage.getItem("specParticipantExplorerMode") || "individuals";
         try { App.state.participantHiddenColumns = JSON.parse(localStorage.getItem("specParticipantHiddenColumns") || "[]"); } catch (error) { App.state.participantHiddenColumns = []; }
         App.state.participantExplorerInitialised = true;
       }
       var search = document.getElementById("participantSearch");
       if (search && search.value !== (App.state.participantExplorerSearch || "")) search.value = App.state.participantExplorerSearch || "";
-      var layout = document.getElementById("participantLayout"); if (layout) layout.value = App.state.participantExplorerLayout;
       var searchPlaceholder = App.state.participantExplorerMode === "groups" ? "Search school, group, item, category or teacher…" : "Search name, school, item, teacher, ID, email or group…";
       if (search) search.placeholder = searchPlaceholder;
     },
@@ -213,7 +215,7 @@
       el.innerHTML = [[groups.length, "School Groups"], [students, "Students represented"], [schools.size, "Schools"], [categories.size, "Categories"]].map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
     },
 
-    getParticipantColumns: function (includeHidden) { var layouts = { default: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Yr"], ["region", "Region"], ["notes", "Notes"]], compact: [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Yr"], ["notes", "Notes"]], production: [["name", "Name"], ["category", "Category"], ["item", "Item"], ["year", "Yr"], ["schoolGroup", "Group"], ["teacher", "Teacher"], ["notes", "Notes"]] }; var columns = layouts[App.state.participantExplorerLayout] || layouts.default; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
+    getParticipantColumns: function (includeHidden) { var columns = [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Yr"], ["region", "Region"], ["notes", "Notes"]]; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
     renderParticipantTable: function (participants) {
       var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return;
       var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, pages = Math.max(1, Math.ceil(participants.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = participants.slice((page - 1) * size, page * size), columns = App.getParticipantColumns();
@@ -268,7 +270,6 @@
     buildParticipantExcelWorkbook: function (headers, rows, sheetName) { var cell = function (value, style) { return '<Cell' + (style ? ' ss:StyleID="' + style + '"' : '') + '><Data ss:Type="String">' + App.escapeParticipantExcelXml(value) + '</Data></Cell>'; }; var table = '<Row>' + headers.map(function (header) { return cell(header, "Header"); }).join("") + '</Row>' + rows.map(function (row) { return '<Row>' + row.map(function (value) { return cell(value, "Body"); }).join("") + '</Row>'; }).join(""); return '<?xml version="1.0" encoding="UTF-8"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1256CF" ss:Pattern="Solid"/></Style><Style ss:ID="Body"><Alignment ss:Vertical="Center" ss:WrapText="1"/></Style></Styles><Worksheet ss:Name="' + App.escapeParticipantExcelXml(sheetName) + '"><Table>' + table + '</Table></Worksheet></Workbook>'; },
     escapeParticipantExcelXml: function (value) { return String(value === null || value === undefined ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); },
     downloadParticipantExcel: function (headers, rows, sheetName) { var workbook = App.buildParticipantExcelWorkbook(headers, rows, sheetName), blob = new Blob([workbook], { type: "application/vnd.ms-excel;charset=utf-8" }), url = URL.createObjectURL(blob), link = document.createElement("a"), date = new Date().toISOString().slice(0, 10); link.href = url; link.download = "SpecCentral-" + sheetName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") + "-" + date + ".xls"; document.body.appendChild(link); link.click(); document.body.removeChild(link); setTimeout(function () { URL.revokeObjectURL(url); }, 0); },
-    applyParticipantLayout: function (layout) { App.state.participantExplorerLayout = layout; localStorage.setItem("specParticipantLayout", layout); App.renderParticipantExplorer(); },
     toggleParticipantColumn: function (key, visible) { var hidden = App.state.participantHiddenColumns || []; hidden = hidden.filter(function (item) { return item !== key; }); if (!visible) hidden.push(key); App.state.participantHiddenColumns = hidden; localStorage.setItem("specParticipantHiddenColumns", JSON.stringify(hidden)); App.renderParticipantExplorer(); },
 
     openParticipantsForCategory: function (category) { App.state.participantExplorerFilters = { productionText: String(category || "").toLowerCase() }; App.state.participantExplorerPage = 1; App.navigate("participants", { context: { category: category } }); setTimeout(App.renderParticipantExplorer, 0); },

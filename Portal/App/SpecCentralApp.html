@@ -434,6 +434,7 @@
         var routeStarted = performance.now();
         if (App.state.currentPage) App.saveCurrentScrollPosition();
         App.closeMobileNavigation(false);
+        App.clearNotification();
         if (page === "projectManagement") page = "operations";
         var config = App.pages[page] || App.pages.dashboard;
         var template = document.getElementById(config.template);
@@ -1067,7 +1068,7 @@
         var source = document.getElementById("calendarSource");
         if (source) source.textContent = "Loading Timeline events...";
 
-        return App.services.request("calendar", "portalGetCalendarData", { cacheMs: 120000, timeoutMs: 30000, forceRefresh: !!forceRefresh })
+        return App.services.request("calendar", "portalGetCalendarData", { cacheMs: 120000, timeoutMs: 120000, forceRefresh: !!forceRefresh })
           .then(function (data) {
             App.state.calendarData = data || { events: [] };
             App.state.rehearsals = App.state.calendarData.events || App.state.rehearsals || [];
@@ -1080,8 +1081,9 @@
           })
           .catch(function (error) {
             if (!App.state.calendarData) App.state.calendarData = { events: [], source: "Timeline unavailable", error: App.getErrorMessage(error) };
-            App.notify("Calendar data could not be loaded: " + App.getErrorMessage(error));
+            if (App.state.currentPage === "calendar" || App.state.currentPage === "rehearsals") App.notify("Calendar data could not be loaded: " + App.getErrorMessage(error));
             if (App.state.currentPage === "calendar") App.renderCalendarPage();
+            if (App.state.currentPage === "rehearsals") App.renderRehearsalsPage();
           });
       },
 

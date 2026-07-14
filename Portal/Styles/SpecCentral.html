@@ -982,17 +982,18 @@
 
     .participantExplorer { display:grid; gap:14px; }
     .participantExplorerHeader { display:grid; grid-template-columns:1fr; align-items:center; gap:14px; }
+    .participantExplorerTopRow { display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .participantModeToggle { width:max-content; display:grid; grid-template-columns:1fr 1fr; gap:3px; padding:4px; border:1px solid #cad8ec; border-radius:999px; background:#edf3fb; }
     .participantModeToggle button { min-height:38px; padding:0 18px; border:0; border-radius:999px; color:var(--muted); background:transparent; font-size:12px; font-weight:900; transition:.18s ease; }
     .participantModeToggle button.active { color:#fff; background:linear-gradient(135deg,#1256cf,#3f83dc); box-shadow:0 5px 13px rgba(18,86,207,.22); }
     .participantExplorerHeader h3 { margin:3px 0; color:var(--navy); font-size:24px; }
     .participantExplorerHeader p { margin:0; color:var(--muted); }
-    .participantExplorerActions { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
     .participantMobileFilterToggle { display:none; }
-    .participantExplorer.groupMode .participantExplorerActions { display:none; }
-    .participantExplorer.groupMode .participantQuickFilters,.participantExplorer.groupMode .participantDropdownFilters,.participantExplorer.groupMode .participantActiveFilters { display:none!important; }
-    .participantQuickFilters { grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px; }
-    .participantDropdownFilters { grid-column:1/-1; display:grid; grid-template-columns:repeat(5,minmax(130px,1fr)) auto auto; align-items:end; gap:7px; padding-top:9px; border-top:1px solid var(--border); }
+    .participantExplorer.groupMode .participantFilterControls,.participantExplorer.groupMode .participantActiveFilters { display:none!important; }
+    .participantFilterControls { display:flex; flex-wrap:wrap; align-items:end; gap:7px; padding-top:9px; border-top:1px solid var(--border); }
+    .participantQuickFilters,.participantDropdownFilters { display:contents; }
+    .participantDropdownFilters .participantFilterField { flex:1 1 145px; }
+    .participantDropdownFilters .participantColumnChooser,.participantDropdownFilters .participantClearFilters { flex:0 1 150px; }
     .filterChip { border:1px solid var(--border); border-radius:999px; padding:6px 10px; color:var(--muted); background:#fff; font-size:9px; font-weight:800; }
     .filterChip.active { color:#fff; border-color:var(--blue); background:var(--blue); }
     .participantExplorerStats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
@@ -1021,9 +1022,10 @@
     .participantExplorerBody:has(.participantFilterPanel[hidden]) { grid-template-columns:1fr; }
     .participantTableToolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:3px 2px 10px; font-size:13px; }
     .participantTableActions { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
-    .participantBulkActions { display:flex; align-items:center; justify-content:flex-end; gap:7px; margin:0 0 8px; }
+    .participantSearchRow { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; margin-bottom:9px; }
+    .participantBulkActions { display:flex; align-items:center; justify-content:flex-end; gap:7px; margin:0; }
     .participantBulkActions .quickLink { min-height:36px; font-size:11px; }
-    .participantTableSearch { margin:0 0 9px; font-size:14px; }
+    .participantTableSearch { min-width:0; margin:0; font-size:14px; }
     .participantActiveFilters { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px; }
     .participantActiveFilters button { border:0; border-radius:999px; padding:4px 7px; color:var(--blue); background:#edf3ff; font-size:8px; font-weight:800; }
     .participantTableWrap { width:100%; max-width:100%; overflow:hidden; border:1px solid var(--border); border-radius:13px; }
@@ -1958,8 +1960,8 @@
     @media (max-width:1250px) { .workspaceTopRow { grid-template-columns:64px minmax(280px,1fr) auto; gap:14px; } .workspaceWelcome { display:none; } }
     @media (max-width:1060px) { .appShell, body.sidebarCollapsed .appShell { grid-template-columns:1fr; } .appSidebar, body.sidebarCollapsed .appSidebar { position:static; height:auto; padding:10px 14px; } .sidebarBrand { min-height:54px; margin-bottom:4px; } .sidebarLogo, body.sidebarCollapsed .sidebarLogo { width:92px; height:50px; } .sidebarNav { display:flex; gap:6px; overflow-x:auto; } .navSectionLabel, .navChildren { display:none!important; } .navItem, body.sidebarCollapsed .navItem { width:auto; flex:0 0 auto; justify-content:flex-start; padding:7px 10px; } .navItem span, body.sidebarCollapsed .navItem span { display:inline; } .navGroupToggle b { display:none; } .workspaceTopRow { grid-template-columns:auto minmax(240px,1fr) auto; } .viewAsControl { display:none!important; } }
     @media (max-width:900px) { .dashboardBriefingHero, .dashboardPrimaryGrid, .dashboardSecondaryGrid, .timelineManagementGrid { grid-template-columns:1fr; } .participantExplorerBody { grid-template-columns:1fr; } .participantFilterPanel { position:static; max-height:none; } .participantDropdownFilters { grid-template-columns:repeat(3,minmax(130px,1fr)); } }
-    @media (max-width:700px) { .operationsMetricGrid, .operationsEventGrid, .operationsDashboardGrid, .operationsFilterBar, .identitySummaryGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section, .operationsWide { grid-column:1/-1; } .pageBreadcrumb, .topBarStatus { display:none; } .workspaceTopRow { grid-template-columns:auto 1fr auto; padding:9px 14px; } .workspaceSearch { font-size:0; min-width:0; } .workspaceSearch::before { content:"Search workspace"; font-size:11px; } .workspaceContextRow { padding:10px 16px 12px; } .briefingList, .dashboardProjectGrid { grid-template-columns:1fr; } .participantExplorerActions { grid-template-columns:1fr 1fr; } .participantExplorerActions .participantSearch { grid-column:1/-1; } .participantDropdownFilters { grid-template-columns:repeat(2,minmax(130px,1fr)); } .productionOverviewGrid { grid-template-columns:1fr 1fr; } }
-    @media (max-width:480px) { .operationsMetricGrid, .operationsEventGrid, .operationsFilterBar, .timelineEditorForm { grid-template-columns:1fr; } .timelineEditorForm label.span2 { grid-column:auto; } .dashboardBriefingHero { padding:18px; } .briefingIdentityRow { grid-template-columns:1fr; gap:3px; } .briefingIdentityRow strong { text-align:left; } .scheduleRow { grid-template-columns:58px minmax(0,1fr); } .dashboardTask { grid-template-columns:1fr; } .participantExplorerActions, .participantDropdownFilters, .productionOverviewGrid { grid-template-columns:1fr; } .participantExplorerActions .participantSearch { grid-column:auto; } }
+    @media (max-width:700px) { .operationsMetricGrid, .operationsEventGrid, .operationsDashboardGrid, .operationsFilterBar, .identitySummaryGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section, .operationsWide { grid-column:1/-1; } .pageBreadcrumb, .topBarStatus { display:none; } .workspaceTopRow { grid-template-columns:auto 1fr auto; padding:9px 14px; } .workspaceSearch { font-size:0; min-width:0; } .workspaceSearch::before { content:"Search workspace"; font-size:11px; } .workspaceContextRow { padding:10px 16px 12px; } .briefingList, .dashboardProjectGrid { grid-template-columns:1fr; } .participantSearchRow { grid-template-columns:1fr; } .participantDropdownFilters { grid-template-columns:repeat(2,minmax(130px,1fr)); } .productionOverviewGrid { grid-template-columns:1fr 1fr; } }
+    @media (max-width:480px) { .operationsMetricGrid, .operationsEventGrid, .operationsFilterBar, .timelineEditorForm { grid-template-columns:1fr; } .timelineEditorForm label.span2 { grid-column:auto; } .dashboardBriefingHero { padding:18px; } .briefingIdentityRow { grid-template-columns:1fr; gap:3px; } .briefingIdentityRow strong { text-align:left; } .scheduleRow { grid-template-columns:58px minmax(0,1fr); } .dashboardTask { grid-template-columns:1fr; } .participantDropdownFilters, .productionOverviewGrid { grid-template-columns:1fr; } }
 
     /* Responsive application shell and touch design system. */
     html, body { max-width:100%; overflow-x:hidden; }
@@ -2056,13 +2058,12 @@
       .productionTile { min-width:0; min-height:76px; padding:10px; }
       .participantExplorer { gap:10px; }
       .participantExplorerHeader { padding:12px; }
-      .participantExplorerActions { justify-content:flex-end; }
-      .participantExplorerActions #participantLayout { display:none; }
       .participantMobileFilterToggle { display:inline-flex; min-width:82px; }
-      .participantQuickFilters, .participantDropdownFilters { display:none; }
-      .participantExplorerHeader.mobileFiltersOpen .participantQuickFilters { display:flex; }
-      .participantExplorerHeader.mobileFiltersOpen .participantDropdownFilters { display:grid; grid-template-columns:1fr; }
-      .participantQuickFilters { flex-wrap:nowrap; margin-inline:-12px; padding:0 12px 5px; overflow-x:auto; scrollbar-width:none; }
+      .participantExplorer.groupMode .participantMobileFilterToggle { display:none; }
+      .participantFilterControls { display:none; }
+      .participantExplorerHeader.mobileFiltersOpen .participantFilterControls { display:flex; }
+      .participantQuickFilters { width:100%; display:flex; flex-wrap:nowrap; margin-inline:-12px; padding:0 12px 5px; overflow-x:auto; scrollbar-width:none; }
+      .participantDropdownFilters { width:100%; display:grid; grid-template-columns:1fr; }
       .participantQuickFilters::-webkit-scrollbar { display:none; }
       .filterChip { min-height:40px; flex:0 0 auto; padding:8px 12px; }
       .participantFilterField, .participantActiveFilters button, .participantCategoryPills button, .participantOpenButton,
