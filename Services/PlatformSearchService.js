@@ -10,8 +10,8 @@ const PlatformSearchService = (() => {
     const canViewCalendar = UserContextService.hasCapability("Calendar.View");
     const canViewAttendance = UserContextService.hasCapability("Attendance.View");
     const canViewStaff = UserContextService.hasCapability("Operations.View");
-    const participants = canViewParticipants ? filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => ParticipantService.getAll()), user) : [];
-    const groups = canViewParticipants ? filterGroupsForUser_(PerformanceCacheService.getOrLoad("participants:groups", 10 * 60, () => ParticipantService.getGroups()), user) : [];
+    const participants = canViewParticipants ? filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 30 * 60, () => ParticipantService.getAll()), user) : [];
+    const groups = canViewParticipants ? filterGroupsForUser_(PerformanceCacheService.getOrLoad("participants:groups", 30 * 60, () => ParticipantService.getGroups()), user) : [];
     const timeline = canViewCalendar ? filterEventsForUser_(TimelineService.getCalendarData().events || [], user) : [];
     participants.forEach(item => add_(results, text, "participant", item.id, item.name, [item.school, item.item, item.category, item.teacherName]));
     ParticipantService.getActiveSchoolsData(participants, groups)

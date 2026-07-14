@@ -160,7 +160,7 @@
     setNotificationFilter: function (filter) { App.notificationFilter = filter; App.renderNotificationCentre(); },
     getNotificationPrefs: function () { return App.safeLoadJson("specCentralNotificationPrefs", {}); },
     toggleNotificationPref: function (id, key) { var prefs = App.getNotificationPrefs(); prefs[id] = prefs[id] || {}; prefs[id][key] = !prefs[id][key]; App.safeSaveJson("specCentralNotificationPrefs", prefs); App.renderNotificationCentre(); App.renderNotificationCount(); },
-    renderNotificationCount: function () { var prefs = App.getNotificationPrefs(); var count = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length; var el = document.getElementById("notificationCount"); if (el) el.textContent = count; },
+    renderNotificationCount: function () { var prefs = App.getNotificationPrefs(); var count = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length; var el = document.getElementById("notificationCount"); if (!el) return; el.textContent = count || ""; el.hidden = count === 0; var trigger = el.closest("button"); if (trigger) trigger.setAttribute("aria-label", count ? "Open notifications, " + count + " unread" : "Open notifications"); },
     renderNotificationCentre: function () {
       var el = document.getElementById("notificationCentreList"); if (!el) return;
       var prefs = App.getNotificationPrefs();

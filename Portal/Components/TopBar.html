@@ -9,7 +9,7 @@
       <div class="workspaceWelcome"><span id="topBarWelcome">Welcome!</span><strong id="topBarUserRole">Staff</strong></div>
       <label id="viewAsControl" class="viewAsControl" hidden><span>Viewing As</span><select id="viewAsRole" onchange="App.setViewingAsRole(this.value)"><option value="">Actual permissions</option></select></label>
       <button id="syncDataButton" class="syncDataButton" type="button" hidden onclick="App.openSyncData()" aria-label="Sync cached data">↻</button>
-      <button class="notificationTrigger" type="button" onclick="App.openNotificationCentre()" aria-label="Open notifications">●<span id="notificationCount">0</span></button>
+      <button class="notificationTrigger" type="button" onclick="App.openNotificationCentre()" aria-label="Open notifications">●<span id="notificationCount" hidden></span></button>
     </div>
   </div>
   <div id="viewingAsBadge" class="viewingAsBadge" hidden></div>

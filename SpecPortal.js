@@ -266,7 +266,7 @@ function portalSearchParticipants(query) {
 
 function portalGetAllParticipants() {
   const user = requirePortalCapability_("Participants.View");
-  return filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => ParticipantService.getAll()), user).map(participant => toSafePortalParticipant_(participant, null));
+  return filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 30 * 60, () => ParticipantService.getAll()), user).map(participant => toSafePortalParticipant_(participant, null));
 }
 
 function portalGetProductionOverview() {
@@ -328,7 +328,7 @@ function portalRefreshPhotoCache() {
 
 function portalGetPortalData() {
   const user = requirePortalCapability_("Participants.View");
-  const canonical = PerformanceCacheService.getOrLoad("participants:portal", 10 * 60, () => ParticipantService.getPortalData());
+  const canonical = PerformanceCacheService.getOrLoad("participants:portal", 30 * 60, () => ParticipantService.getPortalData());
   const participants = filterParticipantsForUser_(canonical.participants || [], user);
   const groups = filterGroupsForUser_(canonical.groups || [], user);
   const schools = new Set(participants.concat(groups).map(item => String(item.school || "").toLowerCase()).filter(Boolean));

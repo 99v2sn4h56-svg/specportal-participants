@@ -89,7 +89,7 @@ ParticipantService.getSchoolsMasterSheet = function () {
  * Returns every participant as an array of objects.
  */
 ParticipantService.getAll = function () {
-  return PerformanceCacheService.getOrLoad("participants:all", 10 * 60, () => {
+  return PerformanceCacheService.getOrLoad("participants:all", 30 * 60, () => {
 
   const sheet = this.getIndividualsSheet();
 
@@ -302,7 +302,7 @@ ParticipantService.search = function (query) {
  * Returns every group entry as an array of objects.
  */
 ParticipantService.getGroups = function () {
-  return PerformanceCacheService.getOrLoad("participants:groups", 10 * 60, () => {
+  return PerformanceCacheService.getOrLoad("participants:groups", 30 * 60, () => {
   const sheet = this.getGroupsSheet();
   if (!sheet) return [];
 
@@ -379,7 +379,7 @@ ParticipantService.getGroups = function () {
  * Returns the schools master data used by Spec Portal.
  */
 ParticipantService.getSchoolsMasterData = function () {
-  return PerformanceCacheService.getOrLoad("participants:schools", 10 * 60, () => {
+  return PerformanceCacheService.getOrLoad("participants:schools", 30 * 60, () => {
   const sheet = this.getSchoolsMasterSheet();
   if (!sheet) return [];
 
