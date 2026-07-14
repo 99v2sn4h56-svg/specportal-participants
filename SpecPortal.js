@@ -95,6 +95,11 @@ function portalGetCommunicationProviderStatus() {
   return CommunicationService.getProviderStatus();
 }
 
+function portalGetShowRunData() {
+  requirePortalCapability_("Operations.View");
+  return ShowRunService.getData();
+}
+
 function openSpecPortalOnOpen_() {
   openSpecPortalHome();
 }

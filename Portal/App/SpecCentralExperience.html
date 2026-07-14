@@ -137,6 +137,7 @@
       }
       if (type === "venue") { App.navigate("calendar"); setTimeout(function () { var search = document.getElementById("calendarSearch"); if (search) { search.value = title; App.setCalendarView("agenda"); } }, 0); return; }
       if (type === "staff") { if (App.hasPermission("Operations.View")) { App.navigate("staff"); setTimeout(function () { App.openStaffProfile(id); }, 0); } else App.notify("Staff Directory requires Operations access."); return; }
+      if (type === "item") { App.navigate("participants"); App.ensurePortalDataLoaded().then(function () { App.renderItemProfile(App.buildItemProfile(title)); }); return; }
       App.navigate("participants");
       App.ensurePortalDataLoaded().then(function () {
         if (type === "school") App.renderSchoolProfile(App.buildSchoolProfile(title));

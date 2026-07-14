@@ -84,6 +84,7 @@ const AdministrationService = (() => {
     return [
       health_("Attendance", () => AttendanceService.getSummary(), result => result && result.ok, result => result && result.data && result.data.totalEvents),
       health_("Timeline", () => TimelineService.getTimelineEvents(), Array.isArray, result => result.length),
+      health_("Show Run", () => ShowRunService.getData(), result => result && Array.isArray(result.items), result => result.items.length, "items"),
       health_("Participants", () => ParticipantService.getAll(), Array.isArray, result => result.length),
       health_("Staff", () => StaffService.getAll(), Array.isArray, result => result.length),
       health_("Production Overview", () => portalGetProductionOverview(), result => result && result.ok !== false && Array.isArray(result.categories), result => result.categories.length),
@@ -150,12 +151,12 @@ const AdministrationService = (() => {
   }
 
   function readCapabilityFor_(id) {
-    const map = { participants: "Participants.View", schools: "Participants.View", groups: "Participants.View", teachers: "Participants.View", items: "Participants.View", categories: "Participants.View", attendance: "Attendance.View", timeline: "Calendar.View", calendar: "Calendar.View", staff: "Operations.View", users: "Administration.View", workflows: "Workflow.Run", jobs: "Jobs.Run", notifications: "Notifications.View" };
+    const map = { participants: "Participants.View", schools: "Participants.View", groups: "Participants.View", teachers: "Participants.View", items: "Participants.View", categories: "Participants.View", attendance: "Attendance.View", timeline: "Calendar.View", calendar: "Calendar.View", "show-run": "Operations.View", staff: "Operations.View", users: "Administration.View", workflows: "Workflow.Run", jobs: "Jobs.Run", notifications: "Notifications.View" };
     return map[id] || "Operations.View";
   }
 
   function sheetNamesFor_(id) {
-    const map = { timeline: "Operation Schedule", participants: "INDIVIDUALS(YES)", groups: "GROUPS(YES)", schools: "Schools Master Dataset", staff: "Staff Production Team", attendance: "Event Index + event sheets" };
+    const map = { timeline: "Operation Schedule", participants: "INDIVIDUALS(YES)", groups: "GROUPS(YES)", schools: "Schools Master Dataset", "show-run": "Show Run (gid 1480106475)", staff: "Staff Production Team", attendance: "Event Index + event sheets" };
     return map[id] || "Service managed";
   }
 

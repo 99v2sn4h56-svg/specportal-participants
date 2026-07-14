@@ -2,7 +2,8 @@
 const SourceRegistryService = (() => {
   const SOURCE_CONFIGS = {
     timeline: { spreadsheetId: "1JccmwT9_wOEhuSU5kyFH6HnU9T9ysfQa87XjvL5WLog", sheetId: 164020104, sheetName: "Operation Schedule" },
-    staff: { spreadsheetId: "1PBO2aN4EBpo2TmEPrVwvagNrCdC2BbmIm1ZmLLG3wSE", sheetName: "SpecCentral" }
+    staff: { spreadsheetId: "1PBO2aN4EBpo2TmEPrVwvagNrCdC2BbmIm1ZmLLG3wSE", sheetName: "SpecCentral" },
+    "show-run": { spreadsheetId: "1Hc_p0KAML6LS-EcD7rhuRsubMyQ7jcehDWU_g1yFgCU", sheetId: 1480106475, scriptId: "1dO_ETfRe63atBcP7mPa9LfDYq4V5vrr-UKBanzDnvCrnyo0WWGiZr_gr", url: "https://docs.google.com/spreadsheets/d/1Hc_p0KAML6LS-EcD7rhuRsubMyQ7jcehDWU_g1yFgCU/edit?gid=1480106475" }
   };
   const REGISTRY = [
     entry("timeline", "TimelineEvent", "Timeline spreadsheet / Operation Schedule", "read-only-command-foundation", "eventId", false, 300, "Timeline.Edit", []),
@@ -12,6 +13,7 @@ const SourceRegistryService = (() => {
     entry("groups", "Group", "Participants spreadsheet / GROUPS(YES)", "read-now-write-later", "groupId", true, 300, "Participants.Edit", ["edit", "assign"]),
     entry("teachers", "Teacher", "Participants spreadsheet teacher fields", "derived-read", "teacherId", false, 300, "Participants.Edit", []),
     entry("items", "Item", "Participants spreadsheet item fields", "derived-read", "itemId", false, 300, "Participants.Edit", []),
+    entry("show-run", "Item", "Show Run spreadsheet / numbered production items", "read-only-authoritative", "itemNumber", false, 600, "Operations.View", []),
     entry("categories", "Category", "Participants and Timeline category fields", "derived-read", "categoryId", false, 300, "Participants.Edit", []),
     entry("segments", "Segment", "Participants group allocations", "derived-read", "segmentId", false, 300, "Participants.Edit", []),
     entry("venues", "Venue", "Timeline spreadsheet location fields", "derived-read", "venueId", false, 300, "Calendar.Edit", []),

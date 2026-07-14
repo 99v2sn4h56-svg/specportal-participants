@@ -3,6 +3,7 @@ const RelationshipService = (() => {
   const MODEL = [
     { from: "Participant", relation: "belongsTo", to: "School", via: "schoolId" },
     { from: "Participant", relation: "performs", to: "Item", via: "itemId" },
+    { from: "Item", relation: "scheduledIn", to: "Segment", via: "segmentId", source: "Show Run" },
     { from: "Participant", relation: "belongsTo", to: "Category", via: "categoryId" },
     { from: "Participant", relation: "appearsIn", to: "Rehearsal", resolver: "participantMatchesEvent" },
     { from: "Teacher", relation: "belongsTo", to: "School", via: "schoolId" },
