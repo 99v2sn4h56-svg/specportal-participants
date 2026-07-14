@@ -84,8 +84,15 @@
         dashboardRenderTimer: null,
         operationsNavExpanded: true,
         dashboardProfile: "operations",
-        applicationVersion: "15",
+        applicationVersion: "16",
         selectedFormDefinitionId: "",
+        communicationsWorkspace: null,
+        communicationsView: "dashboard",
+        communicationsComposerStep: "details",
+        selectedCommunicationCampaignId: "",
+        communicationDraft: null,
+        communicationAudienceResult: null,
+        communicationPreview: null,
         selectedParticipant: null,
         selectedSchool: null,
         selectedGroup: null,
@@ -146,6 +153,12 @@
           description: "Create, publish and review reusable forms and responses.",
           template: "page-form-builder",
           permission: "Operations.View"
+        },
+        communications: {
+          title: "Communications",
+          description: "Create safe, personalised campaign drafts, audiences and templates.",
+          template: "page-communications",
+          permission: "Communications.View"
         },
         operations: {
           title: "Operations",
@@ -503,6 +516,7 @@
         if (page === "mediaTimeline") App.renderMediaTimelinePage();
         if (page === "staff") App.renderStaffPage();
         if (page === "formBuilder" && App.renderFormBuilderPage) App.renderFormBuilderPage();
+        if (page === "communications" && App.renderCommunicationsPage) App.renderCommunicationsPage();
         if (!options.fromBrowser || page !== requestedPage) App.updateBrowserRoute(!!options.replace || page !== requestedPage);
         App.persistModuleState();
         App.restoreCurrentScrollPosition();

@@ -1,6 +1,6 @@
 /** Synchronous typed event bus for platform modules and automation subscribers. */
 const PlatformEventService = (() => {
-  const TYPES = Object.freeze(["ParticipantAccepted", "ParticipantUpdated", "AttendanceMarked", "AttendanceCompleted", "TimelineEventUpdated", "TimelineEventCancelled", "StaffAssigned", "PermissionChanged", "WorkflowCompleted"]);
+  const TYPES = Object.freeze(["ParticipantAccepted", "ParticipantUpdated", "AttendanceMarked", "AttendanceCompleted", "TimelineEventUpdated", "TimelineEventCancelled", "StaffAssigned", "PermissionChanged", "WorkflowCompleted", "CommunicationCampaignCreated", "CommunicationCampaignUpdated", "CommunicationTested"]);
   const subscribers = {};
 
   function subscribe(eventType, subscriberId, handler) {

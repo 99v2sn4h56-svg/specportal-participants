@@ -6,7 +6,9 @@ const EntityModelService = (() => {
     VENUE: "Venue", TIMELINE_EVENT: "TimelineEvent", CALENDAR_EVENT: "CalendarEvent",
     REHEARSAL: "Rehearsal", OPERATIONAL_EVENT: "OperationalEvent",
     ATTENDANCE_SESSION: "AttendanceSession", SUPPORT_PLAN: "SupportPlan",
-    COMMUNICATION: "Communication", PRODUCTION: "Production", ATTENDANCE_RECORD: "AttendanceRecord",
+    COMMUNICATION: "Communication", COMMUNICATION_CAMPAIGN: "CommunicationCampaign", COMMUNICATION_TEMPLATE: "CommunicationTemplate",
+    COMMUNICATION_RECIPIENT: "CommunicationRecipient", COMMUNICATION_EVENT: "CommunicationEvent", SAVED_AUDIENCE: "SavedAudience",
+    SENDER_IDENTITY: "SenderIdentity", PRODUCTION: "Production", ATTENDANCE_RECORD: "AttendanceRecord",
     TASK: "Task", WORKFLOW: "Workflow", WORKFLOW_EXECUTION: "WorkflowExecution", JOB: "Job",
     NOTIFICATION: "Notification", AUDIT_RECORD: "AuditRecord", AUTOMATION_RULE: "AutomationRule"
   });

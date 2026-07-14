@@ -19,7 +19,7 @@ const SourceRegistryService = (() => {
     entry("users", "User", "Staff Production Team identity projection", "derived-read", "email", true, 300, "Users.Manage", ["assign-role", "assign-scope", "set-status"]),
     entry("attendance", "AttendanceSession", "Attendance workbook and API", "read-write-existing-api", "sessionId", true, 120, "Attendance.Mark", ["mark", "bulk-mark", "add-notes"]),
     entry("support-plans", "SupportPlan", "Attendance support-plan Drive folder", "read-only-restricted", "supportPlanId", false, 120, "Participants.View", []),
-    entry("communications", "Communication", "Not connected", "none", "communicationId", false, 0, "Communications.Send", []),
+    entry("communications", "CommunicationCampaign", "Communications repository / Mock email provider", "platform-managed-mock-send", "campaignId", true, 0, "Communications.EditOwn", ["create-draft", "edit-draft", "preview", "test-send", "archive", "manage-template", "build-audience"]),
     entry("production", "Production", "Future production configuration", "none", "productionId", false, 0, "Settings.Admin", []),
     entry("workflows", "Workflow", "Workflow Registry", "platform-managed", "workflowId", true, 0, "Workflow.Admin", ["enable", "disable", "version"]),
     entry("tasks", "Task", "Task Service", "platform-read-write", "taskId", true, 0, "Workflow.Run", ["create", "assign", "update-status", "cancel"]),

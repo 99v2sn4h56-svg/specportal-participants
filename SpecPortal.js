@@ -82,6 +82,19 @@ function portalGetProfileFormResponses(type, id, email) {
   return FormResponseService.responsesForProfile(type, id, email);
 }
 
+function portalGetCommunicationsWorkspace() {
+  return CommunicationService.getWorkspace();
+}
+
+function portalExecuteCommunicationCommand(commandName, input) {
+  return CommunicationService.execute(String(commandName || ""), input || {});
+}
+
+function portalGetCommunicationProviderStatus() {
+  requirePortalCapability_("Communications.View");
+  return CommunicationService.getProviderStatus();
+}
+
 function openSpecPortalOnOpen_() {
   openSpecPortalHome();
 }
