@@ -68,6 +68,11 @@ function portalPublishFormDefinition(form) {
   return FormResponseService.publishDefinition(form || {});
 }
 
+function portalImportGoogleFormQuestions(url) {
+  requirePortalCapability_("Operations.View");
+  return FormResponseService.importGoogleFormQuestions(url);
+}
+
 function portalSubmitFormResponse(request) {
   return FormResponseService.submitResponse(request || {});
 }

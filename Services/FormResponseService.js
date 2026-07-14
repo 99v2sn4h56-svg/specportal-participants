@@ -53,6 +53,16 @@ const FormResponseService = (() => {
     return saveDefinition(form);
   }
 
+  function importGoogleFormQuestions(url) {
+    if (!/^https:\/\/docs\.google\.com\/forms\//i.test(String(url || ""))) throw new Error("Add a valid Google Form URL.");
+    const googleForm = FormApp.openByUrl(url), questions = [];
+    googleForm.getItems().forEach(item => {
+      const kind=String(item.getType()),base={id:makeId_("question"),type:"large_text",label:item.getTitle()||"Untitled question",help:item.getHelpText?item.getHelpText():"",required:false,options:[],optionRules:[],allowOther:false,mapping:""};
+      try { if(kind==="PAGE_BREAK")base.type="page_section";else if(kind==="SECTION_HEADER")base.type="text_section";else if(kind==="PARAGRAPH_TEXT"||kind==="TEXT")base.type="large_text";else if(kind==="LIST"){base.type="dropdown_single";base.options=item.asListItem().getChoices().map(choice=>choice.getValue());}else if(kind==="MULTIPLE_CHOICE"){base.type="single_selection";base.options=item.asMultipleChoiceItem().getChoices().map(choice=>choice.getValue());base.allowOther=!!(item.asMultipleChoiceItem().hasOtherOption&&item.asMultipleChoiceItem().hasOtherOption());}else if(kind==="CHECKBOX"){base.type="dropdown_multi";base.options=item.asCheckboxItem().getChoices().map(choice=>choice.getValue());base.allowOther=!!(item.asCheckboxItem().hasOtherOption&&item.asCheckboxItem().hasOtherOption());}else if(kind==="SCALE")base.type="number";else if(kind==="GRID"||kind==="CHECKBOX_GRID")base.type="table";else if(kind==="FILE_UPLOAD")base.type="file_upload";base.required=!!(item.isRequired&&item.isRequired());}catch(_){base.type="large_text";}base.optionRules=(base.options||[]).map(()=>({action:"",target:""}));questions.push(base);
+    });
+    return questions;
+  }
+
   function getPublicDefinition(formId, workflowContext) {
     const form = listDefinitions().find(item => item.id === String(formId || ""));
     if (!form || form.status !== "Published") return null;
@@ -83,7 +93,7 @@ const FormResponseService = (() => {
     const mapped = mapAnswers_(responseForm, answers);
     const signedInEmail = Session.getActiveUser().getEmail() || "";
     const responseEmail = normaliseEmail_(mapped.responderEmail || signedInEmail);
-    const profile = matchProfile_(responseEmail);
+    const profile = matchProfile_(responseEmail, mapped);
     const responseId = makeId_("response");
     const submittedAt = new Date().toISOString();
     enforceResponseLimits_(responseForm, storage.spreadsheetId, answers);
@@ -130,7 +140,7 @@ const FormResponseService = (() => {
     (responseForm.questions || []).forEach(question => { if (Object.prototype.hasOwnProperty.call(byLabel, question.label)) answers[question.id] = byLabel[question.label]; });
     const mapped = mapAnswers_(responseForm, answers);
     const responseEmail = normaliseEmail_(mapped.responderEmail || event.response.getRespondentEmail && event.response.getRespondentEmail() || "");
-    const profile = matchProfile_(responseEmail), responseId = "google-response-" + event.response.getId(), submittedAt = event.response.getTimestamp().toISOString();
+    const profile = matchProfile_(responseEmail, mapped), responseId = "google-response-" + event.response.getId(), submittedAt = event.response.getTimestamp().toISOString();
     enforceResponseLimits_(responseForm, form.storage.spreadsheetId, answers);
     const uploads = organiseGoogleFormUploads_(responseForm, answers, mapped, responseId);
     appendResponse_(responseForm, form.storage.spreadsheetId, { responseId, submittedAt, signedInEmail: responseEmail, responseEmail, profile, answers, uploads });
@@ -309,18 +319,19 @@ const FormResponseService = (() => {
     }, {});
   }
 
-  function matchProfile_(email) {
-    if (!email) return { type: "", id: "", name: "", email: "" };
+  function matchProfile_(email, mapped) {
+    mapped=mapped||{};
     let participant = null;
     let staff = null;
-    try { participant = ParticipantService.getAll().find(item => normaliseEmail_(item.studentEmail) === email); } catch (_) {}
+    try { participant = ParticipantService.getAll().find(item => email&&normaliseEmail_(item.studentEmail) === email || manualProfileMatch_(item,mapped)); } catch (_) {}
     try {
-      staff = StaffService.getAll().find(item => [item.email, item.primaryEmail, item.secondaryEmail, item.personalEmail].concat(item.aliasEmails || [], item.legacyEmails || []).some(value => normaliseEmail_(value) === email));
+      staff = StaffService.getAll().find(item => [item.email, item.primaryEmail, item.secondaryEmail, item.personalEmail].concat(item.aliasEmails || [], item.legacyEmails || []).some(value => email&&normaliseEmail_(value) === email) || manualProfileMatch_(item,mapped));
     } catch (_) {}
     if (participant) return { type: "student", id: participant.studentKey || participant.studentId || participant.applicationId, name: participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" "), email };
     if (staff) return { type: "staff", id: staff.id || staff.staffId || staff.email, name: staff.displayName || staff.name || staff.email, email };
     return { type: "", id: "", name: "", email };
   }
+  function manualProfileMatch_(item,mapped){const same=(value,expected)=>expected&&String(value||"").trim().toLowerCase()===String(expected).trim().toLowerCase(),digits=value=>String(value||"").replace(/\D/g,"");if(mapped.studentId&&[item.studentId,item.studentKey,item.applicationId].some(value=>same(value,mapped.studentId)))return true;if(mapped.externalReference&&[item.externalReference,item.membershipId,item.employeeId,item.staffId,item.id].some(value=>same(value,mapped.externalReference)))return true;if(mapped.dateOfBirth&&[item.dateOfBirth,item.dob,item.birthDate].some(value=>same(value,mapped.dateOfBirth)))return true;if(mapped.mobilePhone&&[item.mobilePhone,item.mobile,item.phone,item.phoneNumber].some(value=>digits(value)&&digits(value)===digits(mapped.mobilePhone)))return true;return false;}
 
   function validateRequired_(form, answers, activeQuestionIds) {
     const active = Array.isArray(activeQuestionIds) ? activeQuestionIds : null;
@@ -330,7 +341,7 @@ const FormResponseService = (() => {
       if (value == null || value === "" || (Array.isArray(value) && !value.length)) throw new Error("Complete the required question: " + question.label);
     });
   }
-  function questionIsActive_(form, answers, questionId) { const rules=(form.questions||[]).filter(question => question.branchMode === "reveal_question" && question.branchTarget === questionId);if(!rules.length)return true;return rules.some(rule => { const value=answers[rule.id];return Array.isArray(value)?value.includes(rule.branchAnswer):value===rule.branchAnswer; }); }
+  function questionIsActive_(form, answers, questionId) { const rules=[];(form.questions||[]).forEach(question=>{if(question.branchMode==="reveal_question"&&question.branchTarget===questionId)rules.push({id:question.id,answer:question.branchAnswer});(question.optionRules||[]).forEach((rule,index)=>{if(rule.action==="reveal_question"&&rule.target===questionId)rules.push({id:question.id,answer:(question.options||[])[index]});});});if(!rules.length)return true;return rules.some(rule=>{const value=answers[rule.id];return Array.isArray(value)?value.includes(rule.answer):value===rule.answer;}); }
 
   function enforceResponseLimits_(form, spreadsheetId, answers) {
     const limited = (form.questions || []).filter(question => question.type === "limited_response" && Number(question.limit) > 0);
@@ -441,7 +452,7 @@ const FormResponseService = (() => {
     properties.setProperties(updates, false); properties.deleteProperty(key);
   }
 
-  return { listDefinitions, saveDefinition, publishDefinition, getPublicDefinition, submitResponse, responsesForProfile, getWorkspaceData, setStatus, handleGoogleFormSubmit };
+  return { listDefinitions, saveDefinition, publishDefinition, importGoogleFormQuestions, getPublicDefinition, submitResponse, responsesForProfile, getWorkspaceData, setStatus, handleGoogleFormSubmit };
 })();
 
 function handleManagedGoogleFormSubmit(event) {
