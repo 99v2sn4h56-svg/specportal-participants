@@ -7,38 +7,56 @@
   </div>
   <nav class="sidebarNav" aria-label="Spec Central navigation">
     <div class="navSectionLabel">Workspace</div>
-    <button class="navItem active" type="button" title="Dashboard" data-icon="D" data-nav-page="dashboard" onclick="App.navigate('dashboard')"><span>Dashboard</span></button>
-    <button class="navItem" type="button" title="Participants" data-icon="P" data-nav-page="participants" data-permission="Participants.View" onclick="App.navigate('participants')"><span>Participants</span></button>
-    <button class="navItem" type="button" title="Calendar" data-icon="C" data-nav-page="calendar" data-permission="Calendar.View" onclick="App.navigate('calendar')"><span>Calendar</span></button>
-    <button class="navItem" type="button" title="Attendance" data-icon="A" data-nav-page="attendance" data-permission="Attendance.View" onclick="App.navigate('attendance')"><span>Attendance</span></button>
-    <button class="navItem" type="button" title="Communications" data-icon="C" onclick="App.openNotificationCentre()"><span>Communications</span></button>
-    <button class="navItem" type="button" title="Media" data-icon="M" data-nav-page="mediaTimeline" data-permission="mediaTimeline.view" onclick="App.navigate('mediaTimeline')"><span>Media</span></button>
+    <button class="navItem active" type="button" title="Dashboard" data-nav-page="dashboard" onclick="App.navigate('dashboard')"><span>Dashboard</span></button>
 
-    <div class="navSectionLabel" data-permission="operations.view">Management</div>
-    <button class="navItem" type="button" title="Staff" data-icon="S" data-nav-page="staff" data-permission="Operations.View" onclick="App.navigate('staff')"><span>Staff</span></button>
-    <div class="navGroup" data-permission="Operations.View">
-      <button class="navItem navGroupToggle" type="button" title="Forms" data-icon="F" data-nav-page="formBuilder" onclick="App.navigate('formBuilder')"><span>Forms</span><b>⌄</b></button>
-      <div class="navChildren formsNavChildren">
-        <button type="button" onclick="App.navigate('formBuilder');setTimeout(function(){App.showFormsDashboard();},0)">Forms dashboard</button>
+    <details class="specNavGroup" open data-permission="Participants.View">
+      <summary class="navItem navGroupToggle" data-nav-pages="participants,attendance"><span>Participants</span><b>⌄</b></summary>
+      <div class="navChildren">
+        <button type="button" onclick="App.navigate('participants');setTimeout(function(){App.setParticipantExplorerMode('individuals');},0)">Full List</button>
+        <button type="button" onclick="App.navigate('attendance')">Attendance</button>
+        <button type="button" onclick="App.navigate('participants');setTimeout(function(){App.setParticipantExplorerMode('groups');},0)">Teachers</button>
+        <button type="button" onclick="App.openImportCentre()">Import</button>
+      </div>
+    </details>
+
+    <details class="specNavGroup" open data-permission="operations.view">
+      <summary class="navItem navGroupToggle" data-nav-page="operations" data-nav-view="events"><span>Event Manager</span><b>⌄</b></summary>
+      <div class="navChildren">
+        <button type="button" onclick="App.openOperationsView('events')">All events</button>
+        <button type="button" onclick="App.openOperationsView('events');setTimeout(function(){App.openTimelineEditor();},0)">New Event</button>
+      </div>
+    </details>
+
+    <button class="navItem" type="button" title="Communication" onclick="App.openNotificationCentre()"><span>Communication</span></button>
+
+    <details class="specNavGroup" open data-permission="Operations.View">
+      <summary class="navItem navGroupToggle" data-nav-page="formBuilder"><span>Forms</span><b>⌄</b></summary>
+      <div class="navChildren">
+        <button type="button" onclick="App.navigate('formBuilder');setTimeout(function(){App.showFormsDashboard();},0)">Forms Dashboard</button>
+        <button type="button" onclick="App.navigate('formBuilder');setTimeout(function(){App.newFormDefinition();},0)">New Form</button>
         <button type="button" onclick="App.navigate('formBuilder');setTimeout(function(){App.openFormsResponses();},0)">Responses</button>
       </div>
-    </div>
-    <div class="navGroup" data-permission="operations.view">
-      <button class="navItem navGroupToggle" type="button" title="Operations" data-icon="O" data-nav-page="operations" onclick="App.toggleOperationsNav()"><span>Operations</span><b>⌄</b></button>
-      <div id="operationsNavChildren" class="navChildren">
-        <button type="button" onclick="App.openOperationsView('overview')">Operations</button>
-        <button type="button" onclick="App.navigate('staff')">Staff Directory</button>
-        <button type="button" onclick="App.openOperationsView('projects')">Projects</button>
-        <button type="button" onclick="App.openOperationsView('timeline')">Timeline</button>
-        <button type="button" onclick="App.openOperationsView('events')">Event Manager</button>
-        <button type="button" disabled title="No authoritative logistics source is registered">Logistics</button>
-        <button type="button" disabled title="Use live module reporting until a reporting source is registered">Reports</button>
-        <button type="button" disabled title="Operational settings remain read-only">Settings</button>
-      </div>
-    </div>
+    </details>
 
-    <div class="navSectionLabel" data-permission="Administration.View">Platform</div>
-    <button class="navItem" type="button" title="Administration" data-icon="M" data-nav-page="administration" data-permission="Administration.View" onclick="App.navigate('administration')"><span>Administration</span></button>
-    <button class="navItem" type="button" title="Settings" data-icon="S" data-nav-page="settings" data-permission="Settings.Admin" onclick="App.navigate('settings')"><span>Settings</span></button>
+    <div class="specPlatformNav">
+      <details class="specNavGroup" open data-permission="operations.view">
+        <summary class="navItem navGroupToggle" data-nav-page="operations" data-nav-view="general"><span>Operations</span><b>⌄</b></summary>
+        <div class="navChildren">
+          <button type="button" onclick="App.openOperationsView('overview')">Operations</button>
+          <button type="button" onclick="App.navigate('staff')">Staff Directory</button>
+          <button type="button" onclick="App.openOperationsView('projects')">Projects</button>
+          <button type="button" onclick="App.openOperationsView('timeline')">Timeline</button>
+          <button type="button" onclick="App.openOperationsView('events')">Event Manager</button>
+          <button type="button" disabled title="No authoritative logistics source is registered">Logistics</button>
+          <button type="button" disabled title="Use live module reporting until a reporting source is registered">Reports</button>
+          <button type="button" disabled title="Operational settings remain read-only">Settings</button>
+        </div>
+      </details>
+      <button class="navItem" type="button" title="Administration" data-nav-page="administration" data-permission="Administration.View" onclick="App.navigate('administration')"><span>Administration</span></button>
+      <button class="navItem" type="button" title="Settings" data-nav-page="settings" data-permission="Settings.Admin" onclick="App.navigate('settings')"><span>Settings</span></button>
+    </div>
   </nav>
 </aside>
+  <script>
+    App.init();
+  </script>

@@ -84,7 +84,7 @@
         dashboardRenderTimer: null,
         operationsNavExpanded: true,
         dashboardProfile: "operations",
-        applicationVersion: "14",
+        applicationVersion: "15",
         selectedFormDefinitionId: "",
         selectedParticipant: null,
         selectedSchool: null,
@@ -475,8 +475,13 @@
         if (breadcrumb) breadcrumb.textContent = page === "operations" ? "Spec Central / Operations / " + App.toTitle(App.state.operationsView || "dashboard") : "Spec Central / " + config.title;
         if (contextStatus) contextStatus.textContent = page === "administration" ? "Controlled" : (App.state.systemStatus[page] && App.state.systemStatus[page].status || "Live");
 
-        Array.prototype.forEach.call(document.querySelectorAll("[data-nav-page]"), function (button) {
-          button.classList.toggle("active", button.getAttribute("data-nav-page") === page);
+        Array.prototype.forEach.call(document.querySelectorAll("[data-nav-page],[data-nav-pages]"), function (button) {
+          var pages = String(button.getAttribute("data-nav-pages") || button.getAttribute("data-nav-page") || "").split(",");
+          var active = pages.indexOf(page) >= 0;
+          var navView = button.getAttribute("data-nav-view");
+          if (navView === "events") active = active && App.state.operationsView === "events";
+          if (navView === "general") active = active && App.state.operationsView !== "events";
+          button.classList.toggle("active", active);
         });
 
         App.renderStatusRibbon();
