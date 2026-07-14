@@ -18,6 +18,8 @@ const FormResponseService = (() => {
     if (!form.id) form.id = makeId_("form");
     const items = listDefinitions();
     const existingIndex = items.findIndex(item => item.id === form.id);
+    const existing = existingIndex >= 0 ? items[existingIndex] : null;
+    if (form.status === "Published" && !Array.isArray(form.publishedQuestions)) form.publishedQuestions = JSON.parse(JSON.stringify(existing && existing.publishedQuestions || existing && existing.questions || form.questions || []));
     const now = new Date().toISOString();
     form.createdAt = form.createdAt || now;
     form.updatedAt = now;
@@ -31,6 +33,7 @@ const FormResponseService = (() => {
     let form = sanitiseDefinition_(input || {});
     if (!form.name) throw new Error("Give the form a name before publishing.");
     validateWorkflow_(form);
+    form.publishedQuestions = JSON.parse(JSON.stringify(form.questions || []));
     if (form.source === "google") {
       if (!/^https:\/\/docs\.google\.com\/forms\//i.test(form.googleFormUrl || "")) throw new Error("Add a valid Google Form URL before publishing.");
       const googleForm = FormApp.openByUrl(form.googleFormUrl);
@@ -59,7 +62,7 @@ const FormResponseService = (() => {
       name: form.name,
       description: form.description,
       programId: form.programId,
-      questions: form.questions || [],
+      questions: publishedQuestions_(form),
       prefill: form.prefill || {},
       status: form.status,
       user: user,
@@ -71,19 +74,21 @@ const FormResponseService = (() => {
     request = request || {};
     const form = listDefinitions().find(item => item.id === String(request.formId || ""));
     if (!form || form.status !== "Published" || form.source === "google") throw new Error("This form is not available for responses.");
+    const responseForm = Object.assign({}, form, { questions: publishedQuestions_(form) });
     const answers = request.answers || {};
-    validateRequired_(form, answers, request.activeQuestionIds);
-    const storage = provisionStorage_(form);
+    validateRequired_(responseForm, answers, request.activeQuestionIds);
+    const storage = provisionStorage_(responseForm);
     form.storage = storage;
-    const mapped = mapAnswers_(form, answers);
+    responseForm.storage = storage;
+    const mapped = mapAnswers_(responseForm, answers);
     const signedInEmail = Session.getActiveUser().getEmail() || "";
     const responseEmail = normaliseEmail_(mapped.responderEmail || signedInEmail);
     const profile = matchProfile_(responseEmail);
     const responseId = makeId_("response");
     const submittedAt = new Date().toISOString();
-    enforceResponseLimits_(form, storage.spreadsheetId, answers);
-    const uploads = saveUploads_(form, request.files || [], answers, mapped, responseId);
-    appendResponse_(form, storage.spreadsheetId, {
+    enforceResponseLimits_(responseForm, storage.spreadsheetId, answers);
+    const uploads = saveUploads_(responseForm, request.files || [], answers, mapped, responseId);
+    appendResponse_(responseForm, storage.spreadsheetId, {
       responseId,
       submittedAt,
       signedInEmail,
@@ -118,16 +123,17 @@ const FormResponseService = (() => {
     const googleFormId = event.source.getId();
     const form = listDefinitions().find(item => item.googleFormId === googleFormId && item.status === "Published");
     if (!form) return;
+    const responseForm = Object.assign({}, form, { questions: publishedQuestions_(form) });
     const byLabel = {};
     event.response.getItemResponses().forEach(itemResponse => { byLabel[itemResponse.getItem().getTitle()] = itemResponse.getResponse(); });
     const answers = {};
-    (form.questions || []).forEach(question => { if (Object.prototype.hasOwnProperty.call(byLabel, question.label)) answers[question.id] = byLabel[question.label]; });
-    const mapped = mapAnswers_(form, answers);
+    (responseForm.questions || []).forEach(question => { if (Object.prototype.hasOwnProperty.call(byLabel, question.label)) answers[question.id] = byLabel[question.label]; });
+    const mapped = mapAnswers_(responseForm, answers);
     const responseEmail = normaliseEmail_(mapped.responderEmail || event.response.getRespondentEmail && event.response.getRespondentEmail() || "");
     const profile = matchProfile_(responseEmail), responseId = "google-response-" + event.response.getId(), submittedAt = event.response.getTimestamp().toISOString();
-    enforceResponseLimits_(form, form.storage.spreadsheetId, answers);
-    const uploads = organiseGoogleFormUploads_(form, answers, mapped, responseId);
-    appendResponse_(form, form.storage.spreadsheetId, { responseId, submittedAt, signedInEmail: responseEmail, responseEmail, profile, answers, uploads });
+    enforceResponseLimits_(responseForm, form.storage.spreadsheetId, answers);
+    const uploads = organiseGoogleFormUploads_(responseForm, answers, mapped, responseId);
+    appendResponse_(responseForm, form.storage.spreadsheetId, { responseId, submittedAt, signedInEmail: responseEmail, responseEmail, profile, answers, uploads });
     const responseEntry = { responseId, formId: form.id, formName: form.name, submittedAt, profileType: profile.type, profileId: profile.id, profileName: profile.name, profileEmail: responseEmail, spreadsheetUrl: form.storage.spreadsheetUrl, parentResponseId: "", workflowStepId: "" };
     responseEntry.workflow = buildWorkflow_(form, answers, mapped, responseId);
     indexResponse_(responseEntry);
@@ -398,6 +404,7 @@ const FormResponseService = (() => {
     form.questions = Array.isArray(form.questions) ? form.questions.slice(0, 200) : [];
     return form;
   }
+  function publishedQuestions_(form) { return Array.isArray(form.publishedQuestions) ? form.publishedQuestions : form.questions || []; }
 
   function validateWorkflow_(form) {
     const workflow = form.workflow || {}, definitions = listDefinitions();
