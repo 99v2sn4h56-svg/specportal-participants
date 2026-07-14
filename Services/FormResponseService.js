@@ -72,7 +72,7 @@ const FormResponseService = (() => {
     const form = listDefinitions().find(item => item.id === String(request.formId || ""));
     if (!form || form.status !== "Published" || form.source === "google") throw new Error("This form is not available for responses.");
     const answers = request.answers || {};
-    validateRequired_(form, answers);
+    validateRequired_(form, answers, request.activeQuestionIds);
     const storage = provisionStorage_(form);
     form.storage = storage;
     const mapped = mapAnswers_(form, answers);
@@ -215,7 +215,7 @@ const FormResponseService = (() => {
     const uploadByQuestion = {};
     (response.uploads || []).forEach(upload => { uploadByQuestion[upload.questionId] = (uploadByQuestion[upload.questionId] || []).concat(upload.url); });
     const fixed = [response.responseId, response.submittedAt, response.signedInEmail, response.responseEmail, response.profile.type, response.profile.id, response.profile.name, form.id, form.name];
-    const values = (form.questions || []).map(question => {
+    const values = responseQuestions_(form).map(question => {
       if (uploadByQuestion[question.id]) return uploadByQuestion[question.id].join("\n");
       const answer = response.answers[question.id];
       return typeof answer === "object" ? JSON.stringify(answer) : String(answer == null ? "" : answer);
@@ -234,8 +234,9 @@ const FormResponseService = (() => {
   }
 
   function responseHeaders_(form) {
-    return ["Response ID", "Submitted at", "Signed-in email", "Responder email", "Profile type", "Profile ID", "Profile name", "Form ID", "Form name"].concat((form.questions || []).map(question => question.label || question.id));
+    return ["Response ID", "Submitted at", "Signed-in email", "Responder email", "Profile type", "Profile ID", "Profile name", "Form ID", "Form name"].concat(responseQuestions_(form).map(question => question.label || question.id));
   }
+  function responseQuestions_(form) { return (form.questions || []).filter(question => question.type !== "page_section" && question.type !== "text_section"); }
 
   function saveUploads_(form, files, answers, mapped, responseId) {
     const questions = {};
@@ -315,13 +316,15 @@ const FormResponseService = (() => {
     return { type: "", id: "", name: "", email };
   }
 
-  function validateRequired_(form, answers) {
+  function validateRequired_(form, answers, activeQuestionIds) {
+    const active = Array.isArray(activeQuestionIds) ? activeQuestionIds : null;
     (form.questions || []).forEach(question => {
-      if (!question.required || question.type === "text_section") return;
+      if (!question.required || question.type === "text_section" || question.type === "page_section" || active && !active.includes(question.id) || !questionIsActive_(form, answers, question.id)) return;
       const value = answers[question.id];
       if (value == null || value === "" || (Array.isArray(value) && !value.length)) throw new Error("Complete the required question: " + question.label);
     });
   }
+  function questionIsActive_(form, answers, questionId) { const rules=(form.questions||[]).filter(question => question.branchMode === "reveal_question" && question.branchTarget === questionId);if(!rules.length)return true;return rules.some(rule => { const value=answers[rule.id];return Array.isArray(value)?value.includes(rule.branchAnswer):value===rule.branchAnswer; }); }
 
   function enforceResponseLimits_(form, spreadsheetId, answers) {
     const limited = (form.questions || []).filter(question => question.type === "limited_response" && Number(question.limit) > 0);
@@ -374,8 +377,11 @@ const FormResponseService = (() => {
     const workflow = form.workflow || {}, mergeValues = Object.assign({ responseId: responseEntry.responseId, formName: form.name }, mapped);
     const render = text => String(text || "").replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, key) => String(mergeValues[key] == null ? "" : mergeValues[key]));
     if (workflow.confirmation && workflow.confirmation.enabled) {
-      const recipient = normaliseEmail_(workflow.confirmation.recipientEmail || mapped[workflow.confirmation.recipientField || "responderEmail"] || responseEntry.profileEmail);
-      if (recipient) try { MailApp.sendEmail({ to: recipient, subject: render(workflow.confirmation.subject || "We received your {{formName}} response"), htmlBody: render(workflow.confirmation.body || "<p>Thank you. Your response has been received.</p><p>Reference: {{responseId}}</p>") }); } catch (_) {}
+      const fields = workflow.confirmation.recipientFields || [workflow.confirmation.recipientField || "responderEmail"];
+      const fixed = String(workflow.confirmation.recipientEmails || workflow.confirmation.recipientEmail || "").split(/[\s,;]+/);
+      const recipients = fields.map(field => mapped[field]).concat(fixed).map(normaliseEmail_).filter((email, index, all) => email && all.indexOf(email) === index);
+      if (!recipients.length && responseEntry.profileEmail) recipients.push(normaliseEmail_(responseEntry.profileEmail));
+      if (recipients.length) try { MailApp.sendEmail({ to: recipients.join(","), subject: render(workflow.confirmation.subject || "We received your {{formName}} response"), htmlBody: render(workflow.confirmation.body || "<p>Thank you. Your response has been received.</p><p>Reference: {{responseId}}</p>") }); } catch (_) {}
     }
     ((responseEntry.workflow && responseEntry.workflow.steps) || []).forEach(step => {
       if (!step.assigneeEmail || !step.url) return;
@@ -395,7 +401,7 @@ const FormResponseService = (() => {
 
   function validateWorkflow_(form) {
     const workflow = form.workflow || {}, definitions = listDefinitions();
-    if (workflow.confirmation && workflow.confirmation.enabled && !workflow.confirmation.recipientEmail && !workflow.confirmation.recipientField) throw new Error("Choose who receives the confirmation email.");
+    if (workflow.confirmation && workflow.confirmation.enabled && !(workflow.confirmation.recipientFields || []).length && !workflow.confirmation.recipientEmails && !workflow.confirmation.recipientEmail && !workflow.confirmation.recipientField) throw new Error("Choose at least one confirmation email recipient.");
     (workflow.steps || []).forEach(step => {
       if (!step.formId) throw new Error("Choose a form for the workflow step: " + (step.title || "Untitled step"));
       const target = definitions.find(item => item.id === step.formId);
