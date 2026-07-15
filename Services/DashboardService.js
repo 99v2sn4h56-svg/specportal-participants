@@ -16,9 +16,14 @@ const DashboardService = (() => {
     const tasks = staff.isMatched ? safeCall_("TaskService.list", () => TaskService.list().filter(task => String(task.assignedUser || "").toLowerCase() === String(staff.email || "").toLowerCase()).slice(0, 12), []) : [];
     const workflowSummary = staff.isMatched ? safeCall_("Workflow platform summary", () => ({ queue: staff.isOperations ? OperationsQueueService.summary() : {}, tasks: { myTasks: tasks.filter(task => !["Completed", "Cancelled"].includes(task.status)).length } }), {}) : {};
     const audit = safeCall_("AuditService.list", () => AuditService.list(50).filter(item => item.actor === staff.email).slice(0, 12).map(toSafeActivity_), []);
+    // Cache/snapshot only: this call never rebuilds participant data.
+    const unrestrictedParticipants = staff.isAdmin || !staff.scope || !staff.scope.type || staff.scope.type === "production";
+    const participantSummary = unrestrictedParticipants
+      ? safeCall_("ParticipantProjectionService.getDashboardSnapshot", () => ParticipantProjectionService.getDashboardSnapshot(), { categories: [], status: "Unavailable" })
+      : { categories: [], totalParticipants: 0, status: "Scoped summary available in Participants", generatedAt: "", projection: "dashboard-participant-summary-v1" };
 
     const response = {
-      staff,
+      staff: toSafeDashboardStaff_(staff),
       staffTeam,
       timelineStatus: timeline.status || "",
       timelineLastRefreshed: timeline.lastRefreshed || "",
@@ -31,15 +36,17 @@ const DashboardService = (() => {
       workflowSummary,
       tasks,
       recentActivity: audit,
+      participantSummary,
       dashboardProfile: getDashboardProfile_(staff),
       rehearsals: timeline.upcomingRehearsals || [],
       todaysRehearsals: timeline.todaysRehearsals || [],
       attendanceEvents: [],
       currentDate: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM"),
       generatedAt: new Date().toISOString(),
+      projection: ProjectionContractService.contract("dashboard").version,
       services: {
         dashboard: "Connected",
-        participants: "Loaded separately through ParticipantService",
+        participants: "Loaded separately through the Participants route projection",
         staff: staff && staff.isMatched ? "Connected" : staff.status || "No Staff Profile Found",
         staffTeam: "Lazy loaded on Staff route",
         timeline: timeline.status || "Waiting",
@@ -51,11 +58,15 @@ const DashboardService = (() => {
       }
     };
     response.performance = { dashboardLoadMs: Date.now() - started, identity: staff.performance || {} };
+    ProjectionContractService.validate("dashboard", response);
+    response.performance.payloadBytes = JSON.stringify(response).length;
+    PerformanceTelemetryService.record("dashboard.projection.server", response.performance.dashboardLoadMs, { payloadBytes: response.performance.payloadBytes, records: (participantSummary.categories || []).length, projection: "dashboard" });
     if (staff.email) UserContextService.recordMetric("dashboardLoadMs", response.performance.dashboardLoadMs);
     return response;
   }
 
   function toSafeActivity_(item) { return { id: item.id || "", action: item.action || "Platform activity", actor: item.actor || "", occurredAt: item.occurredAt || "", entity: item.entity ? { type: item.entity.type || "", id: item.entity.id || "" } : null }; }
+  function toSafeDashboardStaff_(staff) { return { displayName: staff.displayName || "", firstName: staff.firstName || "", staffId: staff.staffId || "", role: staff.role || "", department: staff.department || "", status: staff.status || "", isMatched: !!staff.isMatched, isAdmin: !!staff.isAdmin, isOperations: !!staff.isOperations, permissionLevel: staff.permissionLevel || "", permissions: (staff.permissions || []).slice(), capabilities: (staff.capabilities || []).slice(), scope: staff.scope || { type: "production", values: [] }, hasPhoto: !!staff.photo, performance: staff.performance || {} }; }
 
   function getDashboardProfile_(staff) {
     const text = [
@@ -82,6 +93,7 @@ const DashboardService = (() => {
   }
 
   return {
-    getContext
+    getContext,
+    getProjection: getContext
   };
 })();

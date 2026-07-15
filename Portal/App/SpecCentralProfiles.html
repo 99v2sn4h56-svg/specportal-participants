@@ -5,9 +5,30 @@
         App.state.selectedParticipant = participant;
         App.events.emit("participant:selected", participant);
         App.recordRecentlyViewed("participant", App.getParticipantName(participant), participant.id || participant.studentKey, App.getParticipantSchool(participant));
-        App.renderParticipantProfile(participant);
+        App.loadParticipantDetail(participant);
         App.persistModuleState();
         if (!(options && options.routeDriven)) App.updateBrowserRoute(false);
+      },
+
+      loadParticipantDetail: function (participant) {
+        var stableId = String(participant && (participant.studentKey || participant.id) || "").trim();
+        var panel = document.getElementById("participantProfilePanel");
+        if (!stableId) { App.notify("This participant does not have a stable Student Key."); return; }
+        if (panel) { panel.hidden = false; panel.innerHTML = App.loadingState("Loading participant details"); }
+        var started = performance.now();
+        App.services.request("participantDetail:" + stableId, "portalGetParticipantDetail", { args: [stableId], cacheMs: 2 * 60 * 1000, timeoutMs: 30000 })
+          .then(function (response) {
+            if (!App.state.selectedParticipant || String(App.state.selectedParticipant.studentKey || App.state.selectedParticipant.id || "") !== stableId) return;
+            var detail = response && response.participant;
+            if (!detail) throw new Error("Participant detail was empty.");
+            App.state.selectedParticipant = detail;
+            App.recordClientPerformance("participant-detail", started, { records: 1, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(response) : 0, projection: "participant-detail" });
+            App.renderParticipantProfile(detail);
+          })
+          .catch(function (error) {
+            App.notify("Participant details could not be loaded: " + App.getErrorMessage(error));
+            if (App.state.selectedParticipant === participant) App.renderParticipantProfile(participant);
+          });
       },
 
       openSchool: function (school) {
@@ -71,7 +92,7 @@
         var category = App.getParticipantCategory(participant);
         var categoryLine = [category, App.getParticipantCategoryDetail(participant)].filter(Boolean).join(" - ");
         var subtitle = [school, App.getParticipantYear(participant) ? "Year " + App.getParticipantYear(participant) : ""].filter(Boolean).join(" · ");
-        var avatar = '<div class="scProfileAvatar">' + App.secureAvatarHtml("participant", participant.id || participant.studentKey, name, "profile") + '</div>';
+        var avatar = '<div class="scProfileAvatar">' + App.secureAvatarHtml("participant", participant.id || participant.studentKey, name, "profile", participant.assetVersion) + '</div>';
         App.recordRecentlyViewed("participant", name, participant.id || participant.studentKey, school);
         if (App.state.currentPage !== "dashboard") App.setWorkspaceBreadcrumb(["Participants", name]);
 
@@ -100,6 +121,8 @@
               '<div id="participantRehearsalSchedule" class="scProfileSection scAttendanceHistory">' +
                 '<div class="empty">Loading Timeline schedule...</div>' +
               '</div>' +
+              '<div class="sectionTitle">Submitted Forms</div>' +
+              '<div id="participantFormResponses" class="scProfileSection scAttendanceHistory"><div class="empty">Loading submitted forms...</div></div>' +
               '<div class="sectionTitle">School & Teacher</div>' +
               '<div class="scProfileSection">' +
                 App.profileLine("School", school) +
@@ -122,6 +145,22 @@
           '</div>';
         App.loadParticipantAttendanceHistory(participant);
         App.loadParticipantRehearsalSchedule(participant);
+        App.loadParticipantFormResponses(participant);
+      },
+
+      loadParticipantFormResponses: function (participant) {
+        var container = document.getElementById("participantFormResponses");
+        if (!container || !participant) return;
+        google.script.run
+          .withSuccessHandler(function (items) {
+            if (App.state.selectedParticipant !== participant) return;
+            items = Array.isArray(items) ? items : [];
+            container.innerHTML = items.length ? items.map(function (item) {
+              return '<article class="scAttendanceHistoryItem"><strong>' + App.escapeHtml(item.formName || "Form response") + '</strong><div class="scAttendanceHistoryMeta">' + App.escapeHtml(item.submittedAt || "") + ' · ' + App.escapeHtml(item.responseId || "") + '</div>' + (item.spreadsheetUrl ? '<a class="quickLink compact" href="' + App.escapeHtml(item.spreadsheetUrl) + '" target="_blank" rel="noopener">Open response spreadsheet</a>' : '') + '</article>';
+            }).join("") : '<div class="empty">No forms have been matched to this participant’s student email.</div>';
+          })
+          .withFailureHandler(function () { if (App.state.selectedParticipant === participant) container.innerHTML = '<div class="empty">Submitted forms are unavailable.</div>'; })
+          .portalGetProfileFormResponses("student", participant.studentKey || participant.studentId || "", participant.studentEmail || "");
       },
 
       closeParticipantProfile: function () {

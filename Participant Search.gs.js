@@ -3,8 +3,9 @@
 *************************************************************/
 
 const PARTICIPANT_SEARCH_SHEET_NAME = "🔍 Participant Search";
-// v5 adds only the storage-neutral photoId/hasPhoto fields to cached records.
-const PARTICIPANT_SEARCH_CACHE_KEY = "participantSearchIndex_v5";
+// v6 stores stable ownership plus abstract availability metadata. Drive IDs
+// remain inside the shared Headshot Asset Service.
+const PARTICIPANT_SEARCH_CACHE_KEY = "participantSearchIndex_v6";
 const PARTICIPANT_SEARCH_CACHE_SECONDS = 600;
 const PARTICIPANT_SEARCH_CACHE_CHUNK_SIZE = 90000;
 
@@ -30,6 +31,7 @@ function openParticipantSearchSidebar() {
 
 function refreshParticipantSearchIndex() {
   clearParticipantSearchCache_();
+  HeadshotAssetService.invalidate("participant");
 
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const records = buildParticipantRecords_(ss);
@@ -73,8 +75,10 @@ function searchParticipantsForTiles(filters) {
 function writeSelectedParticipant(record) {
   if (record.action === "collection") {
     writeCollectionToSearchSheet_(record);
+    return { title: record.title || "Collection", photo: null };
   } else {
     writeProfileToSearchSheet_(record);
+    return { title: record.title || "Participant", photo: resolveParticipantSearchHeadshot_(record) };
   }
 }
 
@@ -201,11 +205,6 @@ function writeProfileToSearchSheet_(record) {
   ss.setActiveSheet(sheet);
 }
 
-/**
- * Renders the sheet profile image in one isolated place. The current shared
- * Headshot Asset Service serves browser clients and cannot yet write directly
- * into a spreadsheet cell, so IMAGE() remains a temporary adapter here.
- */
 function writeParticipantPhotoPanel_(sheet, record) {
   const panel = sheet.getRange("F6:J16")
     .merge()
@@ -218,68 +217,22 @@ function writeParticipantPhotoPanel_(sheet, record) {
     .setFontColor("#7b8494")
     .setBorder(true, true, true, true, true, true, "#dce5f5", SpreadsheetApp.BorderStyle.SOLID);
 
-  const photo = resolveParticipantSearchPhoto_(record);
-  if (!photo.url) {
-    panel.setValue("No photo available");
-    return;
-  }
-
-  const safeUrl = String(photo.url).replace(/"/g, '""');
-  panel.setFormula(`=IFERROR(IMAGE("${safeUrl}",1),"No photo available")`);
+  panel.setValue(record && record.hasPhoto
+    ? "Headshot is shown securely in the Participant Search sidebar"
+    : "No photo available");
 }
 
 /**
- * Resolves the source only when the profile opens. Cached search records keep
- * photoId/hasPhoto rather than a full storage URL, avoiding stale URLs and
- * preparing this view for the shared Headshot Asset Service adapter.
+ * Uses the same authenticated blob proxy as SpecCentral. This avoids private
+ * Drive IMAGE() formulas, which are unreliable in Safari and on mobile.
  */
-function resolveParticipantSearchPhoto_(record) {
-  if (record && record.hasPhoto && record.sheetName === "INDIVIDUALS(YES)") {
-    const rowNumber = Number(record.rowNumber);
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("INDIVIDUALS(YES)");
-
-    if (sheet && Number.isInteger(rowNumber) && rowNumber >= 2 && rowNumber <= sheet.getLastRow()) {
-      const headers = makeHeaderMap_(sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]);
-      const photoIdCol = findHeaderIndex_(headers, ["Photo ID", "PhotoID", "Headshot ID"]);
-      const photoUrlCol = findHeaderIndex_(headers, ["Photo URL", "PhotoURL", "Headshot URL"]);
-      const row = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()).getValues()[0];
-      const current = normaliseParticipantPhotoReference_(
-        getCell_(row, photoUrlCol, -1) || getCell_(row, photoIdCol, -1)
-      );
-      if (current.url) return current;
-    }
+function resolveParticipantSearchHeadshot_(record) {
+  if (!record || !record.stableEntityId || !record.hasPhoto) return null;
+  try {
+    return HeadshotAssetService.resolveMany([{ entityType: "participant", stableId: record.stableEntityId, assetVersion: record.assetVersion || "", size: "large" }])[0] || null;
+  } catch (err) {
+    return { ok: false, errorCategory: "SECURE_HEADSHOT_UNAVAILABLE" };
   }
-
-  return normaliseParticipantPhotoReference_(record && record.photoId);
-}
-
-/**
- * Normalises supported Drive links in one place. Non-Drive HTTPS URLs remain
- * usable, while Drive references are converted to one consistent thumbnail.
- */
-function normaliseParticipantPhotoReference_(value) {
-  const text = String(value || "").trim();
-  if (!text) return { fileId: "", url: "" };
-
-  const patterns = [
-    /\/file\/d\/([a-zA-Z0-9_-]{20,})/,
-    /[?&]id=([a-zA-Z0-9_-]{20,})/,
-    /\/d\/([a-zA-Z0-9_-]{20,})/,
-    /^([a-zA-Z0-9_-]{20,})$/
-  ];
-
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      const fileId = match[1];
-      return {
-        fileId,
-        url: `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w800`
-      };
-    }
-  }
-
-  return /^https:\/\//i.test(text) ? { fileId: "", url: text } : { fileId: "", url: "" };
 }
 
 /*************************************************************
@@ -508,11 +461,8 @@ function addIndividualRecords_(ss, records) {
   const phoneCol = findHeaderIndex_(headers, ["Student Mobile", "Student Phone", "Parent Phone", "Phone"]);
   const statusCol = findHeaderIndex_(headers, ["Accepted?", "Status"]);
   const applicationCol = findHeaderIndex_(headers, ["Application", "Application ID", "Application Link"]);
-  // Headshot references originate in INDIVIDUALS(YES). Only a normalised ID
-  // and availability flag enter the search cache; full URLs are resolved when
-  // the profile is opened.
-  const photoIdCol = findHeaderIndex_(headers, ["Photo ID", "PhotoID", "Headshot ID"]);
-  const photoUrlCol = findHeaderIndex_(headers, ["Photo URL", "PhotoURL", "Headshot URL"]);
+  // Photo ID and Photo URL are read once by ParticipantService. Search stores
+  // only stable ownership and abstract asset metadata from that shared index.
 
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
@@ -523,29 +473,38 @@ function addIndividualRecords_(ss, records) {
 
     if (!name) continue;
 
-    const rawPhotoId = getCell_(row, photoIdCol, -1);
-    const rawPhotoUrl = getCell_(row, photoUrlCol, -1);
-    const normalisedPhoto = normaliseParticipantPhotoReference_(rawPhotoUrl);
-    const photoId = normalisedPhoto.fileId || normaliseParticipantPhotoReference_(rawPhotoId).fileId;
+    const school = getCell_(row, schoolCol, 7);
+    const category = getCell_(row, categoryCol, 2);
+    const item = getCell_(row, itemCol, -1);
+    const applicationId = getCell_(row, applicationCol, 3);
+    const stableEntityId = ParticipantService.makeStudentKey({ firstName: first, lastName: last, name, school, category, discipline: category, item, applicationId });
 
     records.push({
       action: "profile",
       type: "Student",
       icon: "👤",
       title: name,
-      school: getCell_(row, schoolCol, 7),
-      category: getCell_(row, categoryCol, 2),
-      item: getCell_(row, itemCol, -1),
+      stableEntityId,
+      school,
+      category,
+      item,
       email: getCell_(row, emailCol, 13),
       phone: formatPhone_(getCell_(row, phoneCol, -1)),
       status: getCell_(row, statusCol, 0),
-      applicationLink: getCell_(row, applicationCol, 3),
-      photoId,
-      hasPhoto: !!(rawPhotoId || rawPhotoUrl),
+      applicationLink: applicationId,
+      hasPhoto: false,
+      assetVersion: "",
       sheetName: "INDIVIDUALS(YES)",
       rowNumber: r + 1
     });
   }
+
+  const metadata = HeadshotAssetService.getMetadataMany("participant");
+  records.filter(record => record.type === "Student").forEach(record => {
+    const headshot = metadata[record.stableEntityId] || {};
+    record.hasPhoto = !!headshot.hasPhoto;
+    record.assetVersion = headshot.assetVersion || "";
+  });
 }
 
 function addGroupRecords_(ss, records) {
@@ -856,8 +815,8 @@ function dedupeRecords_(records) {
       // Duplicate removal remains unchanged, but photo availability discovered
       // on a later duplicate must not be discarded.
       const existing = output[seen[key]];
-      if (!existing.photoId && record.photoId) existing.photoId = record.photoId;
       if (record.hasPhoto) existing.hasPhoto = true;
+      if (!existing.assetVersion && record.assetVersion) existing.assetVersion = record.assetVersion;
       return;
     }
 

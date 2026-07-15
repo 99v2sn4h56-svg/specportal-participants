@@ -7,6 +7,7 @@
         schools: [],
         photos: {},
         secureImages: {},
+        secureImageExpiry: {},
         secureImageQueue: {},
         secureImageTimer: null,
         secureImageObserver: null,
@@ -109,7 +110,18 @@
         administrationDetailItems: [],
         navigationHistory: [],
         navigationIndex: -1,
-        ready: false
+        ready: false,
+        bootstrapContext: null,
+        startupStartedAt: 0,
+        dashboardUsableRecorded: false,
+        participantsUsableRecorded: false,
+        participantListComplete: false,
+        participantFirstPageReady: false,
+        participantFirstPageData: null,
+        preloadInFlight: {},
+        preloadedModules: {},
+        pendingPerformanceMetrics: [],
+        performanceFlushTimer: null
       },
 
       pages: {
@@ -194,25 +206,35 @@
       },
 
       init: function () {
+        App.state.startupStartedAt = performance.now();
         App.bootstrapState();
         App.restoreSidebarState();
         App.initPerformance();
-        App.loadIdentityContext().then(function () {
-          var restoredParticipants = App.restorePriorityParticipantCache();
-          var canLoadParticipants = App.hasPermission("Participants.View");
-          App.state.participantPriorityPending = canLoadParticipants && !restoredParticipants;
-          var participantsFirst = canLoadParticipants ? App.loadPortalData(false) : Promise.resolve();
+        App.loadBootstrap().then(function (bootstrap) {
+          if (!bootstrap) return;
+          if (bootstrap.platform.maintenanceMode) {
+            App.renderBootstrapGate("Scheduled maintenance", "SpecCentral is temporarily unavailable while platform maintenance is completed.");
+            return;
+          }
+          if (!bootstrap.permissions.modules.dashboard) {
+            App.renderBootstrapGate("Access unavailable", "Your account does not currently have access to the SpecCentral dashboard.");
+            return;
+          }
           App.navigateRoute(location.hash || "#home", { replace: true, initial: true });
-          var secondaryStarted = false;
-          var startSecondaryData = function () { if (secondaryStarted) return; secondaryStarted = true; App.state.participantPriorityPending = false; if (App.state.currentPage === "dashboard") App.renderProductionOverview(); App.loadConfig(); App.prefetchLikelyData(); };
-          Promise.resolve(participantsFirst).finally(startSecondaryData);
-          setTimeout(startSecondaryData, 2500);
+          App.loadConfig().finally(function () {
+            if (App.state.currentPage === "dashboard") App.markDashboardUsable();
+            App.prefetchLikelyData();
+          });
+        }).catch(function (error) {
+          var authenticationRequired = /AUTHENTICATION_REQUIRED|Authentication is required/i.test(App.getErrorMessage(error));
+          App.renderBootstrapGate(authenticationRequired ? "Sign in required" : "SpecCentral could not be loaded", authenticationRequired ? "Sign in with your authorised Google Workspace account, then refresh this page." : "Please refresh and try again. If the problem continues, contact the SpecCentral administrator.");
         });
       },
 
       bootstrapState: function () {
-        App.state.searchHistory = App.safeLoadJson("specCentralSearchHistory", []);
-        App.state.recentlyViewed = App.safeLoadJson("specCentralRecentlyViewed", []);
+        App.state.searchHistory = [];
+        App.state.recentlyViewed = [];
+        try { localStorage.removeItem("specCentralSearchHistory"); localStorage.removeItem("specPortalRecentSearches"); localStorage.removeItem("specCentralRecentlyViewed"); localStorage.removeItem("specPortalRecentlyViewed"); } catch (_) {}
         App.state.favourites = App.safeLoadJson("specCentralFavourites", []);
         App.registerCoreServices();
         App.bindApplicationEvents();
@@ -407,8 +429,8 @@
 
       registerCoreServices: function () {
         [
-          ["config", "Dashboard", "portalGetSpecCentralConfig"],
-          ["portalData", "Participants", "portalGetPortalData"],
+          ["config", "Dashboard", "portalGetDashboardProjection"],
+          ["portalData", "Participants", "portalGetParticipantListProjection"],
           ["calendar", "Timeline", "portalGetCalendarData"],
           ["attendance", "Attendance", "portalGetAttendanceSummary"],
           ["staff", "Staff", "portalGetStaffProductionTeam"],
@@ -551,12 +573,12 @@
       },
 
       loadConfig: function (forceRefresh) {
-        return App.services.request("config", "portalGetSpecCentralConfig", { cacheMs: 120000, timeoutMs: 30000, forceRefresh: !!forceRefresh })
+        return App.services.request("config", "portalGetDashboardProjection", { cacheMs: 60000, timeoutMs: 30000, forceRefresh: !!forceRefresh })
           .then(function (config) {
             config = config || {};
             App.state.dashboardContext = config;
             App.state.dashboardProfile = config.dashboardProfile || "operations";
-            App.applyStaffContext(config.staff || {});
+            if (!App.state.bootstrapContext) App.applyStaffContext(config.staff || {});
             App.state.staffTeam = config.staffTeam || [];
             App.state.attendanceUrl = config.attendanceUrl || "";
             App.state.attendanceStatus = config.attendanceStatus || "";
@@ -565,6 +587,7 @@
             App.state.notifications = config.notifications || [];
             App.state.tasks = config.tasks || [];
             App.state.recentActivity = config.recentActivity || [];
+            App.state.productionOverview = config.participantSummary || { categories: [], status: "Not warmed" };
             App.state.rehearsals = config.rehearsals || [];
             App.state.todaysRehearsals = config.todaysRehearsals || [];
             App.state.attendanceEvents = config.attendanceEvents || [];
@@ -602,6 +625,57 @@
           });
       },
 
+      loadBootstrap: function () {
+        var started = performance.now();
+        return App.services.request("bootstrap", "portalBootstrap", { noCache: true, forceRefresh: true, timeoutMs: 15000 })
+          .then(function (bootstrap) {
+            bootstrap = App.validateBootstrapResponse(bootstrap);
+            App.state.bootstrapContext = bootstrap;
+            App.state.applicationVersion = bootstrap.platform.buildVersion || App.state.applicationVersion;
+            App.applyStaffContext(App.bootstrapStaffContext(bootstrap));
+            App.recordClientPerformance("bootstrap", started, { payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(bootstrap) : 0, projection: "bootstrap" });
+            App.renderDashboardPage();
+            return bootstrap;
+          })
+          .catch(function (error) {
+            App.notify("SpecCentral could not be initialised: " + App.getErrorMessage(error));
+            throw error;
+          });
+      },
+
+      validateBootstrapResponse: function (value) {
+        var isRecord = function (input) { return !!input && typeof input === "object" && !Array.isArray(input); };
+        if (!isRecord(value) || !isRecord(value.user) || !isRecord(value.permissions) || !isRecord(value.permissions.modules) || !isRecord(value.permissions.actions) || !isRecord(value.featureFlags) || !isRecord(value.platform)) {
+          var invalid = new Error("The server returned an invalid bootstrap response.");
+          invalid.code = "INVALID_BOOTSTRAP_RESPONSE";
+          throw invalid;
+        }
+        if (!value.user.id || !value.user.email || value.platform.applicationName !== "SpecCentral") {
+          var incomplete = new Error("The bootstrap response is missing required identity or platform fields.");
+          incomplete.code = "INVALID_BOOTSTRAP_RESPONSE";
+          throw incomplete;
+        }
+        return value;
+      },
+
+      bootstrapStaffContext: function (bootstrap) {
+        var actions = bootstrap.permissions.actions || {};
+        var capabilities = Object.keys(actions).filter(function (name) { return actions[name] === true; });
+        return Object.assign({}, bootstrap.user, {
+          role: bootstrap.user.role || (bootstrap.permissions.roles || [])[0] || "Authenticated user",
+          permissions: capabilities.slice(),
+          capabilities: capabilities.slice()
+        });
+      },
+
+      renderBootstrapGate: function (title, message) {
+        var content = document.getElementById("appContent");
+        if (!content) return;
+        content.innerHTML = '<section class="surfacePanel" role="alert" style="max-width:760px;margin:48px auto;padding:32px"><span class="eyebrow">SpecCentral</span><h2>' + App.escapeHtml(title) + '</h2><p>' + App.escapeHtml(message) + '</p><button class="quickLink primaryAction" type="button" onclick="location.reload()">Refresh</button></section>';
+        var refresh = document.getElementById("pageRefreshAction");
+        if (refresh) refresh.hidden = true;
+      },
+
       applyStaffContext: function (staff) {
         var identityWasResolved = !!App.state.identityWasResolved;
         var previousSignature = App.permissionCacheSignature ? App.permissionCacheSignature() : "";
@@ -613,12 +687,12 @@
         App.state.identityWasResolved = true;
         App.renderNavigation();
         App.renderStaffContext();
-        if (App.state.staff.isAdmin) App.loadViewingAsRoles();
         if (identityWasResolved && previousSignature !== App.permissionCacheSignature()) setTimeout(function () { App.navigateRoute(location.hash || "#home", { replace: true }); }, 0);
       },
 
       loadPortalData: function (forceRefresh) {
-        return App.services.request("portalData", "portalGetPortalData", { cacheMs: 30 * 60 * 1000, timeoutMs: 45000, forceRefresh: !!forceRefresh })
+        var started = performance.now();
+        return App.services.request("portalData", "portalGetParticipantListProjection", { cacheMs: 5 * 60 * 1000, timeoutMs: 45000, forceRefresh: !!forceRefresh })
           .then(function (data) {
             data = data || {};
             App.cachePriorityParticipantData(data);
@@ -627,6 +701,7 @@
             App.state.schools = data.schools || [];
             App.state.photos = data.photos || {};
             App.state.ready = true;
+            App.state.participantListComplete = true;
             App.rebuildSearchProviders();
             App.events.emit("dashboard:refresh");
             App.renderStaffContext();
@@ -634,6 +709,11 @@
             App.renderDashboardPage();
             App.renderParticipantStatus();
             if (App.state.currentPage === "participants" && App.renderParticipantExplorer) App.renderParticipantExplorer();
+            if (!App.state.participantsUsableRecorded) {
+              App.state.participantsUsableRecorded = true;
+              App.recordClientPerformance("participants-usable", App.state.startupStartedAt, { records: App.state.participants.length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, projection: "participant-list" });
+            }
+            App.recordClientPerformance("participant-list-request", started, { records: App.state.participants.length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, cache: data.requestMeta && data.requestMeta.cache || "unknown", projection: "participant-list" });
             return data;
           })
           .catch(function (error) {
@@ -644,15 +724,98 @@
           });
       },
 
+      participantFirstPageQuery: function () {
+        return { key: "participantListPage:v2:page=1:pageSize=50", params: { page: 1, pageSize: 50 } };
+      },
+
+      loadParticipantFirstPage: function (forceRefresh, trigger, refreshServer) {
+        var query = App.participantFirstPageQuery(), started = performance.now();
+        return App.services.request(query.key, "portalGetParticipantListPage", {
+          args: [query.params, { refresh: !!refreshServer }],
+          cacheMs: 5 * 60 * 1000,
+          timeoutMs: 45000,
+          forceRefresh: !!forceRefresh,
+          noCache: !!refreshServer
+        }).then(function (data) {
+          data = data || {};
+          if (data.queryKey && data.queryKey !== "participant-list-page-v2:page=1:pageSize=50") throw new Error("Participant page query key mismatch.");
+          App.cachePriorityParticipantData(data);
+          App.applyParticipantFirstPage(data);
+          App.loadParticipantFilterProjection(false).catch(function () {});
+          App.recordClientPerformance("participant-page-" + (trigger || "route"), started, { records: (data.participants || []).length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, cache: data.requestMeta && data.requestMeta.cache || "unknown", isStale: !!(data.requestMeta && data.requestMeta.isStale), projection: "participant-list-page" });
+          if (App.state.currentPage === "participants" && !App.state.dashboardUsableRecorded) setTimeout(function () { App.flushClientPerformance(true); }, 0);
+          if (data.requestMeta && data.requestMeta.isStale && !refreshServer) setTimeout(function () { App.loadParticipantFirstPage(true, "stale-refresh", true).catch(function () {}); }, 0);
+          return data;
+        });
+      },
+
+      applyParticipantFirstPage: function (data) {
+        if (!data || !Array.isArray(data.participants)) return false;
+        App.state.participantFirstPageData = data;
+        App.state.participantFirstPageReady = true;
+        if (!App.state.participantListComplete) {
+          App.state.participants = data.participants || [];
+          App.state.groups = [];
+          App.state.schools = data.lookups && data.lookups.schools || [];
+          App.state.photos = {};
+          App.state.ready = true;
+          App.rebuildSearchProviders();
+          App.renderParticipantStatus();
+          if (App.state.currentPage === "participants" && App.renderParticipantExplorer) App.renderParticipantExplorer();
+        }
+        return true;
+      },
+
+      loadParticipantFilterProjection: function (forceRefresh) {
+        if (App.state.participantFilterProjection && !forceRefresh) return Promise.resolve(App.state.participantFilterProjection);
+        return App.services.request("participantFilters:v1", "portalGetParticipantFilterProjection", {
+          args: [{ refresh: !!forceRefresh }], cacheMs: 15 * 60 * 1000, timeoutMs: 45000, forceRefresh: !!forceRefresh
+        }).then(function (data) {
+          App.state.participantFilterProjection = data || null;
+          if (App.state.currentPage === "participants" && App.renderParticipantFilterPanel) App.renderParticipantFilterPanel();
+          return data;
+        });
+      },
+
       ensurePortalDataLoaded: function () {
-        if (App.state.ready) return Promise.resolve({
+        if (App.state.participantListComplete) return Promise.resolve({
           participants: App.state.participants,
           groups: App.state.groups,
           schools: App.state.schools,
           photos: App.state.photos
         });
 
-        return App.loadPortalData();
+        var completeInBackground = function () { setTimeout(function () { App.loadPortalData(false).catch(function () {}); }, 0); };
+        if (App.state.participantFirstPageReady || App.restorePriorityParticipantCache()) {
+          completeInBackground();
+          return Promise.resolve(App.state.participantFirstPageData || { participants: App.state.participants, groups: [], schools: App.state.schools, photos: {} });
+        }
+        return App.loadParticipantFirstPage(false, "route", false).then(function (data) { completeInBackground(); return data; });
+      },
+
+      recordClientPerformance: function (name, started, detail) {
+        var duration = typeof started === "number" ? Math.max(0, Math.round(performance.now() - started)) : 0;
+        App.state.pendingPerformanceMetrics.push({ name: name, durationMs: duration, detail: detail || {} });
+        if (App.state.pendingPerformanceMetrics.length > 20) App.state.pendingPerformanceMetrics.shift();
+        if (App.state.dashboardUsableRecorded) {
+          clearTimeout(App.state.performanceFlushTimer);
+          App.state.performanceFlushTimer = setTimeout(App.flushClientPerformance, 250);
+        }
+        return duration;
+      },
+
+      flushClientPerformance: function (force) {
+        if ((!App.state.dashboardUsableRecorded && !force) || !App.state.pendingPerformanceMetrics.length) return;
+        var metrics = App.state.pendingPerformanceMetrics.splice(0, 20);
+        try { google.script.run.portalRecordClientPerformanceBatch(metrics); } catch (_) {}
+      },
+
+      markDashboardUsable: function () {
+        if (App.state.dashboardUsableRecorded) return;
+        App.state.dashboardUsableRecorded = true;
+        App.recordClientPerformance("dashboard-usable", App.state.startupStartedAt, { route: "dashboard", projection: "dashboard" });
+        clearTimeout(App.state.performanceFlushTimer);
+        App.state.performanceFlushTimer = setTimeout(App.flushClientPerformance, 0);
       },
 
       loadProductionOverview: function (forceRefresh) {
@@ -969,7 +1132,6 @@
         if (!el) return;
         if (!App.hasPermission("Participants.View")) { if (el.parentElement) el.parentElement.hidden = true; return; }
         if (el.parentElement) el.parentElement.hidden = false;
-        if (App.state.participantPriorityPending) { el.innerHTML = App.loadingState("Loading participant database"); return; }
         if (!App.state.productionOverview) {
           el.innerHTML = App.loadingState("Loading production categories");
           App.loadProductionOverview(false);

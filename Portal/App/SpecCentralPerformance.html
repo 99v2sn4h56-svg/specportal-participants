@@ -1,16 +1,18 @@
 <script>
   (function () {
     var originalRequest = App.services.request;
-    var CACHE_VERSION = "SC-PERF-002";
-    var PARTICIPANT_CACHE_KEY = "specCentralParticipantCacheV2";
-    var PARTICIPANT_CACHE_MS = 30 * 60 * 1000;
-    var TTL = { config: 120000, portalData: PARTICIPANT_CACHE_MS, calendar: 180000, attendanceSummary: 120000, attendanceEvents: 300000, eventManagerLanding: 180000, operations: 120000, administration: 300000, staffTeam: 300000 };
+    var CACHE_VERSION = "SC-PERF-003";
+    var PARTICIPANT_CACHE_KEY = "specCentralParticipantFirstPageV2";
+    var PARTICIPANT_CACHE_MS = 15 * 60 * 1000;
+    var PARTICIPANT_FRESH_MS = 5 * 60 * 1000;
+    var TTL = { config: 60000, portalData: 5 * 60 * 1000, "participantListPage:v2:page=1:pageSize=50": PARTICIPANT_FRESH_MS, "participantFilters:v1": 15 * 60 * 1000, calendar: 180000, attendanceSummary: 60000, attendanceEvents: 300000, eventManagerLanding: 180000, operations: 120000, administration: 300000, staffTeam: 300000 };
 
     Object.assign(App, {
       initPerformance: function () {
         App.state.sharedClientCache = {};
         App.state.performanceMetrics = [];
         App.state.pageContainers = {};
+        try { sessionStorage.removeItem("specCentralParticipantCacheV2"); sessionStorage.removeItem("specCentralParticipantFirstPageV1"); } catch (_) {}
         App.restoreModuleState();
         window.addEventListener("hashchange", function () {
           if (App.state.suppressHashRoute) return;
@@ -19,10 +21,11 @@
         window.addEventListener("beforeunload", function () { App.persistModuleState(); App.saveCurrentScrollPosition(); });
         document.addEventListener("input", App.queueModuleStatePersist, true);
         document.addEventListener("change", App.queueModuleStatePersist, true);
+        App.bindModulePreloadIntent();
       },
 
       permissionCacheSignature: function () {
-        return [App.state.staff && App.state.staff.email || "anonymous", App.state.viewingAsRole || App.state.staff && App.state.staff.role || "", (App.state.viewingAsCapabilities || App.state.permissions || []).slice().sort().join(",")].join("|");
+        return [App.state.staff && (App.state.staff.cacheIdentity || App.state.staff.email) || "anonymous", App.state.viewingAsRole || App.state.staff && App.state.staff.role || "", (App.state.viewingAsCapabilities || App.state.permissions || []).slice().sort().join(",")].join("|");
       },
 
       clientCacheKey: function (key) { return String(key || "") + "|" + App.permissionCacheSignature(); },
@@ -31,12 +34,26 @@
       setClientCacheEntry: function (key, data, ttl, status) { var now = Date.now(); return App.state.sharedClientCache[App.clientCacheKey(key)] = { data: data, loadedAt: now, expiresAt: now + Math.max(0, Number(ttl) || 0), status: status || "fresh", sourceVersion: CACHE_VERSION }; },
       invalidateClientCache: function (key) { delete App.state.sharedClientCache[App.clientCacheKey(key)]; delete App.state.serviceCache[key]; delete App.state.cacheTimestamps[key]; },
       clearClientCache: function () { App.state.sharedClientCache = {}; App.state.serviceCache = {}; App.state.cacheTimestamps = {}; App.state.inFlightRequests = {}; },
-      clearPermissionScopedCaches: function () { App.clearPriorityParticipantCache(); App.state.sharedClientCache = {}; App.state.serviceCache = {}; App.state.cacheTimestamps = {}; App.state.inFlightRequests = {}; App.state.loadedServices = {}; App.state.participants = []; App.state.groups = []; App.state.schools = []; App.state.ready = false; App.state.calendarData = null; App.state.calendarControlsRestored = false; App.state.attendanceSummary = null; App.state.attendanceEvents = []; App.state.attendanceLoaded = false; App.state.eventManagerData = null; App.state.staffDirectoryData = null; App.state.selectedStaffProfile = null; App.state.administrationData = null; Object.keys(App.state.pageContainers || {}).forEach(function (key) { var node = App.state.pageContainers[key]; if (node && node.parentNode) node.parentNode.removeChild(node); }); App.state.pageContainers = {}; },
-      invalidateClientModule: function (module) { if (module === "participants") App.clearPriorityParticipantCache(); var map = { participants: ["portalData", "photos", "platformSearch"], timeline: ["calendar", "eventManagerLanding", "eventWorkspace", "staffProfile"], attendance: ["attendanceSummary", "attendanceEvents"], staff: ["staffTeam", "staffDirectory", "staffProfile", "identity", "config", "platformSearch"], search: ["platformSearch"], dashboard: ["config"], administration: ["administration", "authorizationModel"] }; var prefixes = map[module] || [module]; Object.keys(App.state.sharedClientCache || {}).forEach(function (cacheKey) { if (prefixes.some(function (prefix) { return cacheKey.indexOf(prefix) === 0; })) delete App.state.sharedClientCache[cacheKey]; }); prefixes.forEach(App.invalidateClientCache); },
+      clearPermissionScopedCaches: function () { App.clearPriorityParticipantCache(); App.state.sharedClientCache = {}; App.state.serviceCache = {}; App.state.cacheTimestamps = {}; App.state.inFlightRequests = {}; App.state.loadedServices = {}; App.state.preloadInFlight = {}; App.state.preloadedModules = {}; App.state.participants = []; App.state.groups = []; App.state.schools = []; App.state.ready = false; App.state.participantListComplete = false; App.state.participantFirstPageReady = false; App.state.participantFirstPageData = null; App.state.calendarData = null; App.state.calendarControlsRestored = false; App.state.attendanceSummary = null; App.state.attendanceEvents = []; App.state.attendanceLoaded = false; App.state.eventManagerData = null; App.state.staffDirectoryData = null; App.state.selectedStaffProfile = null; App.state.administrationData = null; Object.keys(App.state.pageContainers || {}).forEach(function (key) { var node = App.state.pageContainers[key]; if (node && node.parentNode) node.parentNode.removeChild(node); }); App.state.pageContainers = {}; },
+      invalidateClientModule: function (module) { if (module === "participants") App.clearPriorityParticipantCache(); var map = { participants: ["portalData", "participantListPage", "photos", "platformSearch"], timeline: ["calendar", "eventManagerLanding", "eventWorkspace", "staffProfile"], attendance: ["attendanceSummary", "attendanceEvents"], staff: ["staffTeam", "staffDirectory", "staffProfile", "identity", "config", "platformSearch"], search: ["platformSearch"], dashboard: ["config"], administration: ["administration", "authorizationModel"] }; var prefixes = map[module] || [module]; Object.keys(App.state.sharedClientCache || {}).forEach(function (cacheKey) { if (prefixes.some(function (prefix) { return cacheKey.indexOf(prefix) === 0; })) delete App.state.sharedClientCache[cacheKey]; }); prefixes.forEach(App.invalidateClientCache); },
 
-      cachePriorityParticipantData: function (data) { if (!data || !Array.isArray(data.participants)) return; var entry = App.getClientCacheEntry("portalData"); if (entry && entry.status === "hit") return; try { sessionStorage.setItem(PARTICIPANT_CACHE_KEY, JSON.stringify({ signature: App.permissionCacheSignature(), cachedAt: Date.now(), expiresAt: Date.now() + PARTICIPANT_CACHE_MS, data: data })); } catch (err) {} },
-      restorePriorityParticipantCache: function () { var stored; try { stored = JSON.parse(sessionStorage.getItem(PARTICIPANT_CACHE_KEY) || "null"); } catch (err) { stored = null; } if (!stored || stored.signature !== App.permissionCacheSignature() || Number(stored.expiresAt || 0) <= Date.now() || !stored.data || !Array.isArray(stored.data.participants)) { App.clearPriorityParticipantCache(); return false; } App.setClientCacheEntry("portalData", stored.data, Math.max(0, Number(stored.expiresAt) - Date.now()), "session-hit"); App.state.participants = stored.data.participants || []; App.state.groups = stored.data.groups || []; App.state.schools = stored.data.schools || []; App.state.photos = stored.data.photos || {}; App.state.ready = true; App.rebuildSearchProviders(); return true; },
-      clearPriorityParticipantCache: function () { try { sessionStorage.removeItem(PARTICIPANT_CACHE_KEY); } catch (err) {} },
+      cachePriorityParticipantData: function (data) {
+        if (!data || !Array.isArray(data.participants)) return;
+        var allowed = ["id", "studentKey", "firstName", "lastName", "name", "schoolId", "school", "year", "discipline", "subDiscipline", "category", "categoryDetail", "item", "itemId", "region", "directorate", "applicationStatus", "participationType", "segment", "schoolGroup", "attendanceStatus", "lastUpdated", "hasPhoto", "assetKey", "assetVersion"];
+        var safe = { participants: data.participants.slice(0, 50).map(function (item) { return allowed.reduce(function (output, key) { if (item && item[key] !== undefined) output[key] = item[key]; return output; }, {}); }), pagination: data.pagination || { page: 1, pageSize: 50, total: data.participants.length }, generatedAt: data.generatedAt || new Date().toISOString(), sourceUpdatedAt: data.sourceUpdatedAt || data.generatedAt || "", projection: "participant-list-page-v2", queryKey: "participant-list-page-v2:page=1:pageSize=50", requestMeta: data.requestMeta || {} };
+        var freshUntil = data.requestMeta && data.requestMeta.isStale ? Date.now() - 1 : Date.now() + PARTICIPANT_FRESH_MS;
+        try { sessionStorage.setItem(PARTICIPANT_CACHE_KEY, JSON.stringify({ signature: App.permissionCacheSignature(), cachedAt: Date.now(), freshUntil: freshUntil, expiresAt: Date.now() + PARTICIPANT_CACHE_MS, data: safe })); } catch (err) {}
+      },
+      restorePriorityParticipantCache: function () {
+        var stored; try { stored = JSON.parse(sessionStorage.getItem(PARTICIPANT_CACHE_KEY) || "null"); } catch (err) { stored = null; }
+        if (!stored || stored.signature !== App.permissionCacheSignature() || Number(stored.expiresAt || 0) <= Date.now() || !stored.data || stored.data.projection !== "participant-list-page-v2" || !Array.isArray(stored.data.participants)) { App.clearPriorityParticipantCache(); return false; }
+        var ttl = Math.max(0, Number(stored.freshUntil || 0) - Date.now());
+        stored.data.requestMeta = Object.assign({}, stored.data.requestMeta || {}, { cache: ttl ? "session-fresh" : "session-stale", cacheStatus: ttl ? "session-fresh" : "session-stale", isStale: !ttl });
+        App.setClientCacheEntry(App.participantFirstPageQuery().key, stored.data, ttl, ttl ? "session-fresh" : "session-stale");
+        App.applyParticipantFirstPage(stored.data);
+        return true;
+      },
+      clearPriorityParticipantCache: function () { try { sessionStorage.removeItem(PARTICIPANT_CACHE_KEY); } catch (err) {} App.state.participantFirstPageReady = false; App.state.participantFirstPageData = null; },
 
       activatePersistentPage: function (page, template, outlet) {
         while (outlet.firstChild) outlet.removeChild(outlet.firstChild);
@@ -91,7 +108,7 @@
         if (route.page === "operations" && !route.eventId) { App.state.selectedEventWorkspaceId = ""; var eventDrawer = document.getElementById("eventWorkspaceDrawer"); if (eventDrawer) { eventDrawer.hidden = true; eventDrawer.innerHTML = ""; } }
         if (route.operationsView) App.state.operationsView = route.operationsView;
         App.navigate(route.page, { fromBrowser: true, replace: options && options.replace, route: route });
-        if (route.participantId) App.ensurePortalDataLoaded().then(function () { var participant = (App.state.participants || []).find(function (item) { return String(item.id || "") === route.participantId; }); if (participant) App.openParticipant(participant, { routeDriven: true }); });
+        if (route.participantId) App.openParticipant({ id: route.participantId, studentKey: route.participantId, name: "Participant" }, { routeDriven: true });
         if (route.staffId) App.loadStaffDirectory(false).then(function () { App.openStaffProfile(route.staffId, { routeDriven: true }); });
         if (route.eventId) setTimeout(function () { App.openEventWorkspace(route.eventId); }, 0);
         if (route.invalid) { App.updateBrowserRoute(true); App.notify("That route was not recognised. Home has been opened."); }
@@ -107,7 +124,7 @@
 
       persistModuleState: function () {
         var state = {
-          participants: { search: App.state.participantExplorerSearch || "", filters: App.state.participantExplorerFilters || {}, sort: App.state.participantExplorerSort || {}, page: App.state.participantExplorerPage || 1, pageSize: App.state.participantExplorerPageSize || 0, savedView: App.state.participantExplorerSavedView || "all" },
+          participants: { search: "", filters: App.state.participantExplorerFilters || {}, sort: App.state.participantExplorerSort || {}, page: App.state.participantExplorerPage || 1, pageSize: App.state.participantExplorerPageSize || 0, savedView: App.state.participantExplorerSavedView || "all" },
           calendar: { date: App.state.calendarDate instanceof Date ? App.state.calendarDate.toISOString() : App.state.calendarDate, view: App.state.calendarView, search: String((document.getElementById("calendarSearch") || {}).value || App.state.calendarFilters && App.state.calendarFilters.search || ""), type: String((document.getElementById("calendarTypeFilter") || {}).value || App.state.calendarFilters && App.state.calendarFilters.type || ""), venue: String((document.getElementById("calendarVenueFilter") || {}).value || App.state.calendarFilters && App.state.calendarFilters.venue || ""), selectedEventId: App.state.selectedCalendarEvent && (App.state.selectedCalendarEvent.id || App.state.selectedCalendarEvent.eventId) || "" },
           attendance: { sessionId: App.state.selectedAttendanceSessionId || "", eventName: App.state.selectedAttendanceEventName || "", filter: App.state.attendanceEventFilter, search: App.state.attendanceEventSearch },
           eventManager: { search: App.state.eventManagerSearch, range: App.state.eventManagerRange, filters: App.state.eventManagerFilters, view: App.state.eventManagerView, eventId: App.state.selectedEventWorkspaceId, section: App.state.selectedEventWorkspaceSection },
@@ -124,7 +141,7 @@
       restoreModuleState: function () {
         var saved = {}; try { saved = JSON.parse(sessionStorage.getItem("specCentralModuleStateV1") || "{}"); } catch (err) {}
         var participants = saved.participants || {}, calendar = saved.calendar || {}, attendance = saved.attendance || {}, events = saved.eventManager || {}, administration = saved.administration || {}, staff = saved.staff || {};
-        App.state.participantExplorerSearch = participants.search || ""; App.state.participantExplorerFilters = participants.filters || {}; App.state.participantExplorerSort = participants.sort || { key: "name", direction: "asc" }; App.state.participantExplorerPage = participants.page || 1; App.state.participantExplorerPageSize = participants.pageSize || 0; App.state.participantExplorerSavedView = participants.savedView || "all";
+        App.state.participantExplorerSearch = ""; App.state.participantExplorerFilters = participants.filters || {}; App.state.participantExplorerSort = participants.sort || { key: "name", direction: "asc" }; App.state.participantExplorerPage = participants.page || 1; App.state.participantExplorerPageSize = participants.pageSize || 0; App.state.participantExplorerSavedView = participants.savedView || "all";
         if (calendar.date) { var date = new Date(calendar.date); if (!isNaN(date.getTime())) App.state.calendarDate = date; } App.state.calendarView = calendar.view || App.state.calendarView; App.state.calendarFilters = { search: calendar.search || "", type: calendar.type || "", venue: calendar.venue || "" }; App.state.selectedCalendarEventId = calendar.selectedEventId || "";
         App.state.selectedAttendanceSessionId = attendance.sessionId || ""; App.state.selectedAttendanceEventName = attendance.eventName || ""; App.state.attendanceEventFilter = attendance.filter || App.state.attendanceEventFilter; App.state.attendanceEventSearch = attendance.search || "";
         App.state.eventManagerSearch = events.search || ""; App.state.eventManagerRange = events.range || App.state.eventManagerRange; App.state.eventManagerFilters = events.filters || {}; App.state.eventManagerView = events.view || App.state.eventManagerView; App.state.selectedEventWorkspaceId = events.eventId || ""; App.state.selectedEventWorkspaceSection = events.section || "overview";
@@ -139,10 +156,60 @@
 
       prefetchLikelyData: function () {
         var run = function () {
-          if (App.state.currentPage === "dashboard") { if (App.hasPermission("Participants.View")) App.loadProductionOverview(false); if (App.hasPermission("Calendar.View") && !App.state.calendarData) App.loadCalendarData(false); }
-          else if (App.state.currentPage === "operations" && App.state.operationsView !== "events") App.loadEventManagerLanding(false);
+          if (!App.state.dashboardUsableRecorded || App.state.currentPage !== "dashboard") return;
+          var modules = ["participants", "attendance"], started = performance.now();
+          App.recordClientPerformance("preload-start", started, { phase: "start", requests: modules.length, trigger: "idle" });
+          modules.reduce(function (chain, module) {
+            return chain.then(function () { return App.preloadModule(module, "idle"); });
+          }, Promise.resolve()).finally(function () {
+            App.recordClientPerformance("preload-complete", started, { phase: "complete", requests: modules.length, trigger: "idle" });
+          });
         };
         if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 }); else setTimeout(run, 800);
+      },
+
+      bindModulePreloadIntent: function () {
+        if (App.state.preloadIntentBound) return;
+        App.state.preloadIntentBound = true;
+        var handle = function (event) { var target = event.target && event.target.closest ? event.target.closest("[data-preload-module]") : null; if (target) App.preloadModule(target.getAttribute("data-preload-module"), "intent"); };
+        document.addEventListener("pointerover", handle, true);
+        document.addEventListener("focusin", handle, true);
+        document.addEventListener("touchstart", handle, { passive: true, capture: true });
+      },
+
+      canPreloadModule: function (module, trigger) {
+        var bootstrap = App.state.bootstrapContext || {}, platform = bootstrap.platform || {}, permissions = bootstrap.permissions || {}, enabled = permissions.modules || {}, flags = bootstrap.featureFlags || {};
+        if (platform.maintenanceMode || !enabled[module]) return false;
+        if (module === "participants" && (flags.participantListProjection === false || flags.newParticipantViewEnabled === false)) return false;
+        if (module === "attendance" && flags.attendanceEnabled === false) return false;
+        if (trigger === "idle") {
+          var connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection || {};
+          if (connection.saveData || /(^|-)2g$|slow-2g/i.test(String(connection.effectiveType || ""))) return false;
+          if (Number(navigator.deviceMemory || 4) <= 2) return false;
+        }
+        return true;
+      },
+
+      preloadModule: function (module, trigger) {
+        module = String(module || ""); trigger = trigger || "idle";
+        if (!App.canPreloadModule(module, trigger) || App.state.preloadedModules[module]) return Promise.resolve(null);
+        if (App.state.preloadInFlight[module]) return App.state.preloadInFlight[module];
+        var started = performance.now(), request;
+        if (module === "participants") {
+          if (App.state.participantFirstPageReady || App.restorePriorityParticipantCache()) request = App.state.participantFirstPageData && App.state.participantFirstPageData.requestMeta && App.state.participantFirstPageData.requestMeta.isStale ? App.loadParticipantFirstPage(true, "preload-" + trigger, true) : Promise.resolve(App.state.participantFirstPageData);
+          else request = App.loadParticipantFirstPage(false, "preload-" + trigger, false);
+        } else if (module === "attendance") {
+          request = App.services.request("attendanceSummaryPreload", "portalPeekAttendanceSummary", { cacheMs: 60000, timeoutMs: 15000 }).then(function (result) { if (result && result.ok) App.setClientCacheEntry("attendanceSummary", result, 60000, "cache-only-preload"); return result; });
+        } else request = Promise.resolve(null);
+        App.state.preloadInFlight[module] = Promise.resolve(request).then(function (result) {
+          App.state.preloadedModules[module] = true;
+          App.recordClientPerformance("module-preload", started, { module: module, trigger: trigger, phase: "complete", payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(result) : 0 });
+          return result;
+        }).catch(function (error) {
+          App.recordClientPerformance("module-preload", started, { module: module, trigger: trigger, phase: "failed" });
+          return null;
+        }).finally(function () { delete App.state.preloadInFlight[module]; });
+        return App.state.preloadInFlight[module];
       },
 
       maybeRevalidateCurrentPage: function () {

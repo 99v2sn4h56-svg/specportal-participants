@@ -92,8 +92,6 @@
         App.state.searchHistory = [term].concat((App.state.searchHistory || []).filter(function (item) {
           return String(item).toLowerCase() !== term.toLowerCase();
         })).slice(0, 10);
-        App.safeSaveJson("specCentralSearchHistory", App.state.searchHistory);
-        App.safeSaveJson("specPortalRecentSearches", App.state.searchHistory);
       },
 
       recordRecentlyViewed: function (type, label, id, meta) {
@@ -102,8 +100,6 @@
         App.state.recentlyViewed = [{ type: type, label: label, id: id || "", meta: meta || "", key: key, at: Date.now() }].concat((App.state.recentlyViewed || []).filter(function (item) {
           return item.key !== key;
         })).slice(0, 10);
-        App.safeSaveJson("specCentralRecentlyViewed", App.state.recentlyViewed);
-        App.safeSaveJson("specPortalRecentlyViewed", App.state.recentlyViewed);
         if (App.state.currentPage === "dashboard" && App.renderWorkspaceMemory) App.renderWorkspaceMemory();
       },
 
@@ -318,14 +314,17 @@
         return "";
       },
 
-      secureAvatarHtml: function (entityType, entityId, name, size) {
+      secureAvatarHtml: function (entityType, entityId, name, size, assetVersion) {
         var type = String(entityType || "").toLowerCase();
         var id = String(entityId || "").trim();
         var initials = App.getInitials(name || "");
         if (!id) return '<span class="avatarFallbackInline" style="display:grid">' + App.escapeHtml(initials) + '</span>';
-        var key = type + "|" + id + "|" + (size || "card");
-        var cached = App.state.secureImages[key];
-        return '<img class="secureAvatarImage" data-secure-image="1" data-secure-key="' + App.escapeHtml(key) + '" data-entity-type="' + App.escapeHtml(type) + '" data-entity-id="' + App.escapeHtml(id) + '" data-image-size="' + App.escapeHtml(size || "card") + '" alt="Headshot of ' + App.escapeHtml(name || "profile") + '" loading="lazy" onerror="App.showAvatarFallback(this)"' + (cached ? ' src="' + App.escapeHtml(cached) + '"' : ' hidden') + '><span class="avatarFallbackInline"' + (cached ? ' hidden' : ' style="display:grid"') + '>' + App.escapeHtml(initials) + '</span>';
+        var assetSize = size === "profile" || size === "large" ? "large" : size === "medium" ? "medium" : "small";
+        var version = String(assetVersion || "");
+        var key = type + "|" + id + "|" + assetSize + "|" + version;
+        var cached = App.state.secureImages[key], valid = cached && (!cached.expiresAt || cached.expiresAt > Date.now());
+        if (cached && !valid) delete App.state.secureImages[key];
+        return '<img class="secureAvatarImage" data-secure-image="1" data-secure-key="' + App.escapeHtml(key) + '" data-entity-type="' + App.escapeHtml(type) + '" data-entity-id="' + App.escapeHtml(id) + '" data-asset-version="' + App.escapeHtml(version) + '" data-image-size="' + App.escapeHtml(assetSize) + '" alt="Headshot of ' + App.escapeHtml(name || "profile") + '" loading="lazy" onerror="App.showAvatarFallback(this)"' + (valid ? ' src="' + App.escapeHtml(cached.dataUrl) + '"' : ' hidden') + '><span class="avatarFallbackInline"' + (valid ? ' hidden' : ' style="display:grid"') + '>' + App.escapeHtml(initials) + '</span>';
       },
 
       initSecureImages: function () {
@@ -346,7 +345,7 @@
         document.querySelectorAll('img[data-secure-image="1"]:not([data-secure-observed])').forEach(function (image) {
           image.dataset.secureObserved = "1";
           var cached = App.state.secureImages[image.dataset.secureKey];
-          if (cached) App.applySecureImage(image, cached);
+          if (cached && (!cached.expiresAt || cached.expiresAt > Date.now())) App.applySecureImage(image, cached.dataUrl);
           else if (App.state.secureImageObserver) App.state.secureImageObserver.observe(image);
           else App.queueSecureImage(image);
         });
@@ -357,6 +356,7 @@
         App.state.secureImageQueue[image.dataset.secureKey] = {
           entityType: image.dataset.entityType,
           entityId: image.dataset.entityId,
+          assetVersion: image.dataset.assetVersion || "",
           size: image.dataset.imageSize || "card"
         };
         clearTimeout(App.state.secureImageTimer);
@@ -364,18 +364,18 @@
       },
 
       flushSecureImages: function () {
-        var keys = Object.keys(App.state.secureImageQueue).slice(0, 12);
+        var keys = Object.keys(App.state.secureImageQueue).slice(0, 6);
         if (!keys.length) return;
         var requests = keys.map(function (key) { var item = App.state.secureImageQueue[key]; delete App.state.secureImageQueue[key]; return item; });
         App.services.request("secureImages:" + Date.now(), "portalResolveSecureImages", { args: [requests], timeoutMs: 45000, forceRefresh: true })
           .then(function (responses) {
             (responses || []).forEach(function (response) {
-              if (!response || !response.ok || !response.dataUrl) return;
+              if (!response || !response.ok || !response.dataUrl) { if (response && response.errorCategory) console.warn("Headshot unavailable", response.entityType, response.entityId, response.errorCategory); return; }
               var request = requests.find(function (item) { return item.entityType === response.entityType && item.entityId === response.entityId; });
-              var key = response.entityType + "|" + response.entityId + "|" + (request && request.size || "card");
-              App.state.secureImages[key] = response.dataUrl;
+              var key = response.entityType + "|" + response.entityId + "|" + (response.requestedSize || request && request.size || "medium") + "|" + (request && request.assetVersion || "");
+              App.state.secureImages[key] = { dataUrl: response.dataUrl, expiresAt: response.expiresAt ? new Date(response.expiresAt).getTime() : Date.now() + 20 * 60 * 1000 };
               document.querySelectorAll('img[data-secure-image="1"]').forEach(function (image) {
-                if (image.dataset.entityType === response.entityType && image.dataset.entityId === response.entityId) App.applySecureImage(image, response.dataUrl);
+                if (image.dataset.entityType === response.entityType && image.dataset.entityId === response.entityId && image.dataset.imageSize === (response.requestedSize || request && request.size)) App.applySecureImage(image, response.dataUrl);
               });
             });
           })

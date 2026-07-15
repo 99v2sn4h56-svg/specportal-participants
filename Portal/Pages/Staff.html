@@ -86,7 +86,7 @@
 
     renderStaffContactCard: function (staff) {
       var name = staff.name || "Staff member";
-      var avatar = App.secureAvatarHtml("staff", staff.id || staff.staffId || staff.email, name, "card");
+      var avatar = App.secureAvatarHtml("staff", staff.id || staff.staffId || staff.email, name, "card", staff.assetVersion);
       var badges = (staff.badges || []).slice(0, 3).map(function (badge) { return '<b>' + App.escapeHtml(badge) + '</b>'; }).join("");
       var phone = staff.phone ? '<a href="tel:' + App.escapeHtml(String(staff.phone).replace(/[^+0-9]/g, "")) + '" onclick="event.stopPropagation()">Call</a>' : '';
       return '<article class="staffContactCard"><div class="staffCardCompact"><span class="staffCardAvatar">' + avatar + '</span><button class="staffCardIdentity" type="button" onclick="App.openStaffProfile(\'' + App.escapeJs(staff.id || staff.staffId || staff.email) + '\')" aria-label="Open Staff profile for ' + App.escapeHtml(name) + '"><strong>' + App.escapeHtml(name) + '</strong><small>' + App.escapeHtml([staff.productionRole, staff.department].filter(Boolean).join(" · ") || "Staff Production Team") + '</small><em>' + App.escapeHtml(staff.email || App.formatPhoneNumber(staff.phone) || "Contact details unavailable") + '</em></button><div class="staffCardActions">' + phone + '<button type="button" onclick="App.openStaffProfile(\'' + App.escapeJs(staff.id || staff.staffId || staff.email) + '\')">Profile</button></div></div><div class="staffCardBadges">' + badges + '</div></article>';
@@ -107,7 +107,7 @@
     renderStaffProfile: function (staff) {
       var panel = document.getElementById("staffProfilePanel"); if (!panel) return;
       var name = staff.name || "Staff member";
-      var avatar = '<div class="scProfileAvatar">' + App.secureAvatarHtml("staff", staff.id || staff.staffId || staff.email, name, "profile") + '</div>';
+      var avatar = '<div class="scProfileAvatar">' + App.secureAvatarHtml("staff", staff.id || staff.staffId || staff.email, name, "profile", staff.assetVersion) + '</div>';
       var list = function (items, empty) { return (items || []).length ? '<div class="staffProfileList">' + items.map(function (item) { var body = '<strong>' + App.escapeHtml(item.title || item.event || item.name || item.action || String(item)) + '</strong><span>' + App.escapeHtml([item.date, item.start, item.time, item.venue, item.location, item.status, item.role, item.occurredAt].filter(Boolean).join(" · ")) + '</span>'; return item.id && item.eventType ? '<button type="button" onclick="App.openCommandResult(\'event\',\'' + App.escapeJs(item.id) + '\',\'' + App.escapeJs(item.title) + '\')">' + body + '</button>' : '<div>' + body + '</div>'; }).join("") + '</div>' : App.emptyState(empty, "This relationship is ready when authoritative links become available."); };
       var eventList = function (items) { return (items || []).length ? '<div class="staffEventList">' + items.map(function (item) {
         var title = item.title || item.event || "Event";
@@ -119,6 +119,7 @@
       }).join("") + '</div>' : App.emptyState("No assigned events", "No Staff or Timeline event allocations matched this profile."); };
       var fields = function (rows) { return '<div class="staffProfileFields">' + rows.filter(function (row) { return row[1]; }).map(function (row) { return '<div><span>' + App.escapeHtml(row[0]) + '</span><strong>' + App.escapeHtml(Array.isArray(row[1]) ? row[1].join(", ") : row[1]) + '</strong></div>'; }).join("") + '</div>'; };
       var admin = staff.administration || null;
+      var formResponses = staff.formResponses || [];
       var employment = staff.employmentType || staff.employment || "";
       var employmentTone = Math.abs(String(employment).split("").reduce(function (total, character) { return total + character.charCodeAt(0); }, 0)) % 6;
       panel.innerHTML = '<button class="participantProfileClose" type="button" onclick="App.closeStaffProfile()" aria-label="Close Staff profile">×</button><div class="scProfileCard"><div class="scProfileHero staff">' + avatar + '<div><span class="scProfileKicker">Staff Passport</span><h2>' + App.escapeHtml(name) + '</h2><p>' + App.escapeHtml([staff.productionRole, staff.department, staff.status].filter(Boolean).join(" · ")) + '</p>' + (employment ? '<span class="staffEmploymentChip tone' + employmentTone + '">' + App.escapeHtml(employment) + '</span>' : '') + '<div class="staffProfileActions">' + (staff.email ? '<a href="mailto:' + App.escapeHtml(staff.email) + '">Email</a>' : '') + (staff.phone ? '<a href="tel:' + App.escapeHtml(String(staff.phone).replace(/[^+0-9]/g, "")) + '">Call</a>' : '') + '</div></div></div>' +
@@ -126,6 +127,7 @@
         '<details open><summary>Contact details</summary>' + fields([["Email", staff.email], ["Phone", App.formatPhoneNumber(staff.phone)]]) + '</details>' +
         '<details><summary>Production roles & teams</summary>' + fields([["Production roles", staff.productionRoles], ["Departments", staff.departments], ["Teams", staff.teams], ["Category responsibility", staff.categoryResponsibilities], ["Groups", staff.assignedGroups], ["Role description", staff.roleDescription], ["Experience", staff.experience], ["Availability", staff.availability]]) + '</details>' +
         '<details open><summary>Assigned events (' + (staff.assignedEvents || []).length + ')</summary>' + eventList(staff.assignedEvents) + '</details>' +
+        '<details open><summary>Submitted forms (' + formResponses.length + ')</summary>' + (formResponses.length ? '<div class="staffProfileList">' + formResponses.map(function (item) { return '<a href="' + App.escapeHtml(item.spreadsheetUrl || '#') + '" target="_blank" rel="noopener"><strong>' + App.escapeHtml(item.formName || 'Form response') + '</strong><span>' + App.escapeHtml(App.formatDateTime ? App.formatDateTime(item.submittedAt) : item.submittedAt) + ' · ' + App.escapeHtml(item.responseId || '') + '</span></a>'; }).join('') + '</div>' : App.emptyState('No submitted forms', 'Forms matched through this Staff member’s email will appear here.')) + '</details>' +
         '<details><summary>Current projects (' + (staff.currentProjects || []).length + ')</summary>' + list(staff.currentProjects, "No projects or tasks matched") + '</details>' +
         '<details><summary>Notes</summary>' + (staff.notes ? '<p>' + App.escapeHtml(staff.notes) + '</p>' : App.emptyState("No Staff notes", "Notes remain read-only.")) + '</details>' +
         '<details><summary>Activity</summary>' + list(staff.activity, "Activity feed not connected yet") + '</details>' +

@@ -159,3 +159,32 @@ Additional low-risk integration improvements:
 - Dashboard statistics are built by `App.buildDashboardStats()` and reused by widgets instead of recalculating in the widget itself.
 - Timeline, Project Management, and Media Timeline remain lazy-loaded until the user visits those modules.
 - Timeline events now share one contract across Calendar and Rehearsals, reducing future adapter work.
+
+## 2026-07-11 Full-Page Startup Update
+
+The full-page Spec Central app no longer calls `portalGetPortalData()` during `App.init()`. Startup now loads the shell and staff/config context first. Participant data loads only when the user opens Participants, uses global participant search, or uses participant browse shortcuts.
+
+This keeps the compact participant-search sidebar behaviour unchanged while reducing the first-load cost of the staff-facing web app.
+
+Related safe fixes:
+
+- `App.loadPortalData()` now returns the service promise.
+- `App.ensurePortalDataLoaded()` deduplicates participant-load requests through the existing service request layer.
+- Global search waits for participant data before running participant search.
+- Browse Schools/Browse Items waits for participant data before rendering result cards.
+- Home uses personal dashboard cards for all users; organisation-wide metrics remain in Operations.
+- Full-page photo loading avoids an extra `portalGetStudentPhotos()` call when cached photos are already present in the portal data payload.
+
+## 2026-07-11 Full-Page File Split
+
+`SpecCentral.html` has been reduced to a small Apps Script shell. Full-page styling now lives in `Portal/Styles/SpecCentral.html`, and the existing full-page `App` runtime now lives in `Portal/App/SpecCentralApp.html`.
+
+This is a maintainability improvement only. Selectors, JavaScript functions, template order, and public Apps Script APIs were preserved.
+
+Follow-up split:
+
+- `Portal/App/SpecCentralBootstrap.html` now owns the single `App.init()` call.
+- `Portal/App/SpecCentralUtilities.html` owns shared utility helpers.
+- `Portal/App/SpecCentralProfiles.html` owns full-page participant, school, group, item, and teacher profile rendering.
+- `Portal/App/SpecCentralSearch.html` owns universal search and result-card behaviour.
+- The bootstrap include must remain last so all extensions are attached before startup.

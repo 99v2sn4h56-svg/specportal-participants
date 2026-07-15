@@ -89,7 +89,8 @@ ParticipantService.getSchoolsMasterSheet = function () {
  * Returns every participant as an array of objects.
  */
 ParticipantService.getAll = function () {
-  return PerformanceCacheService.getOrLoad("participants:all", 30 * 60, () => {
+  const requestStarted = Date.now();
+  const result = PerformanceCacheService.getOrLoadDetailed("participants:all", 30 * 60, () => {
 
   const sheet = this.getIndividualsSheet();
 
@@ -239,6 +240,8 @@ ParticipantService.getAll = function () {
 
   }).filter(participant => String(participant.firstName || participant.lastName || participant.name || "").trim());
   });
+  PerformanceTelemetryService.record("participants.dataset.request", Date.now() - requestStarted, { cache: result.meta.cache, records: (result.value || []).length, sourceRows: (result.value || []).length, projection: "canonical-participants" });
+  return result.value;
 
 };
 
@@ -553,16 +556,6 @@ ParticipantService.getSchoolProfile = function (schoolName) {
  * Returns all data needed to initialise Spec Portal in one server call.
  */
 ParticipantService.getPortalData = function () {
-  let photos = {};
-
-  try {
-    if (typeof ProfilePhotoService !== "undefined" && ProfilePhotoService.getCachedStudentPhotos) {
-      photos = ProfilePhotoService.getCachedStudentPhotos() || {};
-    }
-  } catch (err) {
-    photos = {};
-  }
-
   const participants = this.getAll();
   const groups = this.getGroups();
 
@@ -570,7 +563,9 @@ ParticipantService.getPortalData = function () {
     participants,
     groups,
     schools: this.getActiveSchoolsData(participants, groups),
-    photos
+    // Headshots are resolved lazily through the authenticated asset service.
+    // No storage references or redundant photo maps enter the portal payload.
+    photos: {}
   };
 };
 

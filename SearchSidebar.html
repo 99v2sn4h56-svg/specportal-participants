@@ -154,6 +154,11 @@
       font-style: italic;
       margin-top: 14px;
     }
+
+    .selected-photo { display:none; margin:12px 0; padding:12px; border:1px solid var(--line); border-radius:14px; background:white; text-align:center; }
+    .selected-photo.visible { display:block; }
+    .selected-photo img { display:block; width:100%; max-height:320px; object-fit:contain; border-radius:10px; }
+    .selected-photo span { color:var(--muted); font-size:12px; font-style:italic; }
   </style>
 </head>
 
@@ -183,6 +188,7 @@
     <button onclick="runSearch(true)">SEARCH 🔍</button>
 
     <div id="status" class="status"></div>
+    <div id="selectedPhoto" class="selected-photo" aria-live="polite"></div>
     <div id="results"></div>
   </div>
 
@@ -287,9 +293,17 @@
         `Loading ${escapeHtml(record.title)}...`;
 
       google.script.run
-        .withSuccessHandler(() => {
+        .withSuccessHandler(result => {
           document.getElementById("status").innerHTML =
             `${escapeHtml(record.title)} loaded on Participant Search sheet.`;
+          const panel = document.getElementById("selectedPhoto");
+          if (panel) {
+            const photo = result && result.photo;
+            panel.className = "selected-photo visible";
+            panel.innerHTML = photo && photo.ok && photo.dataUrl
+              ? `<img src="${escapeHtml(photo.dataUrl)}" alt="Headshot of ${escapeHtml(record.title)}">`
+              : `<span>No photo available</span>`;
+          }
         })
         .withFailureHandler(error => {
           document.getElementById("status").innerHTML =

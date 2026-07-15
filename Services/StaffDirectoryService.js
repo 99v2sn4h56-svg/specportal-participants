@@ -8,7 +8,9 @@
 const StaffDirectoryService = (() => {
   function getDirectoryData() {
     const user = requireViewer_();
-    const staff = StaffService.getAll().map(directoryRecord_);
+    const canonical = StaffService.getAll();
+    const headshots = HeadshotAssetService.getMetadataMany("staff", canonical);
+    const staff = canonical.map(item => directoryRecord_(item, headshots[stableId_(item)]));
     return {
       source: "Staff Production Team · Staff List + SpecCentral",
       generatedAt: new Date().toISOString(),
@@ -27,7 +29,8 @@ const StaffDirectoryService = (() => {
     const events = staffEvents_(staff);
     const assignedEvents = mergeAssignedEvents_(events, staff.eventAllocations || []);
     const tasks = staffTasks_(staff);
-    const result = Object.assign(directoryRecord_(staff), {
+    const headshot = HeadshotAssetService.getMetadataMany("staff", [staff])[stableId_(staff)] || {};
+    const result = Object.assign(directoryRecord_(staff, headshot), {
       preferredName: staff.preferredName || "",
       firstName: staff.firstName || "",
       lastName: staff.lastName || "",
@@ -76,12 +79,12 @@ const StaffDirectoryService = (() => {
     return { generatedAt: new Date().toISOString(), source: staff.source || "Staff Production Team spreadsheet", profile: result };
   }
 
-  function directoryRecord_(staff) {
+  function directoryRecord_(staff, headshot) {
     const displayName = normaliseDisplayName_(staff.displayName || staff.name || "Staff member", staff.preferredName || "");
     return {
-      id: staff.id || "", staffId: staff.staffId || "", entityType: "StaffMember",
+      id: stableId_(staff), staffId: staff.staffId || "", entityType: "StaffMember",
       name: displayName, displayName,
-      preferredName: staff.preferredName || "", hasPhoto: !!staff.photo, email: staff.email || staff.primaryEmail || "", phone: staff.mobile || "", mobile: staff.mobile || "",
+      preferredName: staff.preferredName || "", hasPhoto: !!(headshot && headshot.hasPhoto), assetKey: headshot && headshot.assetKey || "", assetVersion: headshot && headshot.assetVersion || "", email: staff.email || staff.primaryEmail || "", phone: staff.mobile || "", mobile: staff.mobile || "",
       department: staff.department || staff.team || "", departments: unique_(staff.departments || [staff.department]), team: staff.team || staff.department || "", teams: unique_(staff.teams || [staff.team, staff.department]),
       role: staff.productionRole || "", productionRole: staff.productionRole || "", productionRoles: unique_(staff.productionRoles || [staff.productionRole]),
       employment: staff.employment || staff.typeOfWork || "", employmentType: staff.employmentType || staff.employment || staff.typeOfWork || "",
@@ -135,6 +138,7 @@ const StaffDirectoryService = (() => {
   }
 
   function findStaff_(id) { const target = String(id || "").trim().toLowerCase(); return StaffService.getAll().find(staff => [staff.id, staff.staffId, staff.email, staff.primaryEmail].map(value => String(value || "").trim().toLowerCase()).includes(target)) || null; }
+  function stableId_(staff) { return String(staff && (staff.staffId || staff.email || staff.primaryEmail || staff.id) || "").trim(); }
   function facets_(staff) { const facet = key => unique_(staff.flatMap(record => record[key] || [])).sort(); return { departments: facet("departments"), roles: facet("productionRoles"), teams: facet("teams"), employment: facet("employmentType"), staffTypes: unique_(staff.flatMap(record => [].concat(record.productionRoles || [], record.employmentType || [], record.employment || []))).sort(), statuses: facet("status"), access: facet("accessStatus"), permissionLevels: facet("permissionLevel"), categories: facet("categoryResponsibilities"), incompleteProfiles: staff.filter(record => record.incompleteProfile).length }; }
   function summary_(staff) { return { total: staff.length, active: staff.filter(item => /^active$/i.test(item.status)).length, departments: new Set(staff.flatMap(item => item.departments || []).filter(Boolean)).size, enabledUsers: staff.filter(item => item.specCentralAccess).length, contactable: staff.filter(item => item.email || item.phone).length }; }
   function badges_(staff) { return unique_([staff.specCentralAccess ? staff.specCentralRole : "No Access", staff.status, staff.employment || staff.typeOfWork].filter(Boolean)); }

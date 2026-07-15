@@ -101,6 +101,26 @@ This is intentionally not a bundler or framework. It gives the platform a single
 
 The detailed service, event, search, state, and cache contracts are documented in `Docs/PlatformIntegration.md`.
 
+### Startup Loading Policy
+
+The full-page app should not load every module at startup. Initial load is limited to the shell and staff/config context. Participant data is loaded lazily when the user opens Participants, uses global participant search, browses schools/items, or opens a participant-related profile. Calendar/Rehearsals load Timeline data when their modules open. Operations and Media Timeline are permission-controlled and lazy-loaded.
+
+The compact spreadsheet sidebar is intentionally different: it is a dedicated participant-search tool, so it still loads participant portal data when opened.
+
+### Full-Page Shell Modules
+
+`SpecCentral.html` is now the full-page web app shell only. It owns the Apps Script template include order for the header, sidebar, top bar, notifications, page templates, `Portal/Styles/SpecCentral.html`, and the full-page app runtime modules.
+
+Runtime include order:
+
+1. `Portal/App/SpecCentralApp.html` defines `window.App`, state, routing, service loading, dashboard, calendar, attendance, operations, staff, and notifications.
+2. `Portal/App/SpecCentralUtilities.html` attaches shared formatting, field-mapping, localStorage, phone, photo, and escaping helpers.
+3. `Portal/App/SpecCentralProfiles.html` attaches participant, school, group, item, and teacher profile rendering.
+4. `Portal/App/SpecCentralSearch.html` attaches participant/universal search providers, result cards, and result-opening behaviour.
+5. `Portal/App/SpecCentralBootstrap.html` calls `App.init()`.
+
+The compact spreadsheet sidebar remains in `Portal.html` and should not import full-page shell modules unless a future migration explicitly merges the two experiences.
+
 ### Universal Search Providers
 
 Full-page search now runs through a provider registry:

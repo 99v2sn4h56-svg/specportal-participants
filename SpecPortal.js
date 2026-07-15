@@ -43,6 +43,21 @@ function doGet(e) {
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 
+/** Secret-authenticated service endpoint used only by the Attendance adapter. */
+function doPost(e) {
+  const generatedAt = new Date().toISOString();
+  try {
+    const request = JSON.parse(String(e && e.postData && e.postData.contents || "{}"));
+    if (request.action !== "resolve-headshots") throw new Error("UNKNOWN_ASSET_ACTION");
+    const expected = String(PropertiesService.getScriptProperties().getProperty("SC_ASSET_SERVICE_SECRET") || "");
+    const provided = String(request.secret || "");
+    if (expected.length < 32 || provided.length !== expected.length || provided !== expected) throw new Error("ASSET_SERVICE_AUTHENTICATION_FAILED");
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, action: request.action, generatedAt, data: HeadshotAssetService.resolveTrustedMany(request.requests || []) })).setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, action: "resolve-headshots", generatedAt, errorCategory: /AUTHENTICATION/.test(String(error && error.message)) ? "AUTHENTICATION_FAILED" : "ASSET_REQUEST_FAILED" })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 function portalListFormDefinitions() {
   requirePortalCapability_("Operations.View");
   return FormResponseService.listDefinitions();
@@ -107,8 +122,14 @@ function openSpecPortalOnOpen_() {
 function getCurrentStaffContext() {
   const context = Object.assign({}, UserContextService.getCurrent());
   context.hasPhoto = !!context.photo;
+  context.cacheIdentity = context.email ? Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(context.email).toLowerCase())).replace(/=+$/, "").slice(0, 24) : "anonymous";
   delete context.photo;
   return context;
+}
+
+/** Lightweight authenticated shell bootstrap. Contract: spec-central-bootstrap-v2. */
+function portalBootstrap() {
+  return BootstrapService.getContext();
 }
 
 function portalGetAuthorizationModel() {
@@ -191,8 +212,27 @@ function portalGetPerformanceDiagnostics() {
     generatedAt: new Date().toISOString(),
     cache: { client: "permission-scoped in-memory", server: "compressed script/user CacheService", participantSeconds: 600, timelineSeconds: 300, staffSeconds: 300, dashboardSeconds: 120, attendanceSummarySeconds: 120 },
     sync: DataSyncService.getArchitecture(),
-    identity: UserContextService.getDiagnostics()
+    identity: UserContextService.getDiagnostics(),
+    samples: PerformanceTelemetryService.getSummary(),
+    control: PlatformControlService.getConfig(),
+    headshots: HeadshotAssetService.getContract()
   };
+}
+
+function portalRecordClientPerformance(name, durationMs, detail) {
+  const user = UserContextService.getCurrent();
+  if (!user.email) throw new Error("Authentication is required.");
+  const metric = "client." + String(name || "unknown").toLowerCase().replace(/[^a-z0-9._-]/g, "-").slice(0, 70);
+  return PerformanceTelemetryService.record(metric, Math.min(10 * 60 * 1000, Math.max(0, Number(durationMs) || 0)), detail || {});
+}
+
+function portalRecordClientPerformanceBatch(metrics) {
+  const user = UserContextService.getCurrent();
+  if (!user.email) throw new Error("Authentication is required.");
+  return (Array.isArray(metrics) ? metrics : []).slice(0, 20).map(item => {
+    const metric = "client." + String(item && item.name || "unknown").toLowerCase().replace(/[^a-z0-9._-]/g, "-").slice(0, 70);
+    return PerformanceTelemetryService.record(metric, Math.min(10 * 60 * 1000, Math.max(0, Number(item && item.durationMs) || 0)), item && item.detail || {});
+  });
 }
 
 function portalGetUserContextDiagnostics() {
@@ -321,11 +361,17 @@ function toSafeEventReference_(event) {
 
 function portalGetSpecCentralConfig() {
   const user = UserContextService.getCurrent();
-  return PerformanceCacheService.getOrLoadUser(
+  const cached = PerformanceCacheService.getOrLoadUserDetailed(
     PerformanceCacheService.userProjectionKey("dashboard", user),
-    2 * 60,
-    () => DashboardService.getContext()
+    60,
+    () => DashboardService.getProjection()
   );
+  const control = PlatformControlService.getConfig();
+  return Object.assign({}, cached.value, { requestMeta: { cache: cached.meta.cache, cacheStatus: cached.meta.cache, durationMs: cached.meta.durationMs, isStale: false, schemaVersion: control.schemaVersion, cacheEpoch: control.cacheEpoch, payloadBytes: JSON.stringify(cached.value || {}).length } });
+}
+
+function portalGetDashboardProjection() {
+  return portalGetSpecCentralConfig();
 }
 
 function portalSearchParticipants(query) {
@@ -335,23 +381,17 @@ function portalSearchParticipants(query) {
 
 function portalGetAllParticipants() {
   const user = requirePortalCapability_("Participants.View");
-  return filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 30 * 60, () => ParticipantService.getAll()), user).map(participant => toSafePortalParticipant_(participant, null));
+  return ParticipantProjectionService.getList(user).participants;
 }
 
 function portalGetProductionOverview() {
   const user = requirePortalCapability_("Participants.View");
   const started = Date.now();
   try {
-    return PerformanceCacheService.getOrLoadUser(
-      PerformanceCacheService.userProjectionKey("production-overview:v2", user),
-      10 * 60,
-      () => {
-        const all = ParticipantService.getAll();
-        const participants = filterParticipantsForUser_(all, user);
-        const categories = ParticipantService.getProductionOverview(participants);
-        return { ok: true, generatedAt: new Date().toISOString(), lastRefreshed: new Date().toISOString(), categories, diagnostics: { sourceRowCount: all.length, visibleParticipantCount: participants.length, categoryCount: categories.length, cacheSeconds: 600 } };
-      }
-    );
+    const scope = user.scope || { type: "production", values: [] };
+    if (!user.isAdmin && scope.type && scope.type !== "production") return { ok: true, generatedAt: new Date().toISOString(), lastRefreshed: "", categories: [], diagnostics: { sourceRowCount: 0, categoryCount: 0, cache: "scoped-route-only", sourceScans: 0 } };
+    const snapshot = ParticipantProjectionService.getDashboardSnapshot();
+    return { ok: snapshot.status !== "Not warmed", generatedAt: snapshot.generatedAt || new Date().toISOString(), lastRefreshed: snapshot.generatedAt || "", categories: snapshot.categories || [], diagnostics: { sourceRowCount: snapshot.totalParticipants || 0, categoryCount: (snapshot.categories || []).length, cache: snapshot.cache, sourceScans: 0 } };
   } catch (err) {
     return { ok: false, generatedAt: new Date().toISOString(), categories: [], errorCategory: "PARTICIPANT_SOURCE_UNAVAILABLE", error: err && err.message ? err.message : String(err), diagnostics: { responseMs: Date.now() - started } };
   }
@@ -383,7 +423,11 @@ function portalGetPhotoDiagnostics() {
 }
 
 function portalResolveSecureImages(requests) {
-  return SecureImageService.resolveMany(requests || []);
+  return HeadshotAssetService.resolveMany(requests || []);
+}
+
+function portalResolveHeadshots(requests) {
+  return HeadshotAssetService.resolveMany(requests || []);
 }
 
 function portalGetSecureImageHealth() {
@@ -395,20 +439,86 @@ function portalRefreshPhotoCache() {
   return ProfilePhotoService.refreshStudentPhotos();
 }
 
+/** Admin-only headshot operations. These never expose Drive file IDs. */
+function adminRunHeadshotDiagnostics() {
+  requirePortalCapability_("Administration.View");
+  return { generatedAt: new Date().toISOString(), assets: HeadshotAssetService.diagnostics(), delivery: SecureImageService.getHealth() };
+}
+
+function adminRefreshHeadshotAssets() {
+  requirePortalCapability_("Administration.View");
+  const refreshed = HeadshotAssetService.refresh();
+  ParticipantProjectionService.invalidate(UserContextService.getCurrent());
+  PerformanceCacheService.remove("staff:directory");
+  if (typeof clearParticipantSearchCache_ === "function") clearParticipantSearchCache_();
+  return { refreshedAt: new Date().toISOString(), assets: refreshed };
+}
+
+function adminTestHeadshotResolution(entityType, stableEntityId) {
+  requirePortalCapability_("Administration.View");
+  return HeadshotAssetService.testResolution(entityType, stableEntityId);
+}
+
 function portalGetPortalData() {
   const user = requirePortalCapability_("Participants.View");
-  const canonical = PerformanceCacheService.getOrLoad("participants:portal", 30 * 60, () => ParticipantService.getPortalData());
-  const participants = filterParticipantsForUser_(canonical.participants || [], user);
-  const groups = filterGroupsForUser_(canonical.groups || [], user);
-  const schools = new Set(participants.concat(groups).map(item => String(item.school || "").toLowerCase()).filter(Boolean));
-  const scope = user.scope || { type: "production", values: [] };
-  const canUseCanonicalPhotos = !scope.type || scope.type === "production" || user.isAdmin;
-  return {
-    participants: participants.map(participant => toSafePortalParticipant_(participant, canonical.photos || {})),
-    groups,
-    schools: canUseCanonicalPhotos ? (canonical.schools || []) : (canonical.schools || []).filter(item => schools.has(String(item.schoolName || item.name || "").toLowerCase())),
-    photos: {}
-  };
+  return ParticipantProjectionService.getList(user);
+}
+
+function portalGetParticipantListProjection() {
+  return ParticipantProjectionService.getList(requirePortalCapability_("Participants.View"));
+}
+
+function portalGetParticipantListPage(query, options) {
+  return ParticipantProjectionService.getPage(query || {}, requirePortalCapability_("Participants.View"), options || {});
+}
+
+function portalGetParticipantFilterProjection(options) {
+  return ParticipantProjectionService.getFilters(requirePortalCapability_("Participants.View"), options || {});
+}
+
+function portalGetActiveAttendanceProjection(options) {
+  requirePortalCapability_("Attendance.View");
+  return AttendanceProjectionService.getActive(options || {});
+}
+
+function portalPeekActiveAttendanceProjection() {
+  requirePortalCapability_("Attendance.View");
+  return AttendanceProjectionService.peek();
+}
+
+function portalGetParticipantDetail(studentKey) {
+  return ParticipantProjectionService.getDetail(studentKey, requirePortalCapability_("Participants.View"));
+}
+
+function portalWarmStartupProjections() {
+  requirePortalCapability_("Data.Sync");
+  return ParticipantProjectionService.warm();
+}
+
+/** Trigger-safe shared warming. Install only after an administrator opts in. */
+function warmSpecCentralSharedProjections() {
+  const participants = ParticipantProjectionService.warmShared();
+  let attendance = { status: "Not warmed" };
+  try { attendance = AttendanceProjectionService.warm(); } catch (error) { attendance = { status: "Unavailable", errorCategory: "ATTENDANCE_WARM_FAILED" }; }
+  return { generatedAt: new Date().toISOString(), participants, attendance };
+}
+
+function warmSpecCentralActiveAttendanceProjection() {
+  return AttendanceProjectionService.warm();
+}
+
+function installSpecCentralProjectionWarmer() {
+  requirePortalCapability_("Settings.Admin");
+  const handlers = ["warmSpecCentralSharedProjections", "warmSpecCentralActiveAttendanceProjection"];
+  ScriptApp.getProjectTriggers().filter(trigger => handlers.includes(trigger.getHandlerFunction())).forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  ScriptApp.newTrigger("warmSpecCentralSharedProjections").timeBased().everyMinutes(10).create();
+  ScriptApp.newTrigger("warmSpecCentralActiveAttendanceProjection").timeBased().everyMinutes(5).create();
+  return { installed: true, schedules: [{ handler: "warmSpecCentralSharedProjections", intervalMinutes: 10 }, { handler: "warmSpecCentralActiveAttendanceProjection", intervalMinutes: 5 }] };
+}
+
+function portalAdvanceCacheEpoch(reason) {
+  requirePortalCapability_("Settings.Admin");
+  return PlatformControlService.advanceCacheEpoch(reason);
 }
 
 function toSafePortalParticipant_(participant, photoIndex) {
@@ -497,6 +607,11 @@ function portalGetAttendanceConfig() {
 function portalGetAttendanceSummary() {
   requirePortalCapability_("Attendance.View");
   return AttendanceService.getSummary();
+}
+
+function portalPeekAttendanceSummary() {
+  requirePortalCapability_("Attendance.View");
+  return AttendanceService.peekSummary();
 }
 
 function portalGetAttendanceEvents() {

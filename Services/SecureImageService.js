@@ -25,6 +25,7 @@ const SecureImageService = (() => {
         const value = JSON.parse(cached);
         value.cacheHit = true;
         value.durationMs = Date.now() - started;
+        recordHealth_(true, "", value.durationMs);
         return value;
       }
       const image = parsed.type === "drive" ? fetchDrive_(parsed.fileId, input.pixels) : fetchHttps_(parsed.url);
@@ -36,43 +37,37 @@ const SecureImageService = (() => {
     }
   }
 
-  function resolveMany(requests) {
+  function resolveMany(requests, options) {
     const values = Array.isArray(requests) ? requests.slice(0, 12) : [];
     const participantRequest = values.some(item => String(item && item.entityType || "").toLowerCase() === "participant");
     const staffRequest = values.some(item => String(item && item.entityType || "").toLowerCase() === "staff");
-    requestContext_ = { user: UserContextService.getCurrent(), participants: participantRequest ? ParticipantService.getAll() : [], staff: staffRequest ? StaffService.getAll() : [], photoIndex: participantRequest ? ProfilePhotoService.getStudentPhotos() : {} };
+    const trustedIds = options && Array.isArray(options.trustedParticipantIds) ? new Set(options.trustedParticipantIds.map(String)) : null;
+    requestContext_ = { user: trustedIds ? null : UserContextService.getCurrent(), trustedParticipantIds: trustedIds, permissionScope: trustedIds ? "trusted-attendance" : "interactive", participants: participantRequest ? ParticipantService.getAll() : [], staff: staffRequest ? StaffService.getAll() : [] };
     try { return values.map(resolve); }
     finally { requestContext_ = null; }
   }
 
-  function parseReference(value) {
-    const first = String(value || "").split(/[\n,]+/).map(item => item.trim()).filter(Boolean)[0] || "";
-    if (!first) return { valid: false, errorCategory: "NO_IMAGE_REFERENCE" };
-    const patterns = [/\/file\/d\/([a-zA-Z0-9_-]{20,})/, /[?&]id=([a-zA-Z0-9_-]{20,})/, /\/d\/([a-zA-Z0-9_-]{20,})/, /^([a-zA-Z0-9_-]{20,})$/];
-    for (const pattern of patterns) {
-      const match = first.match(pattern);
-      if (match) return { type: "drive", fileId: match[1], valid: true };
-    }
-    if (/^https:\/\//i.test(first)) return { type: "https", url: first, valid: true };
-    return { valid: false, errorCategory: /drive|docs\.google/i.test(first) ? "FILE_ID_PARSE_FAILED" : "UNSUPPORTED_REFERENCE" };
-  }
+  function parseReference(value) { return HeadshotAssetService.parseReference(value); }
 
   function resolveEntity_(input) {
-    const user = requestContext_ && requestContext_.user || UserContextService.getCurrent();
-    if (!user.email) throw coded_("PERMISSION_SCOPE_DENIED");
+    const trustedIds = requestContext_ && requestContext_.trustedParticipantIds;
+    const user = requestContext_ && requestContext_.user || (!trustedIds ? UserContextService.getCurrent() : null);
+    if (!trustedIds && (!user || !user.email)) throw coded_("AUTHENTICATION_REQUIRED");
     if (input.entityType === "participant") {
-      if (!AuthorizationService.hasCapability(user, "Participants.View")) throw coded_("PERMISSION_SCOPE_DENIED");
-      const visible = filterParticipantsForUser_(requestContext_ && requestContext_.participants || ParticipantService.getAll(), user);
+      if (!trustedIds && !AuthorizationService.hasCapability(user, "Participants.View")) throw coded_("PERMISSION_SCOPE_DENIED");
+      if (trustedIds && !trustedIds.has(input.entityId)) throw coded_("PERMISSION_SCOPE_DENIED");
+      const visible = trustedIds ? (requestContext_ && requestContext_.participants || ParticipantService.getAll()) : filterParticipantsForUser_(requestContext_ && requestContext_.participants || ParticipantService.getAll(), user);
       const item = visible.find(record => [record.id, record.studentKey].map(String).includes(input.entityId));
       if (!item) throw coded_("PERMISSION_SCOPE_DENIED");
-      const indexed = (requestContext_ && requestContext_.photoIndex || ProfilePhotoService.getStudentPhotos())[normalisePhotoKey_(item.name || [item.firstName, item.lastName].filter(Boolean).join(" "))] || {};
-      return { reference: item.photoId || item.photoUrl || indexed.fileId || "", sourceField: item.photoId ? "PhotoID" : item.photoUrl ? "Photo URL" : indexed.fileId ? "Headshot folder" : "" };
+      const asset = HeadshotAssetService.getAsset("participant", input.entityId, visible);
+      return { reference: asset.fileId || asset.url || "", assetVersion: asset.assetVersion, sourceField: asset.matchMethod };
     }
     if (input.entityType === "staff") {
       const item = (requestContext_ && requestContext_.staff || StaffService.getAll()).find(record => [record.id, record.staffId, record.email, record.primaryEmail].map(value => String(value || "")).includes(input.entityId));
       const own = item && String(item.email || item.primaryEmail || "").toLowerCase() === String(user.email).toLowerCase();
       if (!item || (!own && !AuthorizationService.hasCapability(user, "Operations.View"))) throw coded_("PERMISSION_SCOPE_DENIED");
-      return { reference: item.photo || "", sourceField: "Display Picture" };
+      const asset = HeadshotAssetService.getAsset("staff", input.entityId, requestContext_ && requestContext_.staff || StaffService.getAll());
+      return { reference: asset.fileId || asset.url || "", assetVersion: asset.assetVersion, sourceField: asset.matchMethod };
     }
     throw coded_("UNSUPPORTED_REFERENCE");
   }
@@ -94,6 +89,8 @@ const SecureImageService = (() => {
     } else {
       response = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media", options);
     }
+    if (response.getResponseCode() === 401 || response.getResponseCode() === 403) throw coded_("FILE_ACCESS_DENIED");
+    if (response.getResponseCode() === 404) throw coded_("FILE_NOT_FOUND");
     if (response.getResponseCode() < 200 || response.getResponseCode() >= 300) throw coded_("IMAGE_CONVERSION_FAILED");
     return blobResult_(response.getBlob(), metadata.mimeType);
   }
@@ -120,19 +117,19 @@ const SecureImageService = (() => {
 
   function getHealth() {
     UserContextService.requireCapability("Administration.View");
-    const references = [];
-    const index = ProfilePhotoService.getStudentPhotos ? ProfilePhotoService.getStudentPhotos() : {};
-    ParticipantService.getAll().forEach(item => { const indexed = index[normalisePhotoKey_(item.name || [item.firstName, item.lastName].filter(Boolean).join(" "))] || {}; const value = item.photoId || item.photoUrl || indexed.fileId || ""; if (value) references.push(value); });
-    StaffService.getAll().forEach(item => { if (item.photo) references.push(item.photo); });
-    const parsed = references.map(parseReference);
-    return { name: "Headshot delivery", status: parsed.some(item => !item.valid) ? "Degraded" : "Healthy", lastAttempted: new Date().toISOString(), lastSuccessful: new Date().toISOString(), responseMs: 0, cacheAge: "Per-user · 30 minutes", recordCount: references.length, parsed: parsed.filter(item => item.valid).length, unsupported: parsed.filter(item => !item.valid).length, inaccessible: 0, unresolved: parsed.filter(item => !item.valid).length, error: parsed.some(item => !item.valid) ? "One or more references could not be parsed" : "" };
+    const diagnostics = HeadshotAssetService.diagnostics();
+    const recordCount = diagnostics.reduce((sum, item) => sum + Number(item.counts.explicit || 0) + Number(item.counts.filename || 0) + Number(item.counts.ambiguous || 0) + Number(item.counts.unmatched || 0), 0);
+    const unresolved = diagnostics.reduce((sum, item) => sum + Number(item.counts.unmatched || 0) + Number(item.counts.ambiguous || 0), 0);
+    const delivery = readHealth_();
+    return { name: "Headshot delivery", status: unresolved || delivery.failures ? "Degraded" : "Healthy", lastAttempted: delivery.lastAttempted || "", lastSuccessful: delivery.lastSuccessful || "", responseMs: delivery.lastResponseMs || 0, cacheAge: "Asset index · 6 hours; delivery · per user 30 minutes", recordCount, parsed: recordCount - unresolved, unsupported: diagnostics.reduce((sum, item) => sum + Number(item.counts.invalidReference || 0), 0), inaccessible: Number(delivery.categories.FILE_ACCESS_DENIED || 0) + Number(delivery.categories.FILE_NOT_FOUND || 0), unresolved, delivery, diagnostics, error: unresolved || delivery.failures ? "One or more headshots are unresolved, ambiguous, or failed secure delivery" : "" };
   }
 
-  function normaliseRequest_(request) { const type = String(request && request.entityType || "").toLowerCase(); const id = String(request && request.entityId || "").trim().slice(0, 220); const size = String(request && request.size || "card"); return { entityType: type, entityId: id, size, pixels: size === "profile" ? 640 : 180 }; }
-  function normalisePhotoKey_(value) { return String(value || "").replace(/\.[^.]+$/, "").replace(/\s*-\s*Headshot$/i, "").replace(/[\-_]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase(); }
-  function cacheKey_(input, parsed) { const identity = [input.entityType, input.entityId, input.size, parsed.fileId || parsed.url].join("|"); return "SC_IMG_" + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, identity)).replace(/=+$/, "").slice(0, 60); }
-  function success_(input, image, started, cacheHit) { return { ok: true, entityType: input.entityType, entityId: input.entityId, dataUrl: "data:" + image.mimeType + ";base64," + Utilities.base64Encode(image.bytes), mimeType: image.mimeType, sizeBytes: image.sizeBytes, cacheHit: !!cacheHit, durationMs: Date.now() - started, errorCategory: "" }; }
-  function failure_(input, category, started) { return { ok: false, entityType: input.entityType, entityId: input.entityId, dataUrl: "", mimeType: "", sizeBytes: 0, cacheHit: false, durationMs: Date.now() - started, errorCategory: category || "UNKNOWN_IMAGE_ERROR" }; }
+  function normaliseRequest_(request) { const type = String(request && request.entityType || "").toLowerCase(); const id = String(request && request.entityId || "").trim().slice(0, 220); const rawSize = String(request && request.size || "medium").toLowerCase(); const size = rawSize === "profile" ? "large" : rawSize === "card" ? "small" : ["small", "medium", "large"].includes(rawSize) ? rawSize : "medium"; return { entityType: type, entityId: id, assetVersion: String(request && request.assetVersion || "").slice(0, 80), size, pixels: size === "large" ? 640 : size === "small" ? 120 : 240 }; }
+  function cacheKey_(input, parsed) { const user = requestContext_ && requestContext_.user || {}; const scope = requestContext_ && requestContext_.permissionScope === "trusted-attendance" ? "trusted-attendance" : ProjectionContractService.permissionScopeKey(user); const identity = [input.entityType, input.entityId, input.size, input.assetVersion || "", parsed.fileId || parsed.url, scope].join("|"); return "SC_IMG_" + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, identity)).replace(/=+$/, "").slice(0, 60); }
+  function success_(input, image, started, cacheHit) { const durationMs = Date.now() - started; recordHealth_(true, "", durationMs); return { ok: true, entityType: input.entityType, entityId: input.entityId, requestedSize: input.size, dataUrl: "data:" + image.mimeType + ";base64," + Utilities.base64Encode(image.bytes), mimeType: image.mimeType, sizeBytes: image.sizeBytes, cacheHit: !!cacheHit, durationMs, expiresAt: new Date(Date.now() + CACHE_SECONDS * 1000).toISOString(), errorCategory: "" }; }
+  function failure_(input, category, started) { const errorCategory = category || "UNKNOWN_IMAGE_ERROR", durationMs = Date.now() - started; recordHealth_(false, errorCategory, durationMs); return { ok: false, entityType: input.entityType, entityId: input.entityId, requestedSize: input.size, dataUrl: "", mimeType: "", sizeBytes: 0, cacheHit: false, durationMs, expiresAt: "", errorCategory }; }
+  function recordHealth_(ok, category, durationMs) { try { const cache = CacheService.getScriptCache(), key = "SC_HEADSHOT_DELIVERY_HEALTH_V1", value = JSON.parse(cache.get(key) || "null") || { attempts: 0, successes: 0, failures: 0, categories: {} }; value.attempts++; value.lastAttempted = new Date().toISOString(); value.lastResponseMs = Number(durationMs) || 0; if (ok) { value.successes++; value.lastSuccessful = value.lastAttempted; } else { value.failures++; value.categories[category] = Number(value.categories[category] || 0) + 1; } cache.put(key, JSON.stringify(value), 21600); } catch (_) {} }
+  function readHealth_() { try { return JSON.parse(CacheService.getScriptCache().get("SC_HEADSHOT_DELIVERY_HEALTH_V1") || "null") || { attempts: 0, successes: 0, failures: 0, categories: {} }; } catch (_) { return { attempts: 0, successes: 0, failures: 0, categories: {} }; } }
   function coded_(category) { const err = new Error(category); err.imageCategory = category; return err; }
   function errorCategory_(err) { return err && err.imageCategory || (/not found/i.test(String(err && err.message)) ? "FILE_NOT_FOUND" : /permission|access/i.test(String(err && err.message)) ? "FILE_ACCESS_DENIED" : "UNKNOWN_IMAGE_ERROR"); }
   return { resolve, resolveMany, parseReference, getHealth };

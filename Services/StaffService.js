@@ -32,7 +32,7 @@ const StaffService = (() => {
     return staffCache_;
   }
 
-  function refresh() { staffCache_ = null; PerformanceCacheService.remove("staff:all"); CacheService.getScriptCache().put("SC_STAFF_EPOCH", String(Date.now()), 21600); return getAll(); }
+  function refresh() { staffCache_ = null; PerformanceCacheService.remove("staff:all"); HeadshotAssetService.invalidate("staff"); CacheService.getScriptCache().put("SC_STAFF_EPOCH", String(Date.now()), 21600); return getAll(); }
 
   function mapStaffRow_(row, indexes) {
     const firstName = getCell_(row, indexes.firstName);

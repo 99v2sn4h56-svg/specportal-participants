@@ -46,6 +46,14 @@ const AttendanceService = (() => {
     return requestPublicApi_("events", {}, EVENTS_CACHE_SECONDS);
   }
 
+  /** Cache-only preload: never calls the Attendance web app or scans event sheets. */
+  function peekSummary() {
+    const cached = CacheService.getScriptCache().get(buildCacheKey_("summary", {}));
+    if (!cached) return { ok: false, action: "summary", status: "Not warmed", generatedAt: new Date().toISOString(), cacheOnly: true };
+    try { return Object.assign({}, JSON.parse(cached), { cacheOnly: true }); }
+    catch (_) { return { ok: false, action: "summary", status: "Unavailable", generatedAt: new Date().toISOString(), cacheOnly: true }; }
+  }
+
   function invalidate() {
     const cache = CacheService.getScriptCache();
     cache.remove(buildCacheKey_("summary", {}));
@@ -400,6 +408,7 @@ const AttendanceService = (() => {
     getWebAppUrl,
     getConfig,
     getSummary,
+    peekSummary,
     getEvents,
     getEvent,
     getParticipantHistory,

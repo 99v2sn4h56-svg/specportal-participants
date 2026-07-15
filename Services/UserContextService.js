@@ -13,19 +13,19 @@ const UserContextService = (() => {
     const started = Date.now();
     const force = !!(options && options.forceRefresh);
     const googleEmail = normaliseEmail_(Session.getActiveUser().getEmail());
-    if (!googleEmail) return unauthenticated_(started);
+    if (!googleEmail) return finish_(unauthenticated_(started), started);
     if (force && StaffService.refresh) StaffService.refresh();
     if (!force) {
       const memory = readMemory_(googleEmail);
-      if (memory) return withCachePerformance_(memory, "Memory", started);
+      if (memory) return finish_(withCachePerformance_(memory, "Memory", started), started);
       const userCached = readCache_(CacheService.getUserCache(), userKey_(googleEmail));
-      if (userCached && userCached.email === googleEmail) return remember_(withCachePerformance_(userCached, "User Cache", started));
+      if (userCached && userCached.email === googleEmail) return finish_(remember_(withCachePerformance_(userCached, "User Cache", started)), started);
       const scriptCached = readCache_(CacheService.getScriptCache(), scriptKey_(googleEmail));
-      if (scriptCached && scriptCached.email === googleEmail) return remember_(withCachePerformance_(scriptCached, "Script Cache", started));
+      if (scriptCached && scriptCached.email === googleEmail) return finish_(remember_(withCachePerformance_(scriptCached, "Script Cache", started)), started);
     }
     const context = resolve_(googleEmail, started);
     writeCaches_(context);
-    return remember_(context);
+    return finish_(remember_(context), started);
   }
 
   function resolve_(googleEmail, started) {
@@ -33,7 +33,8 @@ const UserContextService = (() => {
     const staffRecords = StaffService.getAll();
     const match = matchStaff_(staffRecords, googleEmail);
     const lookupMs = Date.now() - lookupStarted;
-    if (match.duplicates.length) Logger.log(`UserContext duplicate match for ${googleEmail}: ${match.duplicates.map(item => item.id || item.email || item.name).join(", ")}`);
+    PerformanceTelemetryService.record("startup.staff-lookup.server", lookupMs, { records: staffRecords.length, status: match.record ? "matched" : match.duplicates.length ? "duplicate" : "unmatched" });
+    if (match.duplicates.length) Logger.log(`UserContext duplicate match count: ${match.duplicates.length}`);
     if (!match.record) return unmatched_(googleEmail, match, started, lookupMs);
 
     const staff = match.record;
@@ -42,6 +43,7 @@ const UserContextService = (() => {
     const grants = AuthorizationService.resolveGrants(Object.assign({}, staff, { permissions }));
     const capabilities = Array.from(new Set(grants.map(item => item.capability))).sort();
     const permissionMs = Date.now() - permissionsStarted;
+    PerformanceTelemetryService.record("startup.permission-resolution.server", permissionMs, { records: capabilities.length, status: "resolved" });
     const departments = unique_(staff.departments || [staff.department, staff.team]);
     const names = splitName_(staff.displayName || staff.name || displayNameFromEmail_(googleEmail));
     return {
@@ -163,6 +165,7 @@ const UserContextService = (() => {
   function normaliseEmail_(value) { return String(value || "").trim().toLowerCase(); }
   function normaliseIdentity_(value) { return String(value || "").toLowerCase().replace(/[^a-z0-9@._-]+/g, "").trim(); }
   function clone_(value) { return JSON.parse(JSON.stringify(value)); }
+  function finish_(context, started) { try { PerformanceTelemetryService.record("startup.identity.server", Date.now() - started, { cache: context && context.performance && context.performance.cache || "unknown", status: context && context.status || "unknown" }); } catch (_) {} return context; }
 
   return { getCurrent, getDiagnostics, getEmail, hasCapability, requireCapability, refresh, recordMetric };
 })();
