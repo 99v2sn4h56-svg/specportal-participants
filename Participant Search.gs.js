@@ -3,7 +3,8 @@
 *************************************************************/
 
 const PARTICIPANT_SEARCH_SHEET_NAME = "🔍 Participant Search";
-const PARTICIPANT_SEARCH_CACHE_KEY = "participantSearchIndex_v4";
+// v5 adds only the storage-neutral photoId/hasPhoto fields to cached records.
+const PARTICIPANT_SEARCH_CACHE_KEY = "participantSearchIndex_v5";
 const PARTICIPANT_SEARCH_CACHE_SECONDS = 600;
 const PARTICIPANT_SEARCH_CACHE_CHUNK_SIZE = 90000;
 
@@ -112,7 +113,7 @@ function writeProfileToSearchSheet_(record) {
     .setFontColor("#1f3b73")
     .setBackground("#eaf2ff");
 
-  sheet.getRange("D5:J5")
+  sheet.getRange("D5:E5")
     .merge()
     .setValue("Summary")
     .setFontFamily("Poppins")
@@ -120,6 +121,16 @@ function writeProfileToSearchSheet_(record) {
     .setFontWeight("bold")
     .setFontColor("#1f3b73")
     .setBackground("#eaf2ff");
+
+  sheet.getRange("F5:J5")
+    .merge()
+    .setValue("Headshot")
+    .setFontFamily("Poppins")
+    .setFontSize(14)
+    .setFontWeight("bold")
+    .setFontColor("#1f3b73")
+    .setBackground("#eaf2ff")
+    .setHorizontalAlignment("center");
 
   const profileRows = [
     ["Type", record.type || ""],
@@ -184,8 +195,91 @@ function writeProfileToSearchSheet_(record) {
   sheet.getRange("E6:E15")
     .setBackground(lightColour);
 
+  writeParticipantPhotoPanel_(sheet, record);
+
   applySearchSheetWidths_(sheet);
   ss.setActiveSheet(sheet);
+}
+
+/**
+ * Renders the sheet profile image in one isolated place. The current shared
+ * Headshot Asset Service serves browser clients and cannot yet write directly
+ * into a spreadsheet cell, so IMAGE() remains a temporary adapter here.
+ */
+function writeParticipantPhotoPanel_(sheet, record) {
+  const panel = sheet.getRange("F6:J16")
+    .merge()
+    .setBackground("#ffffff")
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle")
+    .setFontFamily("Poppins")
+    .setFontSize(11)
+    .setFontStyle("italic")
+    .setFontColor("#7b8494")
+    .setBorder(true, true, true, true, true, true, "#dce5f5", SpreadsheetApp.BorderStyle.SOLID);
+
+  const photo = resolveParticipantSearchPhoto_(record);
+  if (!photo.url) {
+    panel.setValue("No photo available");
+    return;
+  }
+
+  const safeUrl = String(photo.url).replace(/"/g, '""');
+  panel.setFormula(`=IFERROR(IMAGE("${safeUrl}",1),"No photo available")`);
+}
+
+/**
+ * Resolves the source only when the profile opens. Cached search records keep
+ * photoId/hasPhoto rather than a full storage URL, avoiding stale URLs and
+ * preparing this view for the shared Headshot Asset Service adapter.
+ */
+function resolveParticipantSearchPhoto_(record) {
+  if (record && record.hasPhoto && record.sheetName === "INDIVIDUALS(YES)") {
+    const rowNumber = Number(record.rowNumber);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("INDIVIDUALS(YES)");
+
+    if (sheet && Number.isInteger(rowNumber) && rowNumber >= 2 && rowNumber <= sheet.getLastRow()) {
+      const headers = makeHeaderMap_(sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]);
+      const photoIdCol = findHeaderIndex_(headers, ["Photo ID", "PhotoID", "Headshot ID"]);
+      const photoUrlCol = findHeaderIndex_(headers, ["Photo URL", "PhotoURL", "Headshot URL"]);
+      const row = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()).getValues()[0];
+      const current = normaliseParticipantPhotoReference_(
+        getCell_(row, photoUrlCol, -1) || getCell_(row, photoIdCol, -1)
+      );
+      if (current.url) return current;
+    }
+  }
+
+  return normaliseParticipantPhotoReference_(record && record.photoId);
+}
+
+/**
+ * Normalises supported Drive links in one place. Non-Drive HTTPS URLs remain
+ * usable, while Drive references are converted to one consistent thumbnail.
+ */
+function normaliseParticipantPhotoReference_(value) {
+  const text = String(value || "").trim();
+  if (!text) return { fileId: "", url: "" };
+
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]{20,})/,
+    /[?&]id=([a-zA-Z0-9_-]{20,})/,
+    /\/d\/([a-zA-Z0-9_-]{20,})/,
+    /^([a-zA-Z0-9_-]{20,})$/
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const fileId = match[1];
+      return {
+        fileId,
+        url: `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w800`
+      };
+    }
+  }
+
+  return /^https:\/\//i.test(text) ? { fileId: "", url: text } : { fileId: "", url: "" };
 }
 
 /*************************************************************
@@ -414,6 +508,11 @@ function addIndividualRecords_(ss, records) {
   const phoneCol = findHeaderIndex_(headers, ["Student Mobile", "Student Phone", "Parent Phone", "Phone"]);
   const statusCol = findHeaderIndex_(headers, ["Accepted?", "Status"]);
   const applicationCol = findHeaderIndex_(headers, ["Application", "Application ID", "Application Link"]);
+  // Headshot references originate in INDIVIDUALS(YES). Only a normalised ID
+  // and availability flag enter the search cache; full URLs are resolved when
+  // the profile is opened.
+  const photoIdCol = findHeaderIndex_(headers, ["Photo ID", "PhotoID", "Headshot ID"]);
+  const photoUrlCol = findHeaderIndex_(headers, ["Photo URL", "PhotoURL", "Headshot URL"]);
 
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
@@ -423,6 +522,11 @@ function addIndividualRecords_(ss, records) {
     const name = `${first || ""} ${last || ""}`.trim();
 
     if (!name) continue;
+
+    const rawPhotoId = getCell_(row, photoIdCol, -1);
+    const rawPhotoUrl = getCell_(row, photoUrlCol, -1);
+    const normalisedPhoto = normaliseParticipantPhotoReference_(rawPhotoUrl);
+    const photoId = normalisedPhoto.fileId || normaliseParticipantPhotoReference_(rawPhotoId).fileId;
 
     records.push({
       action: "profile",
@@ -436,6 +540,8 @@ function addIndividualRecords_(ss, records) {
       phone: formatPhone_(getCell_(row, phoneCol, -1)),
       status: getCell_(row, statusCol, 0),
       applicationLink: getCell_(row, applicationCol, 3),
+      photoId,
+      hasPhoto: !!(rawPhotoId || rawPhotoUrl),
       sheetName: "INDIVIDUALS(YES)",
       rowNumber: r + 1
     });
@@ -746,9 +852,16 @@ function dedupeRecords_(records) {
       record.phone
     ].join("|"));
 
-    if (seen[key]) return;
+    if (seen[key] !== undefined) {
+      // Duplicate removal remains unchanged, but photo availability discovered
+      // on a later duplicate must not be discarded.
+      const existing = output[seen[key]];
+      if (!existing.photoId && record.photoId) existing.photoId = record.photoId;
+      if (record.hasPhoto) existing.hasPhoto = true;
+      return;
+    }
 
-    seen[key] = true;
+    seen[key] = output.length;
     output.push(record);
   });
 
