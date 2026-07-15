@@ -69,9 +69,10 @@ function runPerformancePackageTests() {
 
     PerformanceCacheService.getOrLoadUserDetailed = (key, ttl, loader) => ({ value: loader(), meta: { cache: "test-miss", durationMs: 1 } });
     ParticipantService.getPortalData = () => ({
-      participants: [{ id: "P1", studentKey: "KEY-1", firstName: "Ada", lastName: "Example", name: "Ada Example", school: "Example School", year: "8", category: "Dance", item: "Item", studentEmail: "private@example.invalid", parentEmail: "private@example.invalid", photoId: "private-drive-id" }],
+      participants: [{ id: "P1", studentKey: "KEY-1", firstName: "Ada", lastName: "Example", name: "Ada Example", school: "Example School", year: "8", category: "Dance", item: "Item A, Item B", studentEmail: "private@example.invalid", parentEmail: "private@example.invalid", photoId: "private-drive-id" }],
       groups: [], schools: [{ id: "S1", schoolName: "Example School", schoolEmail: "private@example.invalid" }], photos: {}
     });
+    ParticipantService.getAll = () => ParticipantService.getPortalData().participants;
     const list = ParticipantProjectionService.getList(user);
     assert("Participants module loads participant-list projection", list.projection === "participant-list-v2" && list.participants.length === 1);
     assert("participant-list excludes contact and storage fields", list.participants[0].studentEmail === undefined && list.participants[0].parentEmail === undefined && list.participants[0].photoId === undefined && list.schools[0].schoolEmail === undefined);
@@ -83,7 +84,8 @@ function runPerformancePackageTests() {
     assert("participant first-page payload remains bounded", JSON.stringify(page).length < 20000);
 
     const filters = ParticipantProjectionService.getFilters(user);
-    assert("participant-filter projection contains approved lookup values only", filters.projection === "participant-filter-v1" && filters.values.schools[0] === "Example School" && Object.keys(filters.values).every(field => ProjectionContractService.FILTER_FIELDS.includes(field)));
+    assert("participant-filter projection contains approved lookup values only", filters.projection === "participant-filter-v2" && filters.values.schools[0] === "Example School" && Object.keys(filters.values).every(field => ProjectionContractService.FILTER_FIELDS.includes(field)));
+    assert("participant item facets split comma-separated source values", filters.values.items.join("|") === "Item A|Item B", filters.values.items);
     let duplicateRejected = false;
     try { ProjectionContractService.validate("participantList", { projection: "participant-list-v2", generatedAt: new Date().toISOString(), participants: [{ id: "DUP", studentKey: "DUP" }, { id: "DUP", studentKey: "DUP" }] }); } catch (error) { duplicateRejected = error && error.code === "PROJECTION_VALIDATION_FAILED"; }
     assert("duplicate stable participant IDs fail projection validation", duplicateRejected);

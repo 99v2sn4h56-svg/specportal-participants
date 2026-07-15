@@ -17,6 +17,8 @@
     window.CSS=window.CSS||{escape:value=>String(value).replace(/[^a-zA-Z0-9_-]/g,char=>'\\'+char)};
     const escapeHtml = value => String(value == null ? "" : value).replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
     const uploadTypes = ["file_upload","photo_upload","video_upload"];
+    const MAX_UPLOAD_MB = 500;
+    const INLINE_UPLOAD_BYTES = 5 * 1024 * 1024;
     const page = document.getElementById("formPage");
 
     function render() {
@@ -48,7 +50,7 @@
       else if (question.type === "drive_link") control = '<input data-answer="' + escapeHtml(question.id) + '" type="url" placeholder="https://drive.google.com/…"' + required + '>';
       else if (question.type === "signature") control = '<canvas class="signature" data-answer="' + escapeHtml(question.id) + '" width="760" height="150"></canvas><div class="signatureActions"><button class="secondary" type="button" onclick="clearSignature(this)">Clear signature</button></div>';
       else if (question.type === "table") control = renderTable(question);
-      else if (uploadTypes.includes(question.type)) control = '<input data-file="' + escapeHtml(question.id) + '" type="file" ' + (question.type === "photo_upload" ? 'accept="image/*"' : question.type === "video_upload" ? 'accept="video/*"' : '') + required + '><small>Maximum ' + escapeHtml(question.maxSize || 25) + ' MB · filename: ' + escapeHtml(question.filePrefix || "original name") + '</small>';
+      else if (uploadTypes.includes(question.type)) control = '<input data-file="' + escapeHtml(question.id) + '" type="file" ' + (question.type === "photo_upload" ? 'accept="image/*"' : question.type === "video_upload" ? 'accept="video/*"' : '') + required + '><small>Maximum ' + escapeHtml(question.maxSize || MAX_UPLOAD_MB) + ' MB · large files upload in resumable chunks · filename: ' + escapeHtml(question.filePrefix || "original name") + '</small>';
       else control = '<input data-answer="' + escapeHtml(question.id) + '"' + required + '>';
       return '<section class="question" data-question="' + escapeHtml(question.id) + '"><label>' + (index + 1) + '. ' + escapeHtml(question.label) + marker + '</label><small>' + escapeHtml(question.help || "") + '</small>' + control + '</section>';
     }
@@ -77,13 +79,48 @@
       event.preventDefault(); const button=document.getElementById("submitResponse"), message=document.getElementById("responseMessage"); button.disabled=true;button.textContent="Saving…";
       try {
         const answers = collectAnswers();
-        const files = await collectFiles();
+        const files = await collectFiles(answers, button);
         google.script.run.withSuccessHandler(result => { document.getElementById("responseForm").classList.add("hidden");message.className="message";message.innerHTML='<h2>Response received</h2><p>'+escapeHtml(result.message)+'</p><small>Reference: '+escapeHtml(result.responseId)+'</small>';window.scrollTo({top:0,behavior:"smooth"}); }).withFailureHandler(error => {button.disabled=false;button.textContent="Submit response";message.className="message error";message.innerHTML='<h2>Could not submit</h2><p>'+escapeHtml(error.message||error)+'</p>';message.scrollIntoView({behavior:"smooth"});}).portalSubmitFormResponse({formId:FORM.id,answers,files,activeQuestionIds:activeQuestionIds(),parentResponseId:FORM.workflowContext&&FORM.workflowContext.parentResponseId||"",workflowStepId:FORM.workflowContext&&FORM.workflowContext.workflowStepId||""});
       } catch(error) {button.disabled=false;button.textContent="Submit response";message.className="message error";message.innerHTML='<h2>Could not submit</h2><p>'+escapeHtml(error.message||error)+'</p>';}
     }
 
     function collectAnswers(){const answers={};document.querySelectorAll("[data-answer]").forEach(input=>{const id=input.dataset.answer;if(input.tagName==="CANVAS"){answers[id]=input.dataset.signed?"Signature supplied":"";}else if(input.type==="checkbox"){answers[id]=answers[id]||[];if(input.checked)answers[id].push(input.value);}else if(input.type==="radio"){if(input.checked)answers[id]=input.value;}else if(input.multiple){answers[id]=Array.from(input.selectedOptions).map(option=>option.value);}else answers[id]=input.value;});document.querySelectorAll('[data-other-for]:not([hidden])').forEach(input=>{const id=input.dataset.otherFor,value='Other: '+input.value.trim();if(Array.isArray(answers[id]))answers[id]=answers[id].filter(item=>item!=='Other').concat(value);else if(answers[id]==='Other')answers[id]=value;});document.querySelectorAll("[data-ranking-answer]").forEach(list=>{answers[list.dataset.rankingAnswer]=Array.from(list.querySelectorAll('[data-ranking-value]')).map(tile=>tile.dataset.rankingValue)});document.querySelectorAll("[data-table-answer]").forEach(table=>{const value={};table.querySelectorAll("[data-cell]").forEach(cell=>value[cell.dataset.cell]=cell.value);answers[table.dataset.tableAnswer]=value;});return answers;}
-    async function collectFiles(){const output=[];for(const input of document.querySelectorAll("[data-file]")){if(!input.files[0])continue;const question=(FORM.questions||[]).find(item=>item.id===input.dataset.file);const file=input.files[0],max=Number(question.maxSize||25)*1024*1024;if(file.size>max)throw new Error(question.label+" exceeds the "+question.maxSize+" MB limit.");const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});output.push({questionId:question.id,name:file.name,mimeType:file.type,data});}document.querySelectorAll("canvas.signature[data-signed='1']").forEach(canvas=>output.push({questionId:canvas.dataset.answer,name:"signature.png",mimeType:"image/png",data:canvas.toDataURL("image/png")}));return output;}
+    async function collectFiles(answers, button){
+      const output=[];
+      for(const input of document.querySelectorAll("[data-file]")){
+        if(!input.files[0])continue;
+        const question=(FORM.questions||[]).find(item=>item.id===input.dataset.file);
+        const file=input.files[0],limitMb=Math.min(MAX_UPLOAD_MB,Math.max(1,Number(question.maxSize||MAX_UPLOAD_MB))),max=limitMb*1024*1024;
+        if(file.size>max)throw new Error(question.label+" exceeds the "+limitMb+" MB limit.");
+        if(file.size<=INLINE_UPLOAD_BYTES){
+          const data=await readAsDataUrl(file);
+          output.push({questionId:question.id,name:file.name,mimeType:file.type,data});
+        }else{
+          const uploaded=await uploadLargeFile(question,file,answers,button);
+          output.push({questionId:question.id,uploadToken:uploaded.token,preuploaded:true});
+        }
+      }
+      document.querySelectorAll("canvas.signature[data-signed='1']").forEach(canvas=>output.push({questionId:canvas.dataset.answer,name:"signature.png",mimeType:"image/png",data:canvas.toDataURL("image/png")}));
+      return output;
+    }
+
+    async function uploadLargeFile(question,file,answers,button){
+      const session=await callServer("portalStartFormUpload",{formId:FORM.id,questionId:question.id,name:file.name,mimeType:file.type||"application/octet-stream",size:file.size,answers});
+      let offset=Number(session.offset||0),complete=false;
+      while(offset<file.size){
+        const end=Math.min(file.size,offset+Number(session.chunkSize));
+        const data=(await readAsDataUrl(file.slice(offset,end))).split(",").pop();
+        const result=await callServer("portalUploadFormChunk",{token:session.token,offset,data});
+        offset=Number(result.offset||end);complete=!!result.complete;
+        button.textContent="Uploading "+file.name+" · "+Math.min(100,Math.round(offset/file.size*100))+"%";
+      }
+      if(!complete)throw new Error("The upload did not complete. Please try again.");
+      button.textContent="Saving…";
+      return session;
+    }
+
+    function readAsDataUrl(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error||new Error("The selected file could not be read."));reader.readAsDataURL(blob);});}
+    function callServer(method,payload){return new Promise((resolve,reject)=>{const runner=google.script.run.withSuccessHandler(resolve).withFailureHandler(error=>reject(new Error(error&&error.message||error||"The upload failed.")));runner[method](payload);});}
     render();
   </script>
 </body>

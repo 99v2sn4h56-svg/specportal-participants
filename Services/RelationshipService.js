@@ -22,9 +22,9 @@ const RelationshipService = (() => {
   function getModel() { return MODEL.map(item => Object.assign({}, item)); }
   function participantMatchesEvent(participant, event) {
     if (!participant || !event || event.eventType === "Operational Event") return false;
-    const participantGroups = [participant.category, participant.discipline, participant.subDiscipline, participant.item]
-      .map(EntityModelService.normaliseKey).filter(Boolean);
-    const eventGroups = (event.categories || []).concat(event.studentGroups || [])
+    const participantGroups = [participant.category, participant.discipline, participant.subDiscipline]
+      .concat(splitListValue_(participant.item)).map(EntityModelService.normaliseKey).filter(Boolean);
+    const eventGroups = (event.categories || []).concat(event.studentGroups || [], event.items || [])
       .map(EntityModelService.normaliseKey).filter(Boolean);
     const categoryMatch = participantGroups.some(value => eventGroups.includes(value));
     const schoolMatch = (event.schoolGroups || []).map(EntityModelService.normaliseKey)
@@ -64,11 +64,11 @@ const RelationshipService = (() => {
     const participants = all.map(participant => {
       const reasons = [];
       const categoryValues = [participant.category, participant.discipline, participant.subDiscipline].map(EntityModelService.normaliseKey).filter(Boolean);
-      const itemValue = EntityModelService.normaliseKey(participant.item);
+      const itemValues = splitListValue_(participant.item).map(EntityModelService.normaliseKey).filter(Boolean);
       const categories = (event.categories || []).map(EntityModelService.normaliseKey).filter(Boolean);
-      const studentGroups = (event.studentGroups || []).map(EntityModelService.normaliseKey).filter(Boolean);
+      const studentGroups = (event.studentGroups || []).concat(event.items || []).map(EntityModelService.normaliseKey).filter(Boolean);
       if (categoryValues.some(value => categories.includes(value))) reasons.push("Category");
-      if (itemValue && studentGroups.includes(itemValue)) reasons.push("Item");
+      if (itemValues.some(value => studentGroups.includes(value))) reasons.push("Item");
       if (categoryValues.some(value => studentGroups.includes(value))) reasons.push("Individual Student Group");
       if ((event.schoolGroups || []).map(EntityModelService.normaliseKey).includes(EntityModelService.normaliseKey(participant.school))) reasons.push("School Group");
       const name = EntityModelService.normaliseKey(participant.name || [participant.firstName, participant.lastName].filter(Boolean).join(" "));
@@ -117,6 +117,8 @@ const RelationshipService = (() => {
       EntityModelService.normaliseKey(event.venue) === venueKey && (!dateKey || event.dateKey === dateKey));
     return uniqueParticipants_(events.flatMap(event => getAffectedParticipants(event.id)));
   }
+
+  function splitListValue_(value) { return String(value || "").split(/[;,\n]+/).map(item => item.trim()).filter(Boolean); }
 
   function linkAttendanceSessions(events) {
     let sessions = [];

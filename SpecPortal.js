@@ -92,6 +92,14 @@ function portalSubmitFormResponse(request) {
   return FormResponseService.submitResponse(request || {});
 }
 
+function portalStartFormUpload(request) {
+  return FormResponseService.startResumableUpload(request || {});
+}
+
+function portalUploadFormChunk(request) {
+  return FormResponseService.uploadResumableChunk(request || {});
+}
+
 function portalGetProfileFormResponses(type, id, email) {
   requirePortalCapability_("Participants.View");
   return FormResponseService.responsesForProfile(type, id, email);

@@ -62,6 +62,7 @@ const TimelineService = (() => {
       title,
       event: title,
       date: rehearsal.date || rehearsal.dateDisplay || "",
+      dateDisplay: rehearsal.dateDisplay || rehearsal.date || "",
       dateKey: rehearsal.dateKey || "",
       start: rehearsal.start || "",
       finish: rehearsal.finish || "",

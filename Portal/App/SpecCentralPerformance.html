@@ -5,7 +5,7 @@
     var PARTICIPANT_CACHE_KEY = "specCentralParticipantFirstPageV2";
     var PARTICIPANT_CACHE_MS = 15 * 60 * 1000;
     var PARTICIPANT_FRESH_MS = 5 * 60 * 1000;
-    var TTL = { config: 60000, portalData: 5 * 60 * 1000, "participantListPage:v2:page=1:pageSize=50": PARTICIPANT_FRESH_MS, "participantFilters:v1": 15 * 60 * 1000, calendar: 180000, attendanceSummary: 60000, attendanceEvents: 300000, eventManagerLanding: 180000, operations: 120000, administration: 300000, staffTeam: 300000 };
+    var TTL = { config: 60000, portalData: 5 * 60 * 1000, "participantListPage:v2:page=1:pageSize=50": PARTICIPANT_FRESH_MS, "participantFilters:v2": 15 * 60 * 1000, calendar: 180000, attendanceSummary: 60000, attendanceEvents: 300000, eventManagerLanding: 180000, operations: 120000, administration: 300000, staffTeam: 300000 };
 
     Object.assign(App, {
       initPerformance: function () {

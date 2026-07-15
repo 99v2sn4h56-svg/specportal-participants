@@ -8,6 +8,14 @@ const FormResponseService = (() => {
   const RESPONSE_INDEX_KEY = "SC_FORM_RESPONSE_PROFILE_INDEX_V1";
   const RESPONSE_SHEET = "Responses";
   const UPLOAD_TYPES = ["file_upload", "photo_upload", "video_upload", "signature"];
+  const FILE_UPLOAD_TYPES = ["file_upload", "photo_upload", "video_upload"];
+  const MAX_UPLOAD_MB = 500;
+  const INLINE_UPLOAD_MB = 5;
+  // Drive resumable chunks must be a multiple of 256 KB. Keeping chunks small
+  // also avoids sending a very large value through google.script.run.
+  const RESUMABLE_CHUNK_BYTES = 3 * 1024 * 1024;
+  const UPLOAD_SESSION_SECONDS = 6 * 60 * 60;
+  const UPLOAD_CACHE_PREFIX = "SC_FORM_UPLOAD_V1_";
 
   function listDefinitions() {
     return readJson_(DEFINITIONS_KEY, []);
@@ -126,6 +134,98 @@ const FormResponseService = (() => {
     sendWorkflowMessages_(form, responseEntry, answers, mapped);
     saveDefinition(form);
     return { ok: true, responseId, submittedAt, profile, message: profile.type ? "Response saved and linked to " + profile.name + "." : "Response saved. No matching student or staff profile was found for " + (responseEmail || "the supplied email") + "." };
+  }
+
+  /**
+   * Opens a server-owned Drive resumable upload. The OAuth-bearing Drive URL is
+   * retained in Script Cache and is never exposed to the public form client.
+   */
+  function startResumableUpload(request) {
+    request = request || {};
+    cleanupUploadSessions_();
+    const context = uploadContext_(request.formId, request.questionId);
+    const size = Math.floor(Number(request.size || 0));
+    const limitBytes = uploadLimitMb_(context.question) * 1024 * 1024;
+    if (!size || size > limitBytes || size > MAX_UPLOAD_MB * 1024 * 1024) {
+      throw new Error(context.question.label + " exceeds the " + uploadLimitMb_(context.question) + " MB limit.");
+    }
+
+    const answers = request.answers || {};
+    const mapped = mapAnswers_(context.form, answers);
+    const token = Utilities.getUuid().replace(/-/g, "");
+    const temporaryName = makeUploadFileName_(context.question, request.name, context.form, answers, mapped, "upload-" + token.slice(0, 10));
+    const response = UrlFetchApp.fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id%2Cname%2CwebViewLink", {
+      method: "post",
+      contentType: "application/json",
+      headers: {
+        Authorization: "Bearer " + ScriptApp.getOAuthToken(),
+        "X-Upload-Content-Type": String(request.mimeType || "application/octet-stream"),
+        "X-Upload-Content-Length": String(size)
+      },
+      payload: JSON.stringify({ name: temporaryName, parents: [context.folderId] }),
+      muteHttpExceptions: true,
+      followRedirects: false
+    });
+    const code = response.getResponseCode();
+    const headers = response.getHeaders();
+    const sessionUrl = headers.Location || headers.location;
+    if (code < 200 || code >= 300 || !sessionUrl) throw new Error("Google Drive could not start the upload (" + code + ").");
+
+    putUploadSession_(token, {
+      state: "uploading",
+      sessionUrl,
+      formId: context.form.id,
+      questionId: context.question.id,
+      folderId: context.folderId,
+      size,
+      offset: 0,
+      mimeType: String(request.mimeType || "application/octet-stream"),
+      originalName: cleanFileName_(request.name || "upload")
+    });
+    return { token, offset: 0, chunkSize: RESUMABLE_CHUNK_BYTES, maxSizeMb: uploadLimitMb_(context.question) };
+  }
+
+  /** Proxies one bounded chunk to Drive and returns the next byte offset. */
+  function uploadResumableChunk(request) {
+    request = request || {};
+    const token = String(request.token || "").replace(/[^a-zA-Z0-9]/g, "");
+    const session = getUploadSession_(token);
+    if (!session || session.state !== "uploading") throw new Error("This upload session has expired. Please choose the file and try again.");
+    const offset = Math.floor(Number(request.offset || 0));
+    if (offset !== Number(session.offset || 0)) throw new Error("The upload chunk is out of sequence. Please try the upload again.");
+    const bytes = Utilities.base64Decode(String(request.data || ""));
+    if (!bytes.length || bytes.length > RESUMABLE_CHUNK_BYTES) throw new Error("The upload chunk is invalid.");
+    const end = offset + bytes.length - 1;
+    if (end >= session.size) throw new Error("The upload chunk exceeds the declared file size.");
+
+    const response = UrlFetchApp.fetch(session.sessionUrl, {
+      method: "put",
+      contentType: session.mimeType,
+      headers: {
+        Authorization: "Bearer " + ScriptApp.getOAuthToken(),
+        "Content-Range": "bytes " + offset + "-" + end + "/" + session.size
+      },
+      payload: bytes,
+      muteHttpExceptions: true,
+      followRedirects: false
+    });
+    const code = response.getResponseCode();
+    if (code === 308) {
+      const headers = response.getHeaders();
+      const acknowledged = String(headers.Range || headers.range || "").match(/bytes=\d+-(\d+)$/);
+      session.offset = acknowledged ? Number(acknowledged[1]) + 1 : end + 1;
+      putUploadSession_(token, session);
+      return { complete: false, offset: session.offset, size: session.size };
+    }
+    if (code !== 200 && code !== 201) throw new Error("Google Drive rejected an upload chunk (" + code + ").");
+    const result = JSON.parse(response.getContentText() || "{}");
+    if (!result.id) throw new Error("Google Drive completed the upload without returning a file ID.");
+    session.state = "complete";
+    session.fileId = result.id;
+    session.offset = session.size;
+    delete session.sessionUrl;
+    putUploadSession_(token, session);
+    return { complete: true, offset: session.size, size: session.size };
   }
 
   function handleGoogleFormSubmit(event) {
@@ -259,19 +359,99 @@ const FormResponseService = (() => {
     (form.questions || []).forEach(question => { questions[question.id] = question; });
     return (files || []).map(file => {
       const question = questions[file.questionId];
-      if (!question || !UPLOAD_TYPES.includes(question.type) || !file.data) return null;
+      if (!question || !UPLOAD_TYPES.includes(question.type)) return null;
       const folderId = form.storage.questionFolders[question.id];
       const folder = DriveApp.getFolderById(folderId);
-      const originalName = cleanFileName_(file.name || "upload");
-      const extensionIndex = originalName.lastIndexOf(".");
-      const extension = extensionIndex >= 0 ? originalName.slice(extensionIndex) : "";
-      const prefix = renderMerge_(question.filePrefix || "{{responderFirstName}}_{{schoolName}}", form, answers, mapped);
-      const base = extensionIndex >= 0 ? originalName.slice(0, extensionIndex) : originalName;
-      const filename = cleanFileName_([prefix, base, responseId].filter(Boolean).join("_")) + extension;
-      const blob = Utilities.newBlob(Utilities.base64Decode(String(file.data).replace(/^data:[^;]+;base64,/, "")), file.mimeType || MimeType.PLAIN_TEXT, filename);
+
+      if (file.preuploaded && file.uploadToken) {
+        const token = String(file.uploadToken).replace(/[^a-zA-Z0-9]/g, "");
+        const session = getUploadSession_(token);
+        if (!session || session.state !== "complete" || session.formId !== form.id || session.questionId !== question.id || session.folderId !== folderId) {
+          throw new Error("A completed upload could not be verified. Please choose the file and try again.");
+        }
+        const saved = DriveApp.getFileById(session.fileId);
+        saved.setName(makeUploadFileName_(question, session.originalName, form, answers, mapped, responseId));
+        removeUploadSession_(token);
+        return { questionId: question.id, fileId: saved.getId(), name: saved.getName(), url: saved.getUrl() };
+      }
+
+      if (!file.data) return null;
+      const raw = String(file.data).replace(/^data:[^;]+;base64,/, "");
+      const approximateBytes = Math.floor(raw.length * 3 / 4) - (raw.endsWith("==") ? 2 : raw.endsWith("=") ? 1 : 0);
+      const maxBytes = (question.type === "signature" ? INLINE_UPLOAD_MB : uploadLimitMb_(question)) * 1024 * 1024;
+      if (approximateBytes > maxBytes || approximateBytes > INLINE_UPLOAD_MB * 1024 * 1024) {
+        throw new Error(question.label + " is too large for the direct upload path. Please choose the file and try again.");
+      }
+      const filename = makeUploadFileName_(question, file.name, form, answers, mapped, responseId);
+      const blob = Utilities.newBlob(Utilities.base64Decode(raw), file.mimeType || MimeType.PLAIN_TEXT, filename);
       const saved = folder.createFile(blob);
       return { questionId: question.id, fileId: saved.getId(), name: saved.getName(), url: saved.getUrl() };
     }).filter(Boolean);
+  }
+
+  function uploadContext_(formId, questionId) {
+    const ownerForm = listDefinitions().find(item => item.id === String(formId || ""));
+    if (!ownerForm || ownerForm.status !== "Published" || ownerForm.source === "google") throw new Error("This form is not available for uploads.");
+    const form = Object.assign({}, ownerForm, { questions: publishedQuestions_(ownerForm) });
+    const question = (form.questions || []).find(item => item.id === String(questionId || ""));
+    if (!question || !FILE_UPLOAD_TYPES.includes(question.type)) throw new Error("This question does not accept file uploads.");
+    const hadProvisionedStorage = !!(ownerForm.storage && ownerForm.storage.folderId && ownerForm.storage.spreadsheetId);
+    const storage = provisionStorage_(form);
+    ownerForm.storage = storage;
+    form.storage = storage;
+    if (!hadProvisionedStorage) saveDefinition(ownerForm);
+    return { form, question, folderId: storage.questionFolders[question.id] };
+  }
+
+  function uploadLimitMb_(question) {
+    const value = Math.floor(Number(question && question.maxSize || MAX_UPLOAD_MB));
+    return Math.max(1, Math.min(MAX_UPLOAD_MB, value || MAX_UPLOAD_MB));
+  }
+
+  function makeUploadFileName_(question, fileName, form, answers, mapped, suffix) {
+    const originalName = cleanFileName_(fileName || "upload");
+    const extensionIndex = originalName.lastIndexOf(".");
+    const extension = extensionIndex >= 0 ? originalName.slice(extensionIndex) : "";
+    const base = extensionIndex >= 0 ? originalName.slice(0, extensionIndex) : originalName;
+    const prefix = renderMerge_(question.filePrefix || "{{responderFirstName}}_{{schoolName}}", form, answers || {}, mapped || {});
+    return cleanFileName_([prefix, base, suffix].filter(Boolean).join("_")) + extension;
+  }
+
+  function uploadCacheKey_(token) { return UPLOAD_CACHE_PREFIX + token; }
+  function getUploadSession_(token) {
+    if (!token) return null;
+    const key = uploadCacheKey_(token);
+    try {
+      const raw = CacheService.getScriptCache().get(key) || PropertiesService.getScriptProperties().getProperty(key);
+      const session = JSON.parse(raw || "null");
+      if (session && Date.now() - Number(session.updatedAt || 0) <= UPLOAD_SESSION_SECONDS * 1000) return session;
+      removeUploadSession_(token);
+      return null;
+    } catch (_) { return null; }
+  }
+  function putUploadSession_(token, session) {
+    const key = uploadCacheKey_(token);
+    session.updatedAt = Date.now();
+    const raw = JSON.stringify(session);
+    CacheService.getScriptCache().put(key, raw, UPLOAD_SESSION_SECONDS);
+    // Script Properties is the durable fallback because CacheService may evict a
+    // valid session before its nominal expiry during a long 500 MB upload.
+    PropertiesService.getScriptProperties().setProperty(key, raw);
+  }
+  function removeUploadSession_(token) {
+    const key = uploadCacheKey_(token);
+    CacheService.getScriptCache().remove(key);
+    PropertiesService.getScriptProperties().deleteProperty(key);
+  }
+  function cleanupUploadSessions_() {
+    const properties = PropertiesService.getScriptProperties();
+    const now = Date.now();
+    Object.keys(properties.getProperties()).filter(key => key.indexOf(UPLOAD_CACHE_PREFIX) === 0).forEach(key => {
+      try {
+        const session = JSON.parse(properties.getProperty(key) || "null");
+        if (!session || now - Number(session.updatedAt || 0) > UPLOAD_SESSION_SECONDS * 1000) properties.deleteProperty(key);
+      } catch (_) { properties.deleteProperty(key); }
+    });
   }
 
   function organiseGoogleFormUploads_(form, answers, mapped, responseId) {
@@ -413,6 +593,12 @@ const FormResponseService = (() => {
     form.description = String(form.description || "").slice(0, 5000);
     form.source = form.source === "google" ? "google" : "custom";
     form.questions = Array.isArray(form.questions) ? form.questions.slice(0, 200) : [];
+    form.questions.forEach(question => {
+      if (FILE_UPLOAD_TYPES.includes(question.type)) question.maxSize = String(uploadLimitMb_(question));
+    });
+    if (Array.isArray(form.publishedQuestions)) form.publishedQuestions.forEach(question => {
+      if (FILE_UPLOAD_TYPES.includes(question.type)) question.maxSize = String(uploadLimitMb_(question));
+    });
     return form;
   }
   function publishedQuestions_(form) { return Array.isArray(form.publishedQuestions) ? form.publishedQuestions : form.questions || []; }
@@ -452,7 +638,7 @@ const FormResponseService = (() => {
     properties.setProperties(updates, false); properties.deleteProperty(key);
   }
 
-  return { listDefinitions, saveDefinition, publishDefinition, importGoogleFormQuestions, getPublicDefinition, submitResponse, responsesForProfile, getWorkspaceData, setStatus, handleGoogleFormSubmit };
+  return { listDefinitions, saveDefinition, publishDefinition, importGoogleFormQuestions, getPublicDefinition, submitResponse, startResumableUpload, uploadResumableChunk, responsesForProfile, getWorkspaceData, setStatus, handleGoogleFormSubmit };
 })();
 
 function handleManagedGoogleFormSubmit(event) {

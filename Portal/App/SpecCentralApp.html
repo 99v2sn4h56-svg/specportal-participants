@@ -728,8 +728,8 @@
         return { key: "participantListPage:v2:page=1:pageSize=50", params: { page: 1, pageSize: 50 } };
       },
 
-      loadParticipantFirstPage: function (forceRefresh, trigger, refreshServer) {
-        var query = App.participantFirstPageQuery(), started = performance.now();
+      loadParticipantFirstPage: function (forceRefresh, trigger, refreshServer, retryAttempt) {
+        var query = App.participantFirstPageQuery(), started = performance.now(), attempt = Number(retryAttempt || 0);
         return App.services.request(query.key, "portalGetParticipantListPage", {
           args: [query.params, { refresh: !!refreshServer }],
           cacheMs: 5 * 60 * 1000,
@@ -746,6 +746,22 @@
           if (App.state.currentPage === "participants" && !App.state.dashboardUsableRecorded) setTimeout(function () { App.flushClientPerformance(true); }, 0);
           if (data.requestMeta && data.requestMeta.isStale && !refreshServer) setTimeout(function () { App.loadParticipantFirstPage(true, "stale-refresh", true).catch(function () {}); }, 0);
           return data;
+        }).catch(function (error) {
+          var message = App.getErrorMessage(error);
+          if (message.indexOf("CACHE_REBUILD_BUSY") < 0 || attempt >= 5) throw error;
+
+          // A different request is already producing the same cold projection.
+          // Keep any safe browser snapshot visible and wait for the atomic cache
+          // publication instead of replacing the Participants route with an error.
+          if (App.restorePriorityParticipantCache && App.restorePriorityParticipantCache()) {
+            return App.state.participantFirstPageData;
+          }
+          var status = document.getElementById("participantStatus");
+          if (status) status.textContent = "Participant data is warming… retrying automatically";
+          var delay = Math.min(8000, 1000 * Math.pow(2, attempt));
+          return new Promise(function (resolve) { setTimeout(resolve, delay); }).then(function () {
+            return App.loadParticipantFirstPage(true, (trigger || "route") + "-cache-retry", false, attempt + 1);
+          });
         });
       },
 
@@ -768,7 +784,7 @@
 
       loadParticipantFilterProjection: function (forceRefresh) {
         if (App.state.participantFilterProjection && !forceRefresh) return Promise.resolve(App.state.participantFilterProjection);
-        return App.services.request("participantFilters:v1", "portalGetParticipantFilterProjection", {
+        return App.services.request("participantFilters:v2", "portalGetParticipantFilterProjection", {
           args: [{ refresh: !!forceRefresh }], cacheMs: 15 * 60 * 1000, timeoutMs: 45000, forceRefresh: !!forceRefresh
         }).then(function (data) {
           App.state.participantFilterProjection = data || null;
@@ -2264,7 +2280,7 @@
         var editAction = workspace.editableActions && workspace.editableActions.length ? '<button class="quickLink" disabled title="Editing is not enabled for this data source yet">Edit event</button>' : '';
         drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">Event workspace · ' + App.escapeHtml(event.sourceHealth || "Unknown source") + '</span><h3>' + App.escapeHtml(event.title || "Event") + '</h3><span>' + App.escapeHtml([event.eventType, event.date, [event.start, event.finish].filter(Boolean).join("–"), event.venue, event.eventId || event.id, (event.attendance || {}).status].filter(Boolean).join(" · ")) + '</span></div><button type="button" onclick="App.closeEventWorkspace()" aria-label="Close event workspace">×</button></div><div class="eventWorkspaceTabs">' + sections.map(function (name) { return '<button class="' + (workspace.section === name ? 'active' : '') + '" type="button" onclick="App.openEventWorkspace(\'' + App.escapeJs(event.id) + '\',\'' + name + '\')">' + App.toTitle(name.replace("-", " & ")) + '</button>'; }).join("") + '</div><div class="drawerBody">' + App.renderEventWorkspaceSection(workspace) + '</div><div class="drawerActions"><button class="quickLink" type="button" onclick="App.openOperationsEvent(\'' + App.escapeJs(event.id) + '\')">Open in Calendar</button>' + attendanceAction + editAction + '</div>';
       },
-      renderEventWorkspaceSection: function (workspace) { var section = workspace.section; if (section === "overview") return '<div class="eventWorkspaceSummary"><section><h4>Event</h4>' + App.renderKeyValueRows(workspace.event, ["eventType", "status", "date", "start", "finish", "area", "segment", "venue", "eventId", "sourceRow", "notes"]) + '</section><section><h4>Warnings</h4>' + App.renderEventWarnings(workspace.warnings) + '</section></div>'; if (section === "participants") return workspace.participants.length ? '<div class="eventManagerActive">' + workspace.participantPage.total + ' matched participants</div>' + App.renderEventParticipants(workspace.participants) : App.emptyState("No participants are currently assigned to this event", "No permission-safe participant relationship matched this event."); if (section === "schools-groups") return App.renderKeyValueRows({ categories: workspace.categories, groups: workspace.groups, schools: workspace.schools, items: workspace.items }, ["categories", "groups", "schools", "items"]); if (section === "staff") return workspace.staff.length ? App.renderDataTable(workspace.staff, ["name", "role", "department", "source", "email"]) : App.emptyState("No staff allocated", "The Timeline Staff field is blank; no staffing requirement is inferred."); if (section === "attendance") return workspace.attendance.linked ? App.renderKeyValueRows(workspace.attendance, ["sessionId", "status", "studentCount", "attendanceCounts", "completionPercentage", "matchMethod"]) : App.emptyState("No Attendance Session is linked", "Event Manager does not create Attendance sessions during reads."); if (section === "tasks") return workspace.tasks.length ? App.renderDataTable(workspace.tasks, ["title", "assignedUser", "dueDate", "priority", "status"]) : App.emptyState("No tasks are linked to this event", "Task creation remains disabled."); if (section === "activity") return workspace.activity.length ? App.renderDataTable(workspace.activity, ["action", "actor", "occurredAt"]) : App.emptyState("No event activity", "No visible audit activity is linked."); if (section === "diagnostics") return workspace.diagnostics ? App.renderKeyValueRows(workspace.diagnostics, Object.keys(workspace.diagnostics)) : App.emptyState("Diagnostics restricted", "Administration.View is required."); if (section === "communications") return App.emptyState("Communications are not connected yet", "No authoritative communications source exists for events."); return App.renderKeyValueRows(workspace.venue || {}, Object.keys(workspace.venue || {})); },
+      renderEventWorkspaceSection: function (workspace) { var section = workspace.section; if (section === "overview") return '<div class="eventWorkspaceSummary"><section><h4>Event</h4>' + App.renderKeyValueRows(workspace.event, ["eventType", "status", "dateStatus", "date", "start", "finish", "area", "segment", "venue", "eventId", "sourceRow", "notes"]) + '</section><section><h4>Warnings</h4>' + App.renderEventWarnings(workspace.warnings) + '</section></div>'; if (section === "participants") return workspace.participants.length ? '<div class="eventManagerActive">' + workspace.participantPage.total + ' matched participants</div>' + App.renderEventParticipants(workspace.participants) : App.emptyState("No participants are currently assigned to this event", "No permission-safe participant relationship matched this event."); if (section === "schools-groups") return App.renderKeyValueRows({ categories: workspace.categories, groups: workspace.groups, schools: workspace.schools, items: workspace.items }, ["categories", "groups", "schools", "items"]); if (section === "staff") return workspace.staff.length ? App.renderDataTable(workspace.staff, ["name", "role", "department", "source", "email"]) : App.emptyState("No staff allocated", "The Timeline Staff field is blank; no staffing requirement is inferred."); if (section === "attendance") return workspace.attendance.linked ? App.renderKeyValueRows(workspace.attendance, ["sessionId", "status", "studentCount", "attendanceCounts", "completionPercentage", "matchMethod"]) : App.emptyState("No Attendance Session is linked", "Event Manager does not create Attendance sessions during reads."); if (section === "tasks") return workspace.tasks.length ? App.renderDataTable(workspace.tasks, ["title", "assignedUser", "dueDate", "priority", "status"]) : App.emptyState("No tasks are linked to this event", "Task creation remains disabled."); if (section === "activity") return workspace.activity.length ? App.renderDataTable(workspace.activity, ["action", "actor", "occurredAt"]) : App.emptyState("No event activity", "No visible audit activity is linked."); if (section === "diagnostics") return workspace.diagnostics ? App.renderKeyValueRows(workspace.diagnostics, Object.keys(workspace.diagnostics)) : App.emptyState("Diagnostics restricted", "Administration.View is required."); if (section === "communications") return App.emptyState("Communications are not connected yet", "No authoritative communications source exists for events."); return App.renderKeyValueRows(workspace.venue || {}, Object.keys(workspace.venue || {})); },
       renderEventParticipants: function (participants) { return '<div class="tableWrap"><table class="adminTable"><thead><tr><th>Name</th><th>School</th><th>Year</th><th>Category</th><th>Item / Group</th><th>Match source</th><th>Attendance</th></tr></thead><tbody>' + participants.map(function (item) { return '<tr><td><button type="button" onclick="App.openEventParticipant(\'' + App.escapeJs(item.studentKey) + '\')"><strong>' + App.escapeHtml(item.name) + '</strong></button></td><td>' + App.escapeHtml(item.school) + '</td><td>' + App.escapeHtml(item.year) + '</td><td>' + App.escapeHtml(item.category) + '</td><td>' + App.escapeHtml([item.item, item.group].filter(Boolean).join(" · ")) + '</td><td>' + App.escapeHtml((item.matchReasons || []).join(", ")) + '</td><td>' + App.escapeHtml(item.attendanceStatus) + '</td></tr>'; }).join("") + '</tbody></table></div>'; },
       openEventParticipant: function (studentKey) { var participant = (App.state.participants || []).find(function (item) { return String(item.studentKey || item.id) === String(studentKey); }); if (participant && App.openParticipant) { App.closeEventWorkspace(); App.openParticipant(participant); } else { App.notify("Open Participants and search for Student Key " + studentKey + "."); } },
       renderKeyValueRows: function (object, keys) { return '<div class="eventKeyValues">' + keys.map(function (key) { var value = object[key]; if (Array.isArray(value)) value = value.join(", "); else if (value && typeof value === "object") value = JSON.stringify(value); return '<div><span>' + App.escapeHtml(App.toTitle(key)) + '</span><strong>' + App.escapeHtml(value || "—") + '</strong></div>'; }).join("") + '</div>'; },
@@ -2744,9 +2760,9 @@
           } else {
             var itemMap = {};
             App.state.participants.forEach(function (participant) {
-              var item = participant.item || participant.Item || "";
-              if (!item) return;
-              itemMap[item] = (itemMap[item] || 0) + 1;
+              App.participantArray(participant.item || participant.Item || "").forEach(function (item) {
+                itemMap[item] = (itemMap[item] || 0) + 1;
+              });
             });
             App.state.groups.forEach(function (group) {
               var item = group.item || group.groupName || "";

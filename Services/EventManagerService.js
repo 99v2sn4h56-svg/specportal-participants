@@ -76,7 +76,9 @@ const EventManagerService = (() => {
     return {
       id: event.id || "", eventId: event.eventId || "", persistentEventId: event.persistentEventId || "",
       eventIdSource: event.eventIdSource || (event.persistentEventId ? "Timeline" : "Derived"), legacyIds: event.legacyIds || [],
-      title: event.title || event.event || "Event", date: event.date || "", dateKey: event.dateKey || "", start: event.start || "", finish: event.finish || "",
+      title: event.title || event.event || "Event", date: event.date || "", dateKey: event.dateKey || "",
+      dateStatus: event.dateKey ? "Scheduled" : String(event.dateDisplay || event.date || "").trim() ? "Invalid source date" : "To be confirmed",
+      start: event.start || "", finish: event.finish || "",
       venue: event.venue || "", area: event.area || "", segment: event.segment || event.area || "", eventType: event.eventType || "Event", status: event.status || "Active",
       categories: event.categories || [], schoolGroups: event.schoolGroups || [], studentGroups: event.studentGroups || [], individualStudents: event.individualStudents || [],
       items: event.items || [], schools: event.schoolGroups || [], staff: event.staff || [], notes: event.notes || "", sourceRow: event.sourceRow || "", sourceRowValid: Number(event.sourceRow) > 1,
@@ -90,7 +92,9 @@ const EventManagerService = (() => {
     const warnings = [], entityId = event.id || event.eventId || "";
     if (!event.persistentEventId) warnings.push(warning_("MISSING_EVENT_ID", "Warning", "Missing persistent Event ID", "This event uses a derived compatibility ID; editing must remain unavailable.", entityId, "Add a persistent Event ID in a separately approved migration.", "Timeline"));
     if (event.persistentEventId && (duplicateIds || []).includes(event.persistentEventId)) warnings.push(warning_("DUPLICATE_EVENT_ID", "Critical", "Duplicate Event ID", "More than one Timeline row uses this persistent Event ID.", entityId, "Resolve the duplicate in the authoritative Timeline.", "Timeline"));
-    if (!event.dateKey) warnings.push(warning_("INVALID_DATE", "Critical", "Invalid or missing date", "The Timeline date could not be normalised.", entityId, "Review the Timeline date value.", "Timeline"));
+    const sourceDate = String(event.dateDisplay || event.date || "").trim();
+    if (!event.dateKey && sourceDate) warnings.push(warning_("INVALID_DATE", "Critical", "Invalid date", "The supplied Timeline date could not be normalised.", entityId, "Review the Timeline date value: " + sourceDate, "Timeline"));
+    else if (!event.dateKey) warnings.push(warning_("MISSING_DATE", "Warning", "Date to be confirmed", "This event has not been assigned a date in the Timeline yet.", entityId, "Schedule the event date when it is known.", "Timeline"));
     if (!event.venue) warnings.push(warning_("MISSING_VENUE", "Warning", "Venue not assigned", "Location/Venue is blank.", entityId, "Review the event location.", "Timeline"));
     if (event.eventType === "Rehearsal" && !relationship.session) warnings.push(warning_("ATTENDANCE_UNLINKED", "Info", "Attendance not linked", "No compatible Attendance Session was found.", entityId, "Attendance can be created through its existing workflow when required.", "Attendance"));
     if (relationship.session) {

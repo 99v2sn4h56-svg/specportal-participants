@@ -4,7 +4,7 @@ const ProjectionContractService = (() => {
     dashboard: Object.freeze({ name: "dashboard", version: "dashboard-v2" }),
     participantList: Object.freeze({ name: "participants-list", version: "participant-list-v2" }),
     participantPage: Object.freeze({ name: "participants-page", version: "participant-list-page-v2" }),
-    participantFilters: Object.freeze({ name: "participants-filters", version: "participant-filter-v1" }),
+    participantFilters: Object.freeze({ name: "participants-filters", version: "participant-filter-v2" }),
     participantDetail: Object.freeze({ name: "participant-detail", version: "participant-detail-v2" }),
     activeAttendance: Object.freeze({ name: "attendance-active", version: "attendance-active-v1" })
   });

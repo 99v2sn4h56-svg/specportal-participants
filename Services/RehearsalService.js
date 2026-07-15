@@ -1,5 +1,5 @@
 const RehearsalService = (() => {
-  const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V3";
+  const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V4";
   const CACHE_SECONDS = 5 * 60;
   const CACHE_MAX_CHARS = 80000;
 
@@ -127,7 +127,7 @@ const RehearsalService = (() => {
 
     for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
       const headers = values[rowIndex].map(header => EntityModelService.normaliseKey(header));
-      const hasDate = EntityModelService.findHeaderIndex(headers, ["date", "event date", "rehearsal date", "day date", "day/date"]) >= 0;
+      const hasDate = EntityModelService.findHeaderIndex(headers, ["date", "dates", "event date", "event dates", "rehearsal date", "start date", "scheduled date", "schedule date", "date time", "date/time", "day date", "day/date", "when"]) >= 0;
       const hasEvent = EntityModelService.findHeaderIndex(headers, ["activity", "title", "event", "event name", "session", "rehearsal", "name", "details", "item", "items"]) >= 0;
       const hasVenue = EntityModelService.findHeaderIndex(headers, ["location", "venue", "location/venue", "venue location", "where"]) >= 0;
 
@@ -150,7 +150,15 @@ const RehearsalService = (() => {
       "Date",
       "DATE",
       "Event Date",
+      "Event Dates",
       "Rehearsal Date",
+      "Start Date",
+      "Scheduled Date",
+      "Schedule Date",
+      "Date / Time",
+      "Date/Time",
+      "Dates",
+      "When",
       "Day / Date",
       "Day/Date"
     ]);

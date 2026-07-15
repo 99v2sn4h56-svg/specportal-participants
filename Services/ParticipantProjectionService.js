@@ -118,11 +118,24 @@ const ParticipantProjectionService = (() => {
   }
 
   function buildPage_(request, actor) {
-    const list = getList(actor), filtered = applyQuery_(list.participants || [], request), start = (request.page - 1) * request.pageSize;
+    // The first-page route should not build the complete participant-list
+    // projection or resolve every headshot. Filter the canonical rows first,
+    // then resolve asset metadata only for the records actually being returned.
+    const visibleRecords = filterParticipantsForUser_(ParticipantService.getAll(), actor);
+    const recordsById = visibleRecords.reduce((output, item) => {
+      output[String(item.studentKey || item.id || "")] = item;
+      return output;
+    }, {});
+    const filtered = applyQuery_(visibleRecords.map(item => toListItem_(item, null)), request);
+    const start = (request.page - 1) * request.pageSize;
+    const pageItems = filtered.slice(start, start + request.pageSize);
+    const pageRecords = pageItems.map(item => recordsById[String(item.studentKey || item.id || "")]).filter(Boolean);
+    const headshots = HeadshotAssetService.getMetadataMany("participant", pageRecords);
+    const participants = pageRecords.map(item => toListItem_(item, headshots[String(item.studentKey || item.id || "")]));
     const response = {
-      participants: filtered.slice(start, start + request.pageSize),
+      participants,
       pagination: { page: request.page, pageSize: request.pageSize, total: filtered.length, totalPages: Math.max(1, Math.ceil(filtered.length / request.pageSize)) },
-      generatedAt: new Date().toISOString(), sourceUpdatedAt: list.generatedAt || "",
+      generatedAt: new Date().toISOString(), sourceUpdatedAt: "",
       projection: ProjectionContractService.contract("participantPage").version,
       queryKey: pageQueryKey(request)
     };
@@ -133,7 +146,7 @@ const ParticipantProjectionService = (() => {
   function buildFilters_(participants) {
     const values = {
       schools: uniqueField_(participants, "school"), years: uniqueField_(participants, "year"), disciplines: uniqueField_(participants, "discipline"),
-      categories: uniqueField_(participants, "category"), items: uniqueField_(participants, "item"), regions: uniqueField_(participants, "region"),
+      categories: uniqueField_(participants, "category"), items: uniqueListField_(participants, "item"), regions: uniqueField_(participants, "region"),
       directorates: uniqueField_(participants, "directorate"), statuses: uniqueField_(participants, "applicationStatus"),
       participationTypes: uniqueField_(participants, "participationType"), segments: uniqueField_(participants, "segment"), schoolGroups: uniqueField_(participants, "schoolGroup")
     };
@@ -146,7 +159,11 @@ const ParticipantProjectionService = (() => {
     const search = request.search.toLowerCase(), filters = request.filters || {};
     return participants.filter(item => {
       if (search && [item.name, item.school, item.year, item.discipline, item.subDiscipline, item.category, item.categoryDetail, item.item, item.applicationStatus, item.schoolGroup].filter(Boolean).join(" ").toLowerCase().indexOf(search) < 0) return false;
-      return Object.keys(filters).every(field => !filters[field] || String(item[field] || "") === filters[field]);
+      return Object.keys(filters).every(field => {
+        if (!filters[field]) return true;
+        if (field === "item") return splitListValue_(item.item).includes(filters[field]);
+        return String(item[field] || "") === filters[field];
+      });
     }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true }));
   }
 
@@ -171,6 +188,8 @@ const ParticipantProjectionService = (() => {
   }
   function cacheOptions_(name, options) { return Object.assign({}, options || {}, { validator: value => ProjectionContractService.validate(name, value) }); }
   function uniqueField_(rows, field) { return Array.from(new Set((rows || []).map(item => String(item && item[field] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); }
+  function uniqueListField_(rows, field) { return Array.from(new Set((rows || []).flatMap(item => splitListValue_(item && item[field])))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); }
+  function splitListValue_(value) { return String(value || "").split(/[;,\n]+/).map(item => item.trim()).filter(Boolean); }
   function pick_(source, fields) { return fields.reduce((output, field) => { if (source && source[field] !== undefined) output[field] = source[field]; return output; }, {}); }
   function digest_(value, length) { return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ""))).replace(/=+$/, "").slice(0, length || 24); }
   function estimateBytes_(value) { try { return JSON.stringify(value || {}).length; } catch (_) { return 0; } }

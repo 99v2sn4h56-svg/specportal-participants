@@ -49,7 +49,7 @@ const StableIdMigrationService = (() => {
       const applied = {};
       if (targets.includes("timeline")) applied.timeline = applyToSheet_(getTimelineSheet_(), timelineDefinition_());
       if (targets.includes("groups")) applied.groups = applyToSheet_(ParticipantService.getGroupsSheet(), groupDefinition_());
-      CacheService.getScriptCache().remove("SPEC_TIMELINE_EVENTS_V3");
+      CacheService.getScriptCache().removeAll(["SPEC_TIMELINE_EVENTS_V3", "SPEC_TIMELINE_EVENTS_V4"]);
       return { ok: true, mode: "apply", generatedAt: new Date().toISOString(), applied, after: dryRun() };
     } finally {
       lock.releaseLock();
