@@ -10,13 +10,13 @@ const ProjectionContractService = (() => {
   });
   const LIST_FIELDS = Object.freeze([
     "id", "studentKey", "firstName", "lastName", "name", "schoolId", "school", "year",
-    "discipline", "subDiscipline", "category", "categoryDetail", "item", "itemId", "region",
+    "discipline", "subDiscipline", "category", "categoryDetail", "item", "itemId", "region", "gender",
     "directorate", "applicationStatus", "participationType", "segment", "schoolGroup",
     "attendanceStatus", "lastUpdated", "hasPhoto", "assetKey", "assetVersion"
   ]);
   const FILTER_FIELDS = Object.freeze([
     "schools", "years", "disciplines", "categories", "items", "regions", "directorates",
-    "statuses", "participationTypes", "segments", "schoolGroups"
+    "statuses", "participationTypes", "segments", "schoolGroups", "genders"
   ]);
   const FORBIDDEN_LIST_FIELD = /(^|_)(email|phone|mobile|parent|teacher|medical|support|note|form|audit|photoid|photourl|drive|raw)(_|$)/i;
 

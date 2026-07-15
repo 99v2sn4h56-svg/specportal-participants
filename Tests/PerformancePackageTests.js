@@ -14,6 +14,7 @@ function runPerformancePackageTests() {
     participantPortal: ParticipantService.getPortalData,
     participantOverview: ParticipantService.getProductionOverview,
     listCache: PerformanceCacheService.getOrLoadUserDetailed,
+    staleCache: PerformanceCacheService.getOrLoadStaleWhileRevalidate,
     timelineSummary: TimelineService.getDashboardSummary,
     announcementActive: AnnouncementService.getActive,
     notificationCurrent: NotificationService.getForCurrentUser,
@@ -22,11 +23,15 @@ function runPerformancePackageTests() {
     auditList: AuditService.list,
     dashboardSnapshot: ParticipantProjectionService.getDashboardSnapshot,
     secureImages: SecureImageService.resolveMany,
+    headshotFast: HeadshotAssetService.getMetadataManyFast,
+    storeListLarge: PlatformStoreService.listLarge,
+    storePutLarge: PlatformStoreService.putLarge,
     attendanceWebUrl: AttendanceService.getWebAppUrl,
     attendanceSummary: AttendanceService.getSummary,
     attendanceEvents: AttendanceService.getEvents
   };
   const user = { email: "test@example.invalid", displayName: "Test User", firstName: "Test", role: "Operations", department: "Test", status: "Active", isMatched: true, isAdmin: true, isOperations: true, permissions: ["Participants.View"], capabilities: ["Participants.View", "Attendance.View"], scope: { type: "production", values: [] }, performance: { cache: "Test" } };
+  const largeStore = {};
   const throwParticipantLoad = () => { throw new Error("FULL_PARTICIPANT_LOADER_INVOKED"); };
 
   try {
@@ -61,6 +66,9 @@ function runPerformancePackageTests() {
     AttendanceService.getEvents = throwParticipantLoad;
     AttendanceService.getWebAppUrl = () => "";
     SecureImageService.resolveMany = throwParticipantLoad;
+    HeadshotAssetService.getMetadataManyFast = (type, records) => (records || []).reduce((output, record) => { output[record.studentKey || record.id] = { hasPhoto: false, matchStatus: "test" }; return output; }, {});
+    PlatformStoreService.listLarge = collection => JSON.parse(JSON.stringify(largeStore[collection] || []));
+    PlatformStoreService.putLarge = (collection, record, limit) => { const rows = (largeStore[collection] || []).filter(item => item.id !== record.id); rows.unshift(JSON.parse(JSON.stringify(record))); largeStore[collection] = rows.slice(0, limit || 100); return JSON.parse(JSON.stringify(record)); };
     ParticipantProjectionService.getDashboardSnapshot = () => ({ categories: [{ name: "Dance", participants: 2 }], totalParticipants: 2, status: "Connected", projection: "dashboard-participant-summary-v1" });
     const dashboard = DashboardService.getProjection();
     assert("Dashboard projection does not invoke full participant loader", dashboard.participantSummary.totalParticipants === 2);
@@ -82,6 +90,24 @@ function runPerformancePackageTests() {
     assert("participant first page is safe for session persistence", page.participants.length === 1 && page.participants[0].studentEmail === undefined && page.participants[0].parentEmail === undefined && page.participants[0].hasMedicalAlert === undefined && page.participants[0].photoId === undefined);
     assert("participant list does not embed detail-only flags", page.participants[0].hasSupportPlan === undefined && page.participants[0].hasSupportAdjustments === undefined && page.participants[0].outstandingForms === undefined);
     assert("participant first-page payload remains bounded", JSON.stringify(page).length < 20000);
+    const livePagingCache = PerformanceCacheService.getOrLoadStaleWhileRevalidate;
+    try {
+      PerformanceCacheService.getOrLoadStaleWhileRevalidate = (key, fresh, retain, loader) => ({ value: loader(), meta: { cache: "test-miss", durationMs: 1, isStale: false } });
+      ParticipantService.getAll = () => Array.from({ length: 123 }, (_, index) => ({ id: "PAGE-" + index, studentKey: "PAGE-" + index, name: "Participant " + String(index).padStart(3, "0"), school: "School " + (index % 8), category: index % 2 ? "Dance" : "Music", gender: index % 2 ? "Female" : "Male" }));
+      const secondPage = ParticipantProjectionService.getPage({ page: 2, pageSize: 50, sortKey: "name", sortDirection: "asc" }, user);
+      assert("participant paging reports the complete result count rather than the transport size", secondPage.participants.length === 50 && secondPage.pagination.total === 123 && secondPage.pagination.totalPages === 3 && secondPage.pagination.page === 2, secondPage.pagination);
+      const genderPage = ParticipantProjectionService.getPage({ page: 1, pageSize: 50, filters: { gender: "Female" } }, user);
+      assert("participant server filters apply across the complete participant set", genderPage.pagination.total === 61 && genderPage.participants.every(item => item.gender === "Female"), genderPage.pagination);
+    } finally {
+      PerformanceCacheService.getOrLoadStaleWhileRevalidate = livePagingCache;
+      ParticipantService.getAll = () => ParticipantService.getPortalData().participants;
+    }
+    const liveStaleCache = PerformanceCacheService.getOrLoadStaleWhileRevalidate;
+    try {
+      PerformanceCacheService.getOrLoadStaleWhileRevalidate = () => { throw new Error("CACHE_REBUILD_BUSY"); };
+      const durablePage = ParticipantProjectionService.getPage({ page: 1, pageSize: 50 }, user);
+      assert("participant first page falls back to its durable complete snapshot while a rebuild is busy", durablePage.participants.length === 1 && durablePage.requestMeta.cache === "durable-snapshot" && durablePage.requestMeta.isStale);
+    } finally { PerformanceCacheService.getOrLoadStaleWhileRevalidate = liveStaleCache; }
 
     const filters = ParticipantProjectionService.getFilters(user);
     assert("participant-filter projection contains approved lookup values only", filters.projection === "participant-filter-v2" && filters.values.schools[0] === "Example School" && Object.keys(filters.values).every(field => ProjectionContractService.FILTER_FIELDS.includes(field)));
@@ -187,9 +213,10 @@ function runPerformancePackageTests() {
     UserContextService.getCurrent = original.userGet; UserContextService.hasCapability = original.userHas; UserContextService.requireCapability = original.userRequire; UserContextService.recordMetric = original.userMetric;
     PlatformControlService.getConfig = original.controlGet; PlatformControlService.getCacheNamespace = original.controlNamespace; AuthorizationService.hasCapability = original.authHas;
     ParticipantService.getAll = original.participantAll; ParticipantService.getPortalData = original.participantPortal; ParticipantService.getProductionOverview = original.participantOverview;
-    PerformanceCacheService.getOrLoadUserDetailed = original.listCache; TimelineService.getDashboardSummary = original.timelineSummary; AnnouncementService.getActive = original.announcementActive;
+    PerformanceCacheService.getOrLoadUserDetailed = original.listCache; PerformanceCacheService.getOrLoadStaleWhileRevalidate = original.staleCache; TimelineService.getDashboardSummary = original.timelineSummary; AnnouncementService.getActive = original.announcementActive;
     NotificationService.getForCurrentUser = original.notificationCurrent; TaskService.list = original.taskList; OperationsQueueService.summary = original.queueSummary; AuditService.list = original.auditList;
-    ParticipantProjectionService.getDashboardSnapshot = original.dashboardSnapshot; SecureImageService.resolveMany = original.secureImages;
+    ParticipantProjectionService.getDashboardSnapshot = original.dashboardSnapshot; SecureImageService.resolveMany = original.secureImages; HeadshotAssetService.getMetadataManyFast = original.headshotFast;
+    PlatformStoreService.listLarge = original.storeListLarge; PlatformStoreService.putLarge = original.storePutLarge;
     AttendanceService.getWebAppUrl = original.attendanceWebUrl; AttendanceService.getSummary = original.attendanceSummary; AttendanceService.getEvents = original.attendanceEvents;
   }
   return { passed: results.every(item => item.passed), count: results.length, results, generatedAt: new Date().toISOString() };

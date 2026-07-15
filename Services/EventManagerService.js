@@ -1,11 +1,11 @@
 /**
- * Canonical, permission-filtered, read-only Event Manager aggregation service.
- * Timeline owns event details and notes. Related services are projections only;
- * no Event Manager read creates or modifies source records.
+ * Permission-filtered Event Manager aggregation service. Timeline remains the
+ * authoritative production calendar; EventWorkflowService owns the connected
+ * planning overlay. Reads remain projection-only and never mutate a source.
  */
 const EventManagerService = (() => {
   const CACHE_VERSION = "EVENT_MANAGER_V2";
-  const SECTIONS = ["overview", "participants", "schools-groups", "staff", "venue", "attendance", "tasks", "communications", "activity", "diagnostics"];
+  const SECTIONS = ["overview", "workflow", "participants", "schools-groups", "staff", "venue", "risk", "permissions", "attendance", "tasks", "communications", "activity", "diagnostics"];
 
   function getLanding() {
     const user = UserContextService.requireCapability("Operations.View");
@@ -13,9 +13,15 @@ const EventManagerService = (() => {
     const timeline = TimelineService.getTimelineEvents().filter(event => scopeAllowsEvent_(user, event));
     const attendance = UserContextService.hasCapability("Attendance.View") ? getAttendanceEvents_() : [];
     const duplicateIds = duplicatePersistentIds_(timeline);
-    const events = timeline.map(event => {
+    let events = timeline.map(event => {
       const relationship = matchAttendance_(event, attendance);
       return buildSummary_(event, relationship, duplicateIds);
+    });
+    const managed = AuthorizationService.hasCapability(user, "Events.View") ? EventWorkflowService.list() : [];
+    managed.forEach(workflow => {
+      const matchIndex = events.findIndex(event => workflow.timelineEventId && [event.id, event.eventId, event.persistentEventId].includes(workflow.timelineEventId));
+      if (matchIndex >= 0) events[matchIndex] = applyWorkflowSummary_(events[matchIndex], workflow);
+      else events.push(EventWorkflowService.toEventSummary(workflow));
     });
     const today = todayKey_();
     return {
@@ -26,6 +32,8 @@ const EventManagerService = (() => {
         rehearsals: events.filter(event => event.eventType === "Rehearsal").length,
         operationalEvents: events.filter(event => event.eventType === "Operational Event").length,
         attendanceLinked: events.filter(event => event.attendance.linked).length,
+        managed: managed.length,
+        ready: managed.filter(event => event.readiness && event.readiness.label === "Ready").length,
         requiresAttention: events.filter(event => event.warnings.some(warning => warning.severity === "Critical" || warning.severity === "Warning")).length
       },
       filters: buildFilters_(events), events, permissions: permissionModel_(user)
@@ -34,28 +42,68 @@ const EventManagerService = (() => {
 
   function getWorkspace(eventId, section, options) {
     const user = UserContextService.requireCapability("Operations.View");
-    const event = findEvent_(eventId, user);
+    const managedReference = AuthorizationService.hasCapability(user, "Events.View") ? EventWorkflowService.getByReference(eventId) : null;
+    const managed = managedReference ? EventWorkflowService.get(managedReference.id) : null;
+    const event = findEvent_(eventId, user) || (managed ? eventFromManaged_(managed) : null);
     if (!event) throw new Error("The requested event is unavailable or inaccessible.");
     const requested = SECTIONS.includes(String(section || "overview")) ? String(section || "overview") : "overview";
     const attendanceRelationship = UserContextService.hasCapability("Attendance.View") ? matchAttendance_(event, getAttendanceEvents_()) : noAttendance_("permission-restricted");
     const needsImpact = ["overview", "participants", "schools-groups", "diagnostics"].includes(requested) && UserContextService.hasCapability("Participants.View");
-    const impact = needsImpact ? RelationshipService.getAffectedParticipantsWithReasons(event.id) : { participants: [], unresolvedSelections: [], matchSummary: {} };
-    const warnings = buildWarnings_(event, attendanceRelationship, impact.unresolvedSelections, []);
+    const impact = needsImpact ? (managed ? managedImpact_(managed) : RelationshipService.getAffectedParticipantsWithReasons(event.id)) : { participants: [], unresolvedSelections: [], matchSummary: {} };
+    const warnings = buildWarnings_(event, attendanceRelationship, impact.unresolvedSelections, []).concat(managed ? readinessWarnings_(managed) : []);
     const workspace = {
       event: buildSummary_(event, attendanceRelationship, []), participants: [], participantPage: null,
       schools: [], groups: [], items: [], categories: [], staff: [], venue: null,
       attendance: attendanceRelationship.session ? safeAttendance_(attendanceRelationship) : { linked: false, status: "Not linked", matchMethod: attendanceRelationship.method },
       tasks: [], communications: { status: "Unavailable", items: [], message: "Communications are not connected yet." },
-      activity: [], warnings, permissions: permissionModel_(user), editableActions: editableActions_(user), diagnostics: null,
+      activity: [], warnings, workflow: managed || null, risk: managed && managed.risk || null, permissionWorkflow: managed && managed.permissions || null,
+      permissions: permissionModel_(user), editableActions: editableActions_(user, managed), diagnostics: null,
       deferred: SECTIONS.filter(name => name !== requested), section: requested, generatedAt: new Date().toISOString()
     };
     if (["overview", "participants", "schools-groups"].includes(requested)) addImpact_(workspace, impact, options);
-    if (requested === "staff" || requested === "overview") workspace.staff = staffForEvent_(event.staff || [], user);
+    if (requested === "staff" || requested === "overview") workspace.staff = managed ? (managed.participation && managed.participation.staff || []).map(item => ({ id: item.id, name: item.label, source: "Managed roster" })) : staffForEvent_(event.staff || [], user);
     if (requested === "venue" || requested === "overview") workspace.venue = { name: event.venue || "Not assigned", area: event.area || "", date: event.date || "", start: event.start || "", finish: event.finish || "", source: "Timeline" };
     if (requested === "tasks") workspace.tasks = tasksForEvent_(event, attendanceRelationship.session);
-    if (requested === "activity" && UserContextService.hasCapability("Audit.View")) workspace.activity = activityForEvent_(event, attendanceRelationship.session);
+    if (requested === "activity" && (UserContextService.hasCapability("Audit.View") || UserContextService.hasCapability("Events.ViewAudit"))) workspace.activity = activityForEvent_(event, attendanceRelationship.session);
     if (requested === "diagnostics" && permissionModel_(user).canViewDiagnostics) workspace.diagnostics = diagnostics_(event, attendanceRelationship, impact, warnings);
     return workspace;
+  }
+
+  function applyWorkflowSummary_(summary, workflow) {
+    const copy = Object.assign({}, summary, {
+      managedEventId: workflow.id,
+      workflow: workflow.readiness,
+      lifecycleStatus: workflow.status,
+      nextAction: workflow.nextAction,
+      permissionStatus: workflow.permissions && workflow.permissions.status || "Not started",
+      riskStatus: workflow.risk && workflow.risk.status || "Not started"
+    });
+    copy.warnings = (copy.warnings || []).concat(readinessWarnings_(workflow));
+    copy.warningCount = copy.warnings.length;
+    copy.attentionState = attentionState_(copy.warnings);
+    return copy;
+  }
+
+  function eventFromManaged_(workflow) {
+    const summary = EventWorkflowService.toEventSummary(workflow);
+    return Object.assign({}, summary, {
+      event: summary.title,
+      id: workflow.id,
+      eventId: workflow.id,
+      persistentEventId: workflow.timelineEventId || workflow.id,
+      dateDisplay: summary.date,
+      individualStudents: (workflow.participation && workflow.participation.participants || []).map(item => item.label),
+      fingerprint: "managed:" + workflow.id
+    });
+  }
+
+  function managedImpact_(workflow) {
+    const participants = (workflow.participation && workflow.participation.participants || []).map(item => ({ id: item.id, studentKey: item.id, name: item.label, school: item.schoolName || "", item: "", group: "", category: "", matchReasons: ["Managed event roster · stable participant ID"] }));
+    return { participants, unresolvedSelections: [], matchSummary: { managedRoster: participants.length } };
+  }
+
+  function readinessWarnings_(workflow) {
+    return ((workflow.readiness && workflow.readiness.states) ? Object.keys(workflow.readiness.states) : []).filter(key => !["Ready", "Approved", "Prepared"].includes(workflow.readiness.states[key])).map(key => warning_("WORKFLOW_" + key.toUpperCase(), key === "risk" || key === "permission" ? "Warning" : "Info", key.charAt(0).toUpperCase() + key.slice(1) + " needs attention", workflow.readiness.states[key], workflow.id, "Open the managed event workflow", "Event workflow"));
   }
 
   function addImpact_(workspace, impact, options) {
@@ -128,8 +176,8 @@ const EventManagerService = (() => {
   function tasksForEvent_(event, session) { const ids = [event.id, event.eventId, session && session.id, session && session.sessionId].filter(Boolean); return TaskService.list().filter(task => ids.includes(task.relatedEvent) || ids.includes(task.projectId) || ids.includes(task.workflowExecutionId) || (task.entity && ids.includes(task.entity.id))).map(task => ({ id: task.id, title: task.title, assignedUser: task.assignedUser, dueDate: task.dueDate, priority: task.priority, status: task.status, relatedEvent: task.relatedEvent || "", workflowExecutionId: task.workflowExecutionId || "" })); }
   function activityForEvent_(event, session) { const ids = [event.id, event.eventId, session && session.id, session && session.sessionId].filter(Boolean); return AuditService.list(120).filter(item => ids.some(id => JSON.stringify(item).indexOf(id) >= 0)).map(item => ({ id: item.id, action: item.action, actor: item.actor, occurredAt: item.occurredAt, entity: item.entity })); }
   function diagnostics_(event, relationship, impact, warnings) { const source = SourceRegistryService.getSourceConfig("timeline"); return { sourceSpreadsheet: source.spreadsheetId, sourceSheet: source.sheetName, sourceSheetId: source.sheetId, sourceRow: event.sourceRow || null, sourceRowValid: Number(event.sourceRow) > 1, detectedSchema: "Heading-based Timeline schema", eventIdSource: event.eventIdSource || "Derived", legacyIds: event.legacyIds || [], classificationReason: event.eventType === "Rehearsal" ? "Participant assignment selections contain data" : "No participant assignment selections", participantMatching: impact.matchSummary || {}, unresolvedSelections: impact.unresolvedSelections || [], attendanceMatchMethod: relationship.method, fingerprint: event.fingerprint || "", cacheVersion: CACHE_VERSION, warnings }; }
-  function editableActions_(user) { if (!AuthorizationService.hasCapability(user, "Timeline.Edit") || !AuthorizationService.hasCapability(user, "Administration.View")) return []; return CommandRegistryService.list().filter(item => item.entityType === "TimelineEvent").map(item => ({ commandId: item.commandId, label: item.label, enabled: false, reason: "Editing is not enabled for this data source yet." })); }
-  function permissionModel_(user) { return { canView: true, canViewParticipants: AuthorizationService.hasCapability(user, "Participants.View"), canViewAttendance: AuthorizationService.hasCapability(user, "Attendance.View"), canViewAudit: AuthorizationService.hasCapability(user, "Audit.View"), canViewDiagnostics: AuthorizationService.hasCapability(user, "Administration.View"), canEdit: false, commandMode: "disabled", scope: user.scope || { type: "production", values: [] } }; }
+  function editableActions_(user, managed) { const actions = []; if (AuthorizationService.hasCapability(user, "Events.Edit")) actions.push({ commandId: "SaveEventDraft", label: managed ? "Edit workflow" : "Create managed workflow", enabled: true }); if (managed && AuthorizationService.hasCapability(user, "Events.Activate") && managed.status === "Draft") actions.push({ commandId: "ActivateEvent", label: "Activate event", enabled: true }); return actions; }
+  function permissionModel_(user) { return { canView: true, canViewParticipants: AuthorizationService.hasCapability(user, "Participants.View"), canViewAttendance: AuthorizationService.hasCapability(user, "Attendance.View"), canViewAudit: AuthorizationService.hasCapability(user, "Audit.View") || AuthorizationService.hasCapability(user, "Events.ViewAudit"), canViewDiagnostics: AuthorizationService.hasCapability(user, "Administration.View"), canCreate: AuthorizationService.hasCapability(user, "Events.Create"), canEdit: AuthorizationService.hasCapability(user, "Events.Edit"), canActivate: AuthorizationService.hasCapability(user, "Events.Activate"), canManageRoster: AuthorizationService.hasCapability(user, "Events.ManageRoster"), canManageRisk: AuthorizationService.hasCapability(user, "Events.ManageRisk"), canApproveRisk: AuthorizationService.hasCapability(user, "Events.ApproveRisk"), canGeneratePermissions: AuthorizationService.hasCapability(user, "Events.GeneratePermissions"), canViewPermissions: AuthorizationService.hasCapability(user, "Events.ViewPermissions"), canViewMedicalResponses: AuthorizationService.hasCapability(user, "Events.ViewMedicalResponses"), canPrepareCommunications: AuthorizationService.hasCapability(user, "Events.ManageCommunications"), canSendCommunications: AuthorizationService.hasCapability(user, "Events.SendCommunications"), canPrepareAttendance: AuthorizationService.hasCapability(user, "Events.PrepareAttendance"), canRecordAttendance: AuthorizationService.hasCapability(user, "Events.RecordAttendance"), canArchive: AuthorizationService.hasCapability(user, "Events.Archive"), commandMode: "managed-workflow", scope: user.scope || { type: "production", values: [] } }; }
   function duplicatePersistentIds_(events) { const counts = {}; (events || []).forEach(event => { if (event.persistentEventId) counts[event.persistentEventId] = (counts[event.persistentEventId] || 0) + 1; }); return Object.keys(counts).filter(id => counts[id] > 1); }
   function buildFilters_(events) { return { types: unique_(events.map(item => item.eventType)), areas: unique_(events.map(item => item.area)), segments: unique_(events.map(item => item.segment)), venues: unique_(events.map(item => item.venue)), categories: unique_(events.flatMap(item => item.categories || [])), items: unique_(events.flatMap(item => item.items || [])), groups: unique_(events.flatMap(item => (item.schoolGroups || []).concat(item.studentGroups || []))), schools: unique_(events.flatMap(item => item.schools || [])), staff: unique_(events.flatMap(item => item.staff || [])), attendanceStatuses: unique_(events.map(item => item.attendance.status)), attentionStates: ["Critical", "Requires Attention", "Healthy", "Source Warning", "Attendance Warning"] }; }
   function countBy_(items, field) { const counts = {}; (items || []).forEach(item => { const key = String(item[field] || "Unassigned"); counts[key] = (counts[key] || 0) + 1; }); return counts; }

@@ -7,6 +7,7 @@ function runHeadshotAssetServiceTests() {
     testHeadshotDuplicatePersonNameIsAmbiguous_,
     testHeadshotMissingFolderMetadata_,
     testHeadshotProjectionMetadata_,
+    testHeadshotFastMetadataDoesNotBuildIndex_,
     testHeadshotInvalidReference_,
     testHeadshotCacheInvalidation_
   ];
@@ -57,6 +58,16 @@ function testHeadshotProjectionMetadata_() {
   const asset = HeadshotAssetService._test.resolveRecordAsset("participant", { photoId: "12345678901234567890abc" }, "student-1", headshotTestFileIndex_([]));
   const metadata = HeadshotAssetService._test.publicMetadata(asset);
   assertHeadshot_(metadata.hasPhoto && metadata.assetKey && metadata.assetVersion && metadata.assetKey.indexOf("12345678901234567890abc") < 0, "Projection metadata leaked or omitted asset state.");
+}
+
+function testHeadshotFastMetadataDoesNotBuildIndex_() {
+  const originalPeek = PerformanceCacheService.peek;
+  try {
+    PerformanceCacheService.peek = () => null;
+    const explicit = HeadshotAssetService.getMetadataManyFast("participant", [{ studentKey: "student-1", photoId: "12345678901234567890abc" }]);
+    const unresolved = HeadshotAssetService.getMetadataManyFast("participant", [{ studentKey: "student-2", name: "Folder Match Later" }]);
+    assertHeadshot_(explicit["student-1"].hasPhoto && !unresolved["student-2"].hasPhoto && unresolved["student-2"].matchStatus === "index-not-warmed", "Fast metadata attempted folder matching or lost an explicit photo reference.");
+  } finally { PerformanceCacheService.peek = originalPeek; }
 }
 
 function testHeadshotInvalidReference_() {

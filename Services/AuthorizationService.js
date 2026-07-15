@@ -11,7 +11,11 @@ const AuthorizationService = (() => {
     "Communications.Template.View", "Communications.Template.Manage", "Communications.Audience.Build", "Communications.SendTest",
     "Communications.Send", "Communications.Approve", "Communications.Schedule", "Communications.Analytics.View",
     "Communications.Identity.Manage", "Communications.History.View", "Settings.Admin", "Operations.View",
-    "Operations.Admin", "Administration.View", "Users.Manage", "Permissions.Manage", "Data.Sync", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View", "Audit.View", "AI.View"
+    "Operations.Admin", "Events.View", "Events.Create", "Events.Edit", "Events.Activate", "Events.Cancel",
+    "Events.ManageRoster", "Events.ManageRisk", "Events.ApproveRisk", "Events.GeneratePermissions",
+    "Events.ViewPermissions", "Events.ViewMedicalResponses", "Events.ManageCommunications", "Events.SendCommunications",
+    "Events.PrepareAttendance", "Events.RecordAttendance", "Events.Archive", "Events.ViewAudit",
+    "Administration.View", "Users.Manage", "Permissions.Manage", "Data.Sync", "Workflow.Run", "Workflow.Admin", "Jobs.Run", "Notifications.View", "Audit.View", "AI.View"
   ];
 
   const ROLES = {
@@ -28,6 +32,18 @@ const AuthorizationService = (() => {
     "Teacher": ["Participants.View", "Attendance.View", "Calendar.View"],
     "Volunteer": ["Attendance.View", "Attendance.Mark", "Calendar.View"]
   };
+
+  const EVENT_VIEW = ["Events.View"];
+  const EVENT_COORDINATE = EVENT_VIEW.concat(["Events.Create", "Events.Edit", "Events.Activate", "Events.Cancel", "Events.ManageRoster", "Events.ManageRisk", "Events.GeneratePermissions", "Events.ViewPermissions", "Events.ManageCommunications", "Events.PrepareAttendance", "Events.Archive", "Events.ViewAudit"]);
+  ["Lead Production Team", "Administration", "Operations Manager"].forEach(role => {
+    ROLES[role] = Array.from(new Set(ROLES[role].concat(EVENT_COORDINATE)));
+  });
+  ROLES["Operations Manager"] = Array.from(new Set(ROLES["Operations Manager"].concat(["Events.ApproveRisk", "Events.ViewMedicalResponses", "Events.SendCommunications", "Events.RecordAttendance"])));
+  ["Wellbeing Manager", "Ensemble Manager", "Executive", "Department Manager", "Production Team Leader", "Production Team Member", "Teacher", "Volunteer"].forEach(role => {
+    ROLES[role] = Array.from(new Set(ROLES[role].concat(EVENT_VIEW)));
+  });
+  ROLES["Wellbeing Manager"] = Array.from(new Set(ROLES["Wellbeing Manager"].concat(["Events.ManageRisk", "Events.ViewPermissions", "Events.ViewMedicalResponses", "Events.ViewAudit"])));
+  ROLES.Executive = Array.from(new Set(ROLES.Executive.concat(["Events.ApproveRisk", "Events.ViewAudit"])));
 
   const LEGACY = {
     "dashboard.view": "Calendar.View",

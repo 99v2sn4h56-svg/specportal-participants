@@ -81,6 +81,7 @@ const FormResponseService = (() => {
       description: form.description,
       programId: form.programId,
       questions: publishedQuestions_(form),
+      eventPayload: publicEventPayload_(form.eventPayload),
       prefill: form.prefill || {},
       status: form.status,
       user: user,
@@ -131,6 +132,10 @@ const FormResponseService = (() => {
     if (responseEntry.parentResponseId && responseEntry.workflowStepId) completeWorkflowStep_(responseEntry.parentResponseId, responseEntry.workflowStepId, responseEntry, profile);
     else responseEntry.workflow = buildWorkflow_(form, answers, mapped, responseId);
     indexResponse_(responseEntry);
+    // Event permission forms remain ordinary Forms definitions. This hook only
+    // advances the linked Event Manager request only when the unique request
+    // reference and stable Participant ID agree; display names are never keys.
+    try { EventWorkflowService.recordPermissionResponse(form.id, profile, responseId, mapped); } catch (_) {}
     sendWorkflowMessages_(form, responseEntry, answers, mapped);
     saveDefinition(form);
     return { ok: true, responseId, submittedAt, profile, message: profile.type ? "Response saved and linked to " + profile.name + "." : "Response saved. No matching student or staff profile was found for " + (responseEmail || "the supplied email") + "." };
@@ -600,6 +605,17 @@ const FormResponseService = (() => {
       if (FILE_UPLOAD_TYPES.includes(question.type)) question.maxSize = String(uploadLimitMb_(question));
     });
     return form;
+  }
+  function publicEventPayload_(value) {
+    if (!value || typeof value !== "object") return null;
+    return {
+      eventId: String(value.eventId || ""), eventVersion: Number(value.eventVersion || 0), title: String(value.title || ""),
+      shortName: String(value.shortName || ""), purpose: String(value.purpose || ""), publicDescription: String(value.publicDescription || ""),
+      schedule: (value.schedule || []).slice(0, 50).map(item => ({ id: String(item.id || ""), type: String(item.type || ""), label: String(item.label || ""), date: String(item.date || ""), start: String(item.start || ""), end: String(item.end || ""), venueName: String(item.venueName || ""), meetingLocation: String(item.meetingLocation || ""), pickupLocation: String(item.pickupLocation || "") })),
+      venue: { name: String(value.venue && value.venue.name || ""), address: String(value.venue && value.venue.address || ""), room: String(value.venue && value.venue.room || ""), arrivalEntrance: String(value.venue && value.venue.arrivalEntrance || ""), pickupPoint: String(value.venue && value.venue.pickupPoint || ""), accessibility: String(value.venue && value.venue.accessibility || "") },
+      logistics: { participationFee: Number(value.logistics && value.logistics.participationFee || 0), transportCost: Number(value.logistics && value.logistics.transportCost || 0), accommodationCost: Number(value.logistics && value.logistics.accommodationCost || 0), mealCost: Number(value.logistics && value.logistics.mealCost || 0), totalCost: Number(value.logistics && value.logistics.totalCost || 0), fundingModel: String(value.logistics && value.logistics.fundingModel || ""), paymentDueDate: String(value.logistics && value.logistics.paymentDueDate || ""), dress: String(value.logistics && value.logistics.dress || ""), footwear: String(value.logistics && value.logistics.footwear || ""), equipment: String(value.logistics && value.logistics.equipment || ""), travelLegs: (value.logistics && value.logistics.travelLegs || []).slice(0, 30).map(item => ({ origin: String(item.origin || ""), destination: String(item.destination || ""), date: String(item.date || ""), departAt: String(item.departAt || ""), arriveAt: String(item.arriveAt || ""), mode: String(item.mode || "") })), meals: (value.logistics && value.logistics.meals || []).slice(0, 20).map(item => ({ label: String(item.label || ""), date: String(item.date || ""), time: String(item.time || ""), provided: !!item.provided, studentsBring: !!item.studentsBring, leaveVenueOffered: !!item.leaveVenueOffered })) },
+      emergencyContact: { name: String(value.emergencyContact && value.emergencyContact.name || ""), role: String(value.emergencyContact && value.emergencyContact.role || ""), phone: String(value.emergencyContact && value.emergencyContact.phone || "") }, permissionDeadline: String(value.permissionDeadline || "")
+    };
   }
   function publishedQuestions_(form) { return Array.isArray(form.publishedQuestions) ? form.publishedQuestions : form.questions || []; }
 

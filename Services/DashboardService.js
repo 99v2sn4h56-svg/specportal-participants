@@ -21,6 +21,11 @@ const DashboardService = (() => {
     const participantSummary = unrestrictedParticipants
       ? safeCall_("ParticipantProjectionService.getDashboardSnapshot", () => ParticipantProjectionService.getDashboardSnapshot(), { categories: [], status: "Unavailable" })
       : { categories: [], totalParticipants: 0, status: "Scoped summary available in Participants", generatedAt: "", projection: "dashboard-participant-summary-v1" };
+    // Lightweight only: no roster, form response, risk detail or Attendance
+    // payload is loaded into the dashboard bootstrap.
+    const upcomingManagedEvents = UserContextService.hasCapability("Events.View")
+      ? safeCall_("EventWorkflowService.dashboardProjection", () => EventWorkflowService.dashboardProjection(), [])
+      : [];
 
     const response = {
       staff: toSafeDashboardStaff_(staff),
@@ -41,6 +46,7 @@ const DashboardService = (() => {
       rehearsals: timeline.upcomingRehearsals || [],
       todaysRehearsals: timeline.todaysRehearsals || [],
       attendanceEvents: [],
+      upcomingManagedEvents,
       currentDate: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM"),
       generatedAt: new Date().toISOString(),
       projection: ProjectionContractService.contract("dashboard").version,

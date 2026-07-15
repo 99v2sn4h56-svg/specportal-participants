@@ -6,6 +6,7 @@ const ParticipantProjectionService = (() => {
   const DASHBOARD_FRESH_SECONDS = 5 * 60, DASHBOARD_RETAIN_SECONDS = 30 * 60;
   const DEFAULT_PAGE_SIZE = 50;
   const DASHBOARD_SNAPSHOT_PROPERTY = "SC_DASHBOARD_PARTICIPANT_SUMMARY_V2";
+  const PAGE_SNAPSHOT_COLLECTION = "participant_page_snapshots";
 
   function getList(user, options) {
     const actor = user || UserContextService.getCurrent(), key = ProjectionContractService.cacheKey("participantList", {}, actor), started = Date.now();
@@ -17,7 +18,15 @@ const ParticipantProjectionService = (() => {
   function getPage(query, user, options) {
     const actor = user || UserContextService.getCurrent(), request = normalisePageQuery_(query), started = Date.now();
     const logicalKey = ProjectionContractService.cacheKey("participantPage", request, actor);
-    const cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(logicalKey, PAGE_FRESH_SECONDS, PAGE_RETAIN_SECONDS, () => buildPage_(request, actor), cacheOptions_("participantPage", options));
+    let cached;
+    try {
+      cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(logicalKey, PAGE_FRESH_SECONDS, PAGE_RETAIN_SECONDS, () => buildPage_(request, actor), cacheOptions_("participantPage", options));
+    } catch (error) {
+      const snapshot = /CACHE_REBUILD_BUSY/.test(String(error && error.message || "")) ? readPageSnapshot_(logicalKey) : null;
+      if (!snapshot) throw error;
+      cached = { value: snapshot, meta: { cache: "durable-snapshot", cacheStatus: "durable-snapshot", durationMs: Date.now() - started, isStale: true, generatedAt: snapshot.generatedAt || "", expiresAt: "" } };
+    }
+    if (cached.meta.cache !== "hit" || !readPageSnapshot_(logicalKey)) writePageSnapshot_(logicalKey, cached.value);
     const response = withRequestMeta_(cached.value, cached.meta);
     PerformanceTelemetryService.record("participants.page.request", Date.now() - started, { cache: cached.meta.cache, records: (response.participants || []).length, payloadBytes: estimateBytes_(response), projection: "participant-list-page-v2", isStale: !!cached.meta.isStale });
     return response;
@@ -25,7 +34,12 @@ const ParticipantProjectionService = (() => {
 
   function getFilters(user, options) {
     const actor = user || UserContextService.getCurrent(), key = ProjectionContractService.cacheKey("participantFilters", {}, actor), started = Date.now();
-    const cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(key, FILTER_FRESH_SECONDS, FILTER_RETAIN_SECONDS, () => buildFilters_(getList(actor).participants || []), cacheOptions_("participantFilters", options));
+    // Facets only need safe list fields. Building them directly from canonical
+    // participants avoids the much heavier complete-list/headshot projection.
+    const cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(key, FILTER_FRESH_SECONDS, FILTER_RETAIN_SECONDS, () => {
+      const visible = filterParticipantsForUser_(ParticipantService.getAll(), actor);
+      return buildFilters_(visible.map(item => toListItem_(item, null)));
+    }, cacheOptions_("participantFilters", options));
     PerformanceTelemetryService.record("participants.filters.request", Date.now() - started, { cache: cached.meta.cache, records: Object.keys(cached.value && cached.value.values || {}).reduce((sum, field) => sum + cached.value.values[field].length, 0), payloadBytes: estimateBytes_(cached.value), projection: "participant-filter-v1", isStale: !!cached.meta.isStale });
     return withRequestMeta_(cached.value, cached.meta);
   }
@@ -44,7 +58,7 @@ const ParticipantProjectionService = (() => {
   function pageQueryKey(query) {
     const request = normalisePageQuery_(query);
     const base = ["participant-list-page-v2", "page=" + request.page, "pageSize=" + request.pageSize];
-    if (request.search || Object.keys(request.filters).length) base.push("query=" + digest_(JSON.stringify({ search: request.search, filters: request.filters }), 16));
+    if (request.search || Object.keys(request.filters).length || request.sortKey !== "name" || request.sortDirection !== "asc") base.push("query=" + digest_(JSON.stringify({ search: request.search, filters: request.filters, sortKey: request.sortKey, sortDirection: request.sortDirection }), 16));
     return base.join(":");
   }
 
@@ -130,7 +144,9 @@ const ParticipantProjectionService = (() => {
     const start = (request.page - 1) * request.pageSize;
     const pageItems = filtered.slice(start, start + request.pageSize);
     const pageRecords = pageItems.map(item => recordsById[String(item.studentKey || item.id || "")]).filter(Boolean);
-    const headshots = HeadshotAssetService.getMetadataMany("participant", pageRecords);
+    // Never block the participant route on a full Drive folder scan. Explicit
+    // photo references and a previously warmed index are enough for first paint.
+    const headshots = HeadshotAssetService.getMetadataManyFast("participant", pageRecords);
     const participants = pageRecords.map(item => toListItem_(item, headshots[String(item.studentKey || item.id || "")]));
     const response = {
       participants,
@@ -148,7 +164,8 @@ const ParticipantProjectionService = (() => {
       schools: uniqueField_(participants, "school"), years: uniqueField_(participants, "year"), disciplines: uniqueField_(participants, "discipline"),
       categories: uniqueField_(participants, "category"), items: uniqueListField_(participants, "item"), regions: uniqueField_(participants, "region"),
       directorates: uniqueField_(participants, "directorate"), statuses: uniqueField_(participants, "applicationStatus"),
-      participationTypes: uniqueField_(participants, "participationType"), segments: uniqueField_(participants, "segment"), schoolGroups: uniqueField_(participants, "schoolGroup")
+      participationTypes: uniqueField_(participants, "participationType"), segments: uniqueField_(participants, "segment"), schoolGroups: uniqueField_(participants, "schoolGroup"),
+      genders: uniqueField_(participants, "gender")
     };
     const response = { values, generatedAt: new Date().toISOString(), projection: ProjectionContractService.contract("participantFilters").version };
     ProjectionContractService.validate("participantFilters", response);
@@ -162,9 +179,16 @@ const ParticipantProjectionService = (() => {
       return Object.keys(filters).every(field => {
         if (!filters[field]) return true;
         if (field === "item") return splitListValue_(item.item).includes(filters[field]);
+        if (field === "category") return [item.discipline, item.category].map(value => String(value || "")).includes(filters[field]);
+        if (field === "hasAttendance") return !!String(item.attendanceStatus || "").trim();
+        if (field === "missingAttendance") return !String(item.attendanceStatus || "").trim();
+        if (field === "productionText") return [item.discipline, item.category, item.categoryDetail, item.item, item.schoolGroup].filter(Boolean).join(" ").toLowerCase().indexOf(String(filters[field]).toLowerCase()) >= 0;
         return String(item[field] || "") === filters[field];
       });
-    }).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true }));
+    }).sort((a, b) => {
+      const result = String(a[request.sortKey] || "").localeCompare(String(b[request.sortKey] || ""), undefined, { numeric: true });
+      return request.sortDirection === "desc" ? -result : result;
+    });
   }
 
   function toListItem_(item, headshot) {
@@ -182,9 +206,10 @@ const ParticipantProjectionService = (() => {
   function toSchoolItem_(item) { return pick_(item, ["id", "schoolId", "code", "schoolName", "name", "directorate", "region"]); }
   function sanitiseDetail_(item) { const value = JSON.parse(JSON.stringify(item || {})); const stableId = String(value.studentKey || value.id || ""); const headshot = HeadshotAssetService.getMetadataMany("participant", [item])[stableId] || {}; value.hasPhoto = !!headshot.hasPhoto; value.assetKey = headshot.assetKey || ""; value.assetVersion = headshot.assetVersion || ""; delete value.photoId; delete value.photoUrl; delete value.driveUrl; return value; }
   function normalisePageQuery_(query) {
-    const value = query && typeof query === "object" ? query : {}, allowed = ["school", "year", "discipline", "category", "item", "region", "directorate", "applicationStatus", "participationType", "segment", "schoolGroup"], filters = {};
+    const value = query && typeof query === "object" ? query : {}, allowed = ["school", "year", "discipline", "category", "item", "region", "gender", "directorate", "applicationStatus", "participationType", "segment", "schoolGroup", "hasAttendance", "missingAttendance", "productionText"], filters = {};
     Object.keys(value.filters || {}).filter(field => allowed.includes(field)).forEach(field => { const cleaned = String(value.filters[field] || "").trim().slice(0, 120); if (cleaned) filters[field] = cleaned; });
-    return { page: Math.max(1, Math.floor(Number(value.page) || 1)), pageSize: Math.min(100, Math.max(10, Math.floor(Number(value.pageSize) || DEFAULT_PAGE_SIZE))), search: String(value.search || "").trim().slice(0, 160), filters };
+    const sortKeys = ["name", "school", "category", "item", "year", "region", "applicationStatus"];
+    return { page: Math.max(1, Math.floor(Number(value.page) || 1)), pageSize: Math.min(100, Math.max(10, Math.floor(Number(value.pageSize) || DEFAULT_PAGE_SIZE))), search: String(value.search || "").trim().slice(0, 160), filters, sortKey: sortKeys.includes(value.sortKey) ? value.sortKey : "name", sortDirection: value.sortDirection === "desc" ? "desc" : "asc" };
   }
   function cacheOptions_(name, options) { return Object.assign({}, options || {}, { validator: value => ProjectionContractService.validate(name, value) }); }
   function uniqueField_(rows, field) { return Array.from(new Set((rows || []).map(item => String(item && item[field] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); }
@@ -194,6 +219,9 @@ const ParticipantProjectionService = (() => {
   function digest_(value, length) { return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ""))).replace(/=+$/, "").slice(0, length || 24); }
   function estimateBytes_(value) { try { return JSON.stringify(value || {}).length; } catch (_) { return 0; } }
   function readDashboardSnapshot_() { try { const value = JSON.parse(PropertiesService.getScriptProperties().getProperty(DASHBOARD_SNAPSHOT_PROPERTY) || "null"); ProjectionContractService.validate("dashboard", value); return value; } catch (_) { return null; } }
+  function pageSnapshotId_(logicalKey) { return "PAGESNAP-" + digest_(logicalKey, 32); }
+  function readPageSnapshot_(logicalKey) { try { const record = PlatformStoreService.listLarge(PAGE_SNAPSHOT_COLLECTION).find(item => item.id === pageSnapshotId_(logicalKey)); const value = record && record.value; if (!value) return null; ProjectionContractService.validate("participantPage", value); return value; } catch (_) { return null; } }
+  function writePageSnapshot_(logicalKey, value) { try { ProjectionContractService.validate("participantPage", value); PlatformStoreService.putLarge(PAGE_SNAPSHOT_COLLECTION, { id: pageSnapshotId_(logicalKey), entityType: "ParticipantPageSnapshot", generatedAt: new Date().toISOString(), value }, 8); } catch (_) {} }
   function emptyDashboard_(status, cache) { return { categories: [], totalParticipants: 0, status, generatedAt: "", projection: ProjectionContractService.contract("dashboard").version, cache }; }
   function withRequestMeta_(value, meta) { const control = PlatformControlService.getConfig(); return Object.assign({}, value || {}, { requestMeta: { cache: meta.cache, cacheStatus: meta.cacheStatus || meta.cache, durationMs: meta.durationMs, payloadBytes: estimateBytes_(value), isStale: !!meta.isStale, schemaVersion: control.schemaVersion, cacheEpoch: control.cacheEpoch, generatedAt: meta.generatedAt || value && value.generatedAt || "", expiresAt: meta.expiresAt || "" } }); }
 

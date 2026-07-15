@@ -38,20 +38,55 @@ const HeadshotAssetService = (() => {
     }, {});
   }
 
+  /**
+   * First-paint metadata path. It never scans Drive. A warm canonical index is
+   * reused when available; otherwise only explicit source references are
+   * recognised. Filename matching is filled in by the later full-list warm.
+   */
+  function getMetadataManyFast(entityType, records) {
+    const type = normaliseEntityType_(entityType);
+    const cached = PerformanceCacheService.peek(indexKey_(type));
+    if (cached && cached.assets) return metadataForRecords_(type, records, cached.assets);
+    return (Array.isArray(records) ? records : []).reduce((output, record) => {
+      const stableId = stableId_(type, record);
+      if (!stableId) return output;
+      const explicit = explicitReference_(type, record);
+      const parsed = parseReference(explicit);
+      const asset = parsed.valid && parsed.type === "drive"
+        ? asset_(type, stableId, parsed.fileId, "explicit-reference", "matched", record.lastUpdated)
+        : parsed.valid && parsed.type === "https"
+          ? asset_(type, stableId, "", "explicit-reference", "matched", record.lastUpdated, parsed.url)
+          : unresolved_(type, stableId, explicit ? "invalid-reference" : "index-not-warmed");
+      output[stableId] = publicMetadata_(asset);
+      return output;
+    }, {});
+  }
+
   function getAsset(entityType, stableEntityId, records) {
     const stableId = String(stableEntityId || "").trim();
     if (!stableId) return unresolved_(entityType, stableId, "missing-stable-id");
+    // Explicit IDs/URLs can be delivered immediately without making the user
+    // wait for filename matching across the whole Drive folder.
+    const source = (Array.isArray(records) ? records : []).find(record => stableId_(normaliseEntityType_(entityType), record) === stableId);
+    if (source) {
+      const explicit = explicitReference_(entityType, source), parsed = parseReference(explicit);
+      if (parsed.valid && parsed.type === "drive") return asset_(normaliseEntityType_(entityType), stableId, parsed.fileId, "explicit-reference", "matched", source.lastUpdated);
+      if (parsed.valid && parsed.type === "https") return asset_(normaliseEntityType_(entityType), stableId, "", "explicit-reference", "matched", source.lastUpdated, parsed.url);
+    }
     const index = getIndex_(entityType, records);
     return index.assets[stableId] || unresolved_(entityType, stableId, "unmatched");
   }
 
   function getIndex_(entityType) {
     const type = normaliseEntityType_(entityType);
-    const key = `headshots:index:${CONTRACT}:${type}`;
+    const key = indexKey_(type);
     // Never let a permission-filtered request create a partial shared index.
     // The canonical index is always built from the complete server-side source.
     return PerformanceCacheService.getOrLoad(key, CACHE_SECONDS, () => buildIndex_(type));
   }
+
+  function indexKey_(type) { return `headshots:index:${CONTRACT}:${type}`; }
+  function metadataForRecords_(entityType, records, assets) { return (Array.isArray(records) ? records : []).reduce((output, record) => { const stableId = stableId_(entityType, record); if (stableId) output[stableId] = publicMetadata_(assets[stableId]); return output; }, {}); }
 
   function buildIndex_(entityType, records) {
     const sourceRecords = Array.isArray(records) ? records : entityType === "participant" ? ParticipantService.getAll() : StaffService.getAll();
@@ -249,5 +284,5 @@ const HeadshotAssetService = (() => {
   }
   function getContract() { return { version: CONTRACT, ownerKey: "stableId", entityTypes: ["participant", "staff"], sizes: SIZES.slice(), currentStorage: "private Drive adapter behind authenticated proxy", futureStorage: "private Cloud Storage adapter", delivery: "permission-scoped ephemeral response", rawStorageReferencesExposed: false, configurationProperties: Object.assign({}, CONFIG) }; }
 
-  return { resolveMany, resolveTrustedMany, getMetadataMany, getAsset, parseReference, invalidate, refresh, diagnostics, testResolution, getContract, _test: { normaliseName: normaliseName_, filenameKeys: filenameKeys_, matchRecord: matchRecord_, resolveRecordAsset: resolveRecordAsset_, rejectSharedFilenameOwners: rejectSharedFilenameOwners_, buildIndex: buildIndex_, publicMetadata: publicMetadata_ } };
+  return { resolveMany, resolveTrustedMany, getMetadataMany, getMetadataManyFast, getAsset, parseReference, invalidate, refresh, diagnostics, testResolution, getContract, _test: { normaliseName: normaliseName_, filenameKeys: filenameKeys_, matchRecord: matchRecord_, resolveRecordAsset: resolveRecordAsset_, rejectSharedFilenameOwners: rejectSharedFilenameOwners_, buildIndex: buildIndex_, publicMetadata: publicMetadata_ } };
 })();

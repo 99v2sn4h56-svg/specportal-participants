@@ -599,6 +599,14 @@ function portalGetEventWorkspace(eventId, section, options) {
   return EventManagerService.getWorkspace(eventId, section, options || {});
 }
 
+function portalGetManagedEventWorkflow(eventId) {
+  return EventWorkflowService.get(String(eventId || ""));
+}
+
+function portalExecuteEventWorkflowCommand(commandName, input) {
+  return EventWorkflowService.execute(String(commandName || ""), input || {});
+}
+
 function portalGetCommandArchitecture() {
   return CommandService.getArchitecture();
 }

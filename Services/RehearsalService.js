@@ -1,5 +1,6 @@
 const RehearsalService = (() => {
-  const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V4";
+  // V5 rebuilds rows after the yearless spreadsheet-date normalisation fix.
+  const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V5";
   const CACHE_SECONDS = 5 * 60;
   const CACHE_MAX_CHARS = 80000;
 
@@ -293,28 +294,67 @@ const RehearsalService = (() => {
   }
 
   function parseTimelineDate_(dateDisplay) {
-    const text = String(dateDisplay || "").trim();
+    if (Object.prototype.toString.call(dateDisplay) === "[object Date]" && !isNaN(dateDisplay.getTime())) return dateDisplay;
+    const text = String(dateDisplay || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[，]/g, ",")
+      .replace(/[‐‑‒–—]/g, "-")
+      .replace(/\s+/g, " ")
+      .trim();
     if (!text) return null;
 
-    const hasExplicitYear = /\b\d{4}\b/.test(text) || /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/.test(text);
-    const parsed = new Date(text);
-    if (hasExplicitYear && Object.prototype.toString.call(parsed) === "[object Date]" && !isNaN(parsed.getTime())) {
-      return parsed;
-    }
-
-    const currentYear = new Date().getFullYear();
     const withoutDay = text.replace(/^(?:mon|tue|wed|thu|fri|sat|sun)(?:day)?[,]?\s+/i, "");
-    const dayMonthMatch = withoutDay.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s/.-]+([a-z]{3,9}|\d{1,2})(?:[\s/.-]+(\d{2,4}))?/i);
+    const iso = withoutDay.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+    if (iso) return createCalendarDate_(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
 
-    if (!dayMonthMatch) return null;
+    let match = withoutDay.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s/.-]+([a-z]{3,9}|\d{1,2})(?:[\s,./-]+(\d{2,4}))?$/i);
+    let day = match ? Number(match[1]) : 0;
+    let month = match ? parseMonth_(match[2]) : -1;
+    let suppliedYear = match && match[3] ? normaliseYear_(match[3]) : 0;
+    if (!match) {
+      match = withoutDay.match(/^([a-z]{3,9})[\s,.-]+(\d{1,2})(?:st|nd|rd|th)?(?:[\s,./-]+(\d{2,4}))?$/i);
+      month = match ? parseMonth_(match[1]) : -1;
+      day = match ? Number(match[2]) : 0;
+      suppliedYear = match && match[3] ? normaliseYear_(match[3]) : 0;
+    }
+    if (!match || !day || month < 0) return null;
 
-    const day = Number(dayMonthMatch[1]);
-    const month = parseMonth_(dayMonthMatch[2]);
-    const year = normaliseYear_(dayMonthMatch[3] || currentYear);
-    if (!day || month < 0 || !year) return null;
+    const weekday = weekdayIndex_(text);
+    const year = suppliedYear || inferTimelineYear_(month, day, weekday);
+    const date = createCalendarDate_(year, month, day);
+    return date;
+  }
 
-    const date = new Date(year, month, day);
-    return isNaN(date.getTime()) ? null : date;
+  function inferTimelineYear_(month, day, weekday) {
+    const configured = configuredTimelineYear_();
+    const currentYear = new Date().getFullYear();
+    if (weekday < 0) return configured || currentYear;
+    const configuredDate = configured ? createCalendarDate_(configured, month, day) : null;
+    if (configuredDate && configuredDate.getDay() === weekday) return configured;
+    const candidates = [];
+    [configured, currentYear - 1, currentYear, currentYear + 1, currentYear + 2].filter(Boolean).forEach(year => {
+      if (!candidates.includes(year) && createCalendarDate_(year, month, day) && createCalendarDate_(year, month, day).getDay() === weekday) candidates.push(year);
+    });
+    if (!candidates.length) return configured || currentYear;
+    return candidates.sort((a, b) => Math.abs(a - currentYear) - Math.abs(b - currentYear) || b - a)[0];
+  }
+
+  function configuredTimelineYear_() {
+    try {
+      const properties = PropertiesService.getScriptProperties();
+      return normaliseYear_(properties.getProperty("SPEC_TIMELINE_YEAR") || properties.getProperty("SPEC_PRODUCTION_YEAR"));
+    } catch (_) { return 0; }
+  }
+
+  function weekdayIndex_(value) {
+    const match = String(value || "").match(/^(sun|mon|tue|wed|thu|fri|sat)(?:day)?\b/i);
+    return match ? ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(match[1].slice(0, 3).toLowerCase()) : -1;
+  }
+
+  function createCalendarDate_(year, month, day) {
+    if (!year || month < 0 || month > 11 || day < 1 || day > 31) return null;
+    const date = new Date(year, month, day, 12, 0, 0, 0);
+    return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day ? date : null;
   }
 
   function parseMonth_(value) {
@@ -394,6 +434,7 @@ const RehearsalService = (() => {
     byText,
     today,
     next,
-    byItem
+    byItem,
+    _test: { parseTimelineDate: parseTimelineDate_, buildDateKey: buildDateKey_, inferTimelineYear: inferTimelineYear_ }
   };
 })();

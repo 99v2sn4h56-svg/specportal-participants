@@ -39,7 +39,7 @@
       if (!App.state.ready) {
         var results = document.getElementById("participantResults");
         if (results) results.innerHTML = App.loadingState("Loading participant database");
-        App.ensurePortalDataLoaded().then(App.renderParticipantExplorer).catch(function (error) { if (results) results.innerHTML = App.emptyState("Participant data unavailable", App.getErrorMessage(error)); });
+        App.ensurePortalDataLoaded({ firstPageOnly: true }).then(App.renderParticipantExplorer).catch(function (error) { if (results) results.innerHTML = App.emptyState("Participant data unavailable", App.getErrorMessage(error)); });
         return;
       }
       try {
@@ -48,9 +48,29 @@
         root.classList.toggle("groupMode", groupMode);
         App.renderParticipantModeToggle();
         if (groupMode) {
+          if (!App.state.participantListComplete) {
+            var groupResults = document.getElementById("participantResults");
+            if (App.state.participantGroupListLoading) return;
+            App.state.participantGroupListLoading = true;
+            if (groupResults) groupResults.innerHTML = App.loadingState("Loading school groups");
+            App.loadPortalData(false).then(function () {
+              App.state.participantGroupListLoading = false;
+              if (App.state.participantListComplete) App.renderParticipantExplorer();
+              else if (groupResults) groupResults.innerHTML = App.emptyState("School groups are still warming", "Try again shortly; the Individuals list remains available.");
+            });
+            return;
+          }
           var groups = App.getFilteredParticipantGroups();
           App.renderParticipantGroupStats(groups);
           App.renderParticipantGroupTable(groups);
+          return;
+        }
+        var pageQuery = App.participantExplorerPageQuery();
+        if (App.state.participantExplorerPageSignature !== pageQuery.signature) {
+          var pageResults = document.getElementById("participantResults"), pageStatus = document.getElementById("participantStatus");
+          if (pageStatus) pageStatus.textContent = "Loading matching participants…";
+          if (pageResults) pageResults.innerHTML = App.loadingState("Loading participant page");
+          App.loadParticipantExplorerPage(false).then(App.renderParticipantExplorer).catch(function (error) { if (pageResults) pageResults.innerHTML = App.emptyState("Participant data unavailable", App.getErrorMessage(error)); });
           return;
         }
         var filtered = App.getFilteredParticipants();
@@ -109,6 +129,7 @@
     },
 
     getFilteredParticipants: function () {
+      if (App.state.participantExplorerPageData && App.state.participantExplorerPageSignature === App.participantExplorerPageQuery().signature) return (App.state.participantExplorerPageData.participants || []).slice();
       var filters = App.state.participantExplorerFilters || {}, query = String(App.state.participantExplorerSearch || "").trim().toLowerCase();
       var list = (App.state.participants || []).filter(function (participant) {
         var values = App.getParticipantExplorerValues(participant);
@@ -183,7 +204,7 @@
       var fields = ["category", "item", "school", "region", "year", "gender", "directorate", "status", "participationType", "segment", "staffAllocation", "teacher", "schoolGroup"], facets = {};
       fields.forEach(function (field) { facets[field] = []; });
       var projected = App.state.participantFilterProjection && App.state.participantFilterProjection.values || {};
-      var projectedFields = { category: "categories", item: "items", school: "schools", region: "regions", year: "years", directorate: "directorates", status: "statuses", participationType: "participationTypes", segment: "segments", schoolGroup: "schoolGroups" };
+      var projectedFields = { category: "categories", item: "items", school: "schools", region: "regions", year: "years", gender: "genders", directorate: "directorates", status: "statuses", participationType: "participationTypes", segment: "segments", schoolGroup: "schoolGroups" };
       Object.keys(projectedFields).forEach(function (field) { if (Array.isArray(projected[projectedFields[field]])) facets[field] = projected[projectedFields[field]].slice(); });
       (App.state.participants || []).forEach(function (participant) { var values = App.getParticipantExplorerValues(participant); fields.forEach(function (field) { if (field === "category") { values.categories.forEach(function (category) { if (!facets.category.includes(category)) facets.category.push(category); }); } else if (field === "item") { values.items.forEach(function (item) { if (!facets.item.includes(item)) facets.item.push(item); }); } else if (values[field] && facets[field].indexOf(values[field]) < 0) facets[field].push(values[field]); }); });
       fields.forEach(function (field) { facets[field].sort(function (a, b) { return String(a).localeCompare(String(b), undefined, { numeric: true }); }); });
@@ -206,6 +227,11 @@
 
     renderParticipantExplorerStats: function (participants) {
       var el = document.getElementById("participantStats"); if (!el) return; var unique = function (values) { return new Set(values.filter(Boolean)).size; };
+      if (App.state.participantExplorerPageData && App.state.participantExplorerPageSignature === App.participantExplorerPageQuery().signature) {
+        var page = App.state.participantExplorerPageData.pagination || {}, projected = App.state.participantFilterProjection && App.state.participantFilterProjection.values || {};
+        el.innerHTML = [[Number(page.total || 0), "Total Participants"], [(projected.schools || []).length, "Schools"], [(projected.categories || projected.disciplines || []).length, "Categories"]].map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
+        return;
+      }
       var stats = [[participants.length, "Total Participants"], [unique(participants.map(App.getParticipantSchool)), "Schools"], [unique(participants.reduce(function (all, participant) { return all.concat(App.getParticipantCategories(participant)); }, [])), "Categories"], [participants.filter(function (p) { return p.featuredPerformer; }).length, "Featured Performers"], [participants.filter(App.participantMatchesCulturalIdentity).length, "Aboriginal / TSI"], [participants.filter(function (p) { return App.participantNotesContain(p, /\blote\b/i); }).length, "LOTE / EAL-D"], [participants.filter(function (p) { return App.participantNotesContain(p, /\bsupport\s+needed\b/i); }).length, "Support Needed"], [participants.filter(function (p) { return App.participantNotesContain(p, /\b1st\b/i); }).length, "First Time"], [participants.filter(function (p) { return p.returningStudent; }).length, "Returning"], [participants.filter(App.participantHasAttendanceToday).length, "Attendance Today"]];
       el.innerHTML = stats.filter(function (item) { return Number(item[0]) > 0 || ["Total Participants", "Schools", "Categories"].includes(item[1]); }).map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
     },
@@ -220,11 +246,11 @@
     getParticipantColumns: function (includeHidden) { var columns = [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Yr"], ["region", "Region"], ["status", "Status"]]; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
     renderParticipantTable: function (participants) {
       var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return;
-      var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, pages = Math.max(1, Math.ceil(participants.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = participants.slice((page - 1) * size, page * size), columns = App.getParticipantColumns();
-      App.state.participantExplorerPage = page; App.state.participantExplorerPageSize = size; App.state.participantExplorerCurrentRows = participants;
-      if (status) status.textContent = participants.length + " matching participants · page " + page + " of " + pages;
+      var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, serverPage = App.state.participantExplorerPageData && App.state.participantExplorerPageSignature === App.participantExplorerPageQuery().signature && App.state.participantExplorerPageData.pagination, pages = serverPage ? Number(serverPage.totalPages || 1) : Math.max(1, Math.ceil(participants.length / size)), page = serverPage ? Number(serverPage.page || 1) : Math.min(App.state.participantExplorerPage || 1, pages), rows = serverPage ? participants : participants.slice((page - 1) * size, page * size), total = serverPage ? Number(serverPage.total || 0) : participants.length, columns = App.getParticipantColumns();
+      App.state.participantExplorerPage = page; App.state.participantExplorerPageSize = size; App.state.participantExplorerCurrentRows = rows;
+      if (status) status.textContent = total + " matching participants · page " + page + " of " + pages;
       el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable"><thead><tr>' + columns.map(function (column) { var sort = App.state.participantExplorerSort || {}; return '<th class="participantColumn participantColumn-' + column[0] + '"><button type="button" onclick="App.sortParticipantExplorer(\'' + column[0] + '\')">' + App.escapeHtml(column[1]) + (sort.key === column[0] ? (sort.direction === "asc" ? " ↑" : " ↓") : "") + '</button></th>'; }).join("") + '<th class="participantColumn participantColumn-open">Actions</th></tr></thead><tbody>' + rows.map(function (participant, index) {
-        var values = App.getParticipantExplorerValues(participant), rowIndex = (page - 1) * size + index;
+        var values = App.getParticipantExplorerValues(participant), rowIndex = serverPage ? index : (page - 1) * size + index;
         return '<tr>' + columns.map(function (column) { return '<td class="participantColumn participantColumn-' + column[0] + '" data-label="' + App.escapeHtml(column[1]) + '">' + App.renderParticipantCell(participant, values, column[0]) + '</td>'; }).join("") + '<td class="participantColumn participantColumn-open" data-label="Actions"><div class="participantRowActions"><button class="participantOpenButton" type="button" onclick="App.openExplorerParticipant(' + rowIndex + ')">Open profile →</button></div></td></tr>';
       }).join("") + '</tbody></table></div>' : App.emptyState("No participants match these filters", "Clear or adjust the active filters.");
       if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>';
@@ -248,7 +274,7 @@
     getParticipantCategoryTone: function (category) { var hash = 0, text = String(category || "").toLowerCase(); for (var i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0; return Math.abs(hash) % 8; },
     openExplorerParticipant: function (index) { var participant = (App.state.participantExplorerCurrentRows || [])[index]; if (participant) App.openParticipant(participant); },
     openExplorerGroup: function (index) { var group = (App.state.participantExplorerCurrentGroups || [])[index]; if (!group) return; App.openGroup(group); var panel = document.getElementById("participantProfilePanel"); if (panel) panel.hidden = false; },
-    sortParticipantExplorer: function (key) { var sort = App.state.participantExplorerSort || {}; App.state.participantExplorerSort = { key: key, direction: sort.key === key && sort.direction === "asc" ? "desc" : "asc" }; App.renderParticipantExplorer(); },
+    sortParticipantExplorer: function (key) { var sort = App.state.participantExplorerSort || {}; App.state.participantExplorerSort = { key: key, direction: sort.key === key && sort.direction === "asc" ? "desc" : "asc" }; App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); },
     changeParticipantPage: function (delta) { App.state.participantExplorerPage = Math.max(1, (App.state.participantExplorerPage || 1) + delta); App.renderParticipantExplorer(); },
     getParticipantFamilyEmails: function (participant) { return App.normaliseParticipantEmailList([App.getParticipantStudentEmail(participant), App.getParticipantParentEmail(participant), App.getParticipantAdditionalParentEmail(participant)]); },
     normaliseParticipantEmailList: function (values) { var emails = [], seen = {}; (values || []).forEach(function (value) { String(value || "").split(/[;,\n]+/).forEach(function (email) { var clean = email.trim(), key = clean.toLowerCase(); if (!clean || clean.indexOf("@") < 1 || seen[key]) return; seen[key] = true; emails.push(clean); }); }); return emails; },
