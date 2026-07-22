@@ -14,6 +14,9 @@ const EventWorkflowService = (() => {
   const SCHOOL_NOTIFICATIONS = "event_school_notifications";
   const STATUSES = ["Draft", "Active", "Completed", "Cancelled", "Archived"];
   const RISK_STATUSES = ["Not started", "Draft", "In review", "Approved"];
+  const RISK_ROW_STATUSES = ["Identified", "Reviewed", "Closed"];
+  const LIKELIHOOD_SCALE = ["Rare", "Unlikely", "Possible", "Likely", "Almost certain"];
+  const CONSEQUENCE_SCALE = ["Insignificant", "Minor", "Moderate", "Major", "Severe"];
   const COMMANDS = Object.freeze({
     CreateEventDraft: "Events.Create",
     SaveEventDraft: "Events.Edit",
@@ -31,6 +34,10 @@ const EventWorkflowService = (() => {
     PrepareAttendanceSessions: "Events.PrepareAttendance"
   });
   const MATERIAL_FIELDS = ["title", "eventType", "purpose", "publicDescription", "deadlines", "emergencyContact", "schedule", "venue", "logistics", "participation"];
+  const EVENT_TYPES = ["Rehearsal", "Performance", "Workshop", "Audition", "Filming", "Recording", "Professional learning", "Meeting", "Excursion", "Tour", "Camp", "Competition", "Ceremony", "Other"];
+  const EVENT_ROLES = ["Event lead", "Supervising teacher", "Production staff", "First aid", "Transport supervisor", "Attendance officer", "Welfare contact", "Emergency contact", "General staff"];
+  const SCHEDULE_TYPES = ["Primary event", "Rehearsal", "Compulsory rehearsal", "Optional rehearsal", "Online briefing", "Staff briefing", "Costume fitting", "Technical rehearsal", "Dress rehearsal", "Travel day"];
+  const BUILDER_OPTION_TYPES = ["participants", "staff", "schoolGroups", "schools", "eventTypes", "eventRoles", "scheduleTypes"];
 
   function list() {
     const user = UserContextService.requireCapability("Events.View");
@@ -170,14 +177,22 @@ const EventWorkflowService = (() => {
 
   function saveRisk_(input, user, status) {
     const current = requireEvent_(input.id || input.eventId, user), supplied = input.risk || {};
+    const priorRows = (current.risk && current.risk.risks) || [];
+    const suppliedRows = Array.isArray(supplied.risks) && supplied.risks.length ? supplied.risks
+      : (supplied.hazards || supplied.controls) ? risksFromLegacyHazardControls_(supplied.hazards, supplied.controls)
+      : priorRows;
+    const risks = cleanRisks_(suppliedRows);
     const risk = {
       id: current.risk && current.risk.id || PlatformStoreService.createId("RSK"),
       status: RISK_STATUSES.includes(status) ? status : "Draft",
       version: Number(current.risk && current.risk.version || 0) + 1,
       ownerId: String(supplied.ownerId || current.risk && current.risk.ownerId || user.staffId || user.email),
       approverId: String(supplied.approverId || current.risk && current.risk.approverId || ""),
-      hazards: cleanLinks_(supplied.hazards || current.risk && current.risk.hazards || [], "hazardId", "label"),
-      controls: cleanLinks_(supplied.controls || current.risk && current.risk.controls || [], "controlId", "label"),
+      risks,
+      // Derived, read-only compatibility views for any existing caller that
+      // still expects the old flat hazard/control label lists.
+      hazards: risks.filter(row => row.hazard).map(row => ({ id: row.id + "-HAZ", label: row.hazard })),
+      controls: risks.filter(row => row.controls).map(row => ({ id: row.id + "-CTL", label: row.controls })),
       emergencyPlan: String(supplied.emergencyPlan || current.risk && current.risk.emergencyPlan || "").slice(0, 4000),
       healthConsiderationsRequired: supplied.healthConsiderationsRequired === undefined ? !!(current.risk && current.risk.healthConsiderationsRequired) : !!supplied.healthConsiderationsRequired,
       updatedAt: new Date().toISOString(),
@@ -187,23 +202,61 @@ const EventWorkflowService = (() => {
     };
     const saved = PlatformStoreService.putLarge(EVENTS, Object.assign({}, current, { risk, version: Number(current.version || 0) + 1, updatedAt: risk.updatedAt, updatedBy: user.email }), 500);
     recordVersion_(saved, user, "Risk " + risk.status, ["risk"]);
-    audit_("EventRisk" + risk.status.replace(/\s+/g, ""), saved, user, { riskId: risk.id, riskVersion: risk.version, hazardCount: risk.hazards.length });
+    audit_("EventRisk" + risk.status.replace(/\s+/g, ""), saved, user, { riskId: risk.id, riskVersion: risk.version, riskRowCount: risk.risks.length, hazardCount: risk.hazards.length });
     return workspace_(saved, user);
   }
 
   function generateRisk_(input, user) {
-    const current = requireEvent_(input.id || input.eventId, user), hazards = [], controls = [];
-    const add = (code, hazard, control) => { hazards.push({ id: "HAZ-" + code, label: hazard }); controls.push({ id: "CTL-" + code, label: control }); };
-    add("SUPERVISION", "Student supervision, arrival, departure or lost participant", "Confirm session-level Staff roles, roll checks, handover points and escalation contacts.");
-    if ((current.schedule || []).some(item => item.venueId || item.venueName)) add("VENUE", "Venue access, public areas, emergency egress or accessibility", "Complete a venue inspection and confirm entrances, pickup, assembly and accessibility arrangements.");
-    if (current.logistics && current.logistics.travelLegs && current.logistics.travelLegs.length) add("TRAVEL", "Transport delay, vehicle incident or separation during travel", "Confirm providers, supervising Staff, manifests, emergency contacts and delay communications for each travel leg.");
-    if (current.logistics && current.logistics.meals && current.logistics.meals.length) add("MEALS", "Food, allergens, hydration or unsupervised meal-break movement", "Review authorised dietary alerts, catering controls, water access and meal-break supervision.");
-    if (/performance|rehearsal|filming|recording|workshop|competition/i.test(String(current.eventType || ""))) add("ACTIVITY", "Activity, staging, equipment, electrical, sound or lighting hazards", "Complete activity-specific equipment checks, safe-work briefings and restricted-area controls.");
+    const current = requireEvent_(input.id || input.eventId, user), risks = [];
+    const add = (code, hazard, controls, likelihood, consequence) => { risks.push({ id: "RISK-" + code, hazard, controls, initialLikelihood: likelihood, initialConsequence: consequence }); };
+    add("SUPERVISION", "Student supervision, arrival, departure or lost participant", "Confirm session-level Staff roles, roll checks, handover points and escalation contacts.", "Possible", "Major");
+    if ((current.schedule || []).some(item => item.venueId || item.venueName)) add("VENUE", "Venue access, public areas, emergency egress or accessibility", "Complete a venue inspection and confirm entrances, pickup, assembly and accessibility arrangements.", "Possible", "Moderate");
+    if (current.logistics && current.logistics.travelLegs && current.logistics.travelLegs.length) add("TRAVEL", "Transport delay, vehicle incident or separation during travel", "Confirm providers, supervising Staff, manifests, emergency contacts and delay communications for each travel leg.", "Possible", "Major");
+    if (current.logistics && current.logistics.meals && current.logistics.meals.length) add("MEALS", "Food, allergens, hydration or unsupervised meal-break movement", "Review authorised dietary alerts, catering controls, water access and meal-break supervision.", "Unlikely", "Moderate");
+    if (/performance|rehearsal|filming|recording|workshop|competition/i.test(String(current.eventType || ""))) add("ACTIVITY", "Activity, staging, equipment, electrical, sound or lighting hazards", "Complete activity-specific equipment checks, safe-work briefings and restricted-area controls.", "Possible", "Major");
     const dates = Array.from(new Set((current.schedule || []).map(item => item.date).filter(Boolean)));
-    if (dates.length > 1) add("MULTIDAY", "Fatigue, overnight or multi-day welfare arrangements", "Confirm daily welfare checks, accommodation supervision where relevant, rest breaks and escalation arrangements.");
-    add("EMERGENCY", "Emergency, severe weather, Staff absence or communication failure", "Confirm emergency plan, assembly point, event contacts, backup Staff and communication channels before activation.");
-    return saveRisk_({ id: current.id, risk: { ownerId: input.ownerId || current.risk && current.risk.ownerId || user.staffId || user.email, approverId: input.approverId || current.risk && current.risk.approverId || "", hazards, controls, emergencyPlan: current.risk && current.risk.emergencyPlan || "Review the venue emergency procedure and event communication plan before submitting for approval.", healthConsiderationsRequired: (current.participation && current.participation.participants || []).length > 0 } }, user, "Draft");
+    if (dates.length > 1) add("MULTIDAY", "Fatigue, overnight or multi-day welfare arrangements", "Confirm daily welfare checks, accommodation supervision where relevant, rest breaks and escalation arrangements.", "Possible", "Minor");
+    add("EMERGENCY", "Emergency, severe weather, Staff absence or communication failure", "Confirm emergency plan, assembly point, event contacts, backup Staff and communication channels before activation.", "Unlikely", "Major");
+    return saveRisk_({ id: current.id, risk: { ownerId: input.ownerId || current.risk && current.risk.ownerId || user.staffId || user.email, approverId: input.approverId || current.risk && current.risk.approverId || "", risks, emergencyPlan: current.risk && current.risk.emergencyPlan || "Review the venue emergency procedure and event communication plan before submitting for approval.", healthConsiderationsRequired: (current.participation && current.participation.participants || []).length > 0 } }, user, "Draft");
   }
+
+  function risksFromLegacyHazardControls_(hazards, controls) {
+    // Compatibility path for any older caller still submitting the flat
+    // hazard/control label-list shape. Rows are paired positionally, which
+    // matches how generateRisk_ always produced them 1:1 in that shape.
+    const hazardRows = Array.isArray(hazards) ? hazards : [], controlRows = Array.isArray(controls) ? controls : [];
+    return hazardRows.map((hazard, index) => ({ id: hazard && hazard.id || undefined, hazard: hazard && hazard.label, controls: controlRows[index] && controlRows[index].label }));
+  }
+  function deriveRiskRating_(likelihood, consequence) {
+    const l = LIKELIHOOD_SCALE.indexOf(likelihood) + 1, c = CONSEQUENCE_SCALE.indexOf(consequence) + 1;
+    if (!l || !c) return "";
+    const score = l * c;
+    return score <= 4 ? "Low" : score <= 9 ? "Medium" : score <= 16 ? "High" : "Extreme";
+  }
+  function cleanRiskRow_(row) {
+    const value = row || {};
+    const likelihood = LIKELIHOOD_SCALE.includes(value.initialLikelihood) ? value.initialLikelihood : "Possible";
+    const consequence = CONSEQUENCE_SCALE.includes(value.initialConsequence) ? value.initialConsequence : "Moderate";
+    const residualLikelihood = LIKELIHOOD_SCALE.includes(value.residualLikelihood) ? value.residualLikelihood : "";
+    const residualConsequence = CONSEQUENCE_SCALE.includes(value.residualConsequence) ? value.residualConsequence : "";
+    return {
+      id: String(value.id || PlatformStoreService.createId("RISK")),
+      hazard: String(value.hazard || value.label || "").trim().slice(0, 500),
+      personsAtRisk: String(value.personsAtRisk || "Students, Staff").slice(0, 250),
+      initialLikelihood: likelihood,
+      initialConsequence: consequence,
+      initialRating: deriveRiskRating_(likelihood, consequence),
+      controls: String(value.controls || "").trim().slice(0, 2000),
+      responsibleOfficer: String(value.responsibleOfficer || "").slice(0, 180),
+      dueDate: dateKey_(value.dueDate),
+      residualLikelihood,
+      residualConsequence,
+      residualRating: residualLikelihood && residualConsequence ? deriveRiskRating_(residualLikelihood, residualConsequence) : "",
+      reviewNotes: String(value.reviewNotes || "").slice(0, 2000),
+      status: RISK_ROW_STATUSES.includes(value.status) ? value.status : "Identified"
+    };
+  }
+  function cleanRisks_(rows) { return uniqueById_((Array.isArray(rows) ? rows : []).slice(0, 60).map(cleanRiskRow_)).filter(row => row.hazard); }
 
   function approveRisk_(input, user) {
     const current = requireEvent_(input.id || input.eventId, user);
@@ -230,7 +283,7 @@ const EventWorkflowService = (() => {
       }, 5000);
       return request.id;
     });
-    const permissions = { status: "Draft form", formId: form.id, version: permissionVersion, requestIds, dueDate: String(input.dueDate || ""), generatedAt: new Date().toISOString(), generatedBy: user.email, outdatedAt: "", outdatedReason: "" };
+    const permissions = { status: "Draft form", formId: form.id, version: permissionVersion, requestIds, requestCount: requestIds.length, submittedCount: 0, approvedCount: 0, declinedCount: 0, healthReviewPendingCount: 0, dueDate: String(input.dueDate || ""), generatedAt: new Date().toISOString(), generatedBy: user.email, outdatedAt: "", outdatedReason: "" };
     const saved = PlatformStoreService.putLarge(EVENTS, Object.assign({}, current, { permissions, version: Number(current.version || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: user.email }), 500);
     recordVersion_(saved, user, "Permission form generated", ["permissions"]);
     audit_("EventPermissionFormGenerated", saved, user, { formId: form.id, permissionVersion, requestCount: requestIds.length });
@@ -389,6 +442,72 @@ const EventWorkflowService = (() => {
     return safe;
   }
 
+  /**
+   * Permission-scoped canonical selections for the guided event builder.
+   * Every list is sourced from the existing canonical services (never a
+   * parallel copy) and carries the same stable IDs those services already
+   * use, so a builder selection is safe to store directly on the roster.
+   */
+  function getBuilderOptions(type, query) {
+    const kind = String(type || "");
+    if (!BUILDER_OPTION_TYPES.includes(kind)) throw new Error("Unsupported builder option type: " + kind);
+    if (["eventTypes", "eventRoles", "scheduleTypes"].includes(kind)) {
+      UserContextService.requireCapability("Events.View");
+      return { type: kind, items: staticOptionList_(kind) };
+    }
+    // Selecting real participant/staff/school records is part of managing the
+    // roster, so it requires the same capability that saving the roster does
+    // — a user who can merely view an event should not get a free directory
+    // browser through the builder.
+    const user = UserContextService.requireCapability("Events.ManageRoster");
+    const q = query || {};
+    const search = String(q.search || "").trim().slice(0, 160);
+    const limit = Math.min(50, Math.max(5, Math.floor(Number(q.limit) || 20)));
+    if (kind === "participants") return participantOptions_(user, search, limit);
+    if (kind === "staff") return staffOptions_(search, limit);
+    if (kind === "schoolGroups") return schoolGroupOptions_(user, search, limit);
+    return schoolOptions_(user, search, limit);
+  }
+  function staticOptionList_(kind) { return (kind === "eventTypes" ? EVENT_TYPES : kind === "eventRoles" ? EVENT_ROLES : SCHEDULE_TYPES).slice(); }
+  function participantOptions_(user, search, limit) {
+    const page = ParticipantProjectionService.getPage({ search, page: 1, pageSize: limit }, user, {});
+    const items = (page.participants || []).map(item => ({ id: item.studentKey || item.id, label: item.name, school: item.school || "", schoolId: item.schoolId || "", year: item.year || "", category: item.category || "", item: item.item || "", discipline: item.discipline || "" }));
+    return { type: "participants", search, items, total: page.pagination ? page.pagination.total : items.length };
+  }
+  function staffOptions_(search, limit) {
+    // StaffService.getAll() is the lightweight, sheet-backed roster — it does
+    // not resolve headshots, unlike StaffDirectoryService's full profile view.
+    const needle = search.toLowerCase();
+    const active = StaffService.getAll().filter(staff => /^active$/i.test(String(staff.status || "Active")));
+    const matched = needle ? active.filter(staff => [staff.name, staff.displayName, staff.department, staff.productionRole].some(value => String(value || "").toLowerCase().indexOf(needle) >= 0)) : active;
+    const items = matched.slice(0, limit).map(staff => ({ id: staff.id, label: staff.displayName || staff.name, department: staff.department || "", role: staff.productionRole || "" }));
+    return { type: "staff", search, items, total: matched.length };
+  }
+  function schoolGroupOptions_(user, search, limit) {
+    const canSeeContact = AuthorizationService.hasCapability(user, "Events.ManageCommunications");
+    const needle = search.toLowerCase();
+    const groups = ParticipantService.getGroups();
+    const matched = needle ? groups.filter(group => [group.school, group.item, group.groupName, group.category].some(value => String(value || "").toLowerCase().indexOf(needle) >= 0)) : groups;
+    const items = matched.slice(0, limit).map(group => {
+      const record = { id: group.id, label: group.groupName || [group.school, group.item].filter(Boolean).join(" — "), school: group.school || "", schoolId: group.schoolId || "", item: group.item || "", category: group.category || "", allocatedCount: Number(group.allocatedCount) || 0, acceptedCount: Number(group.acceptedCount) || 0, contactTeacherId: group.teacherId || "", contactTeacherName: group.teacherName || "" };
+      if (canSeeContact) record.contactTeacherEmail = group.teacherEmail || "";
+      return record;
+    });
+    return { type: "schoolGroups", search, items, total: matched.length, contactFieldsIncluded: canSeeContact };
+  }
+  function schoolOptions_(user, search, limit) {
+    const canSeeContact = AuthorizationService.hasCapability(user, "Events.ManageCommunications");
+    const needle = search.toLowerCase();
+    const schools = ParticipantService.getSchoolsMasterData();
+    const matched = needle ? schools.filter(school => String(school.schoolName || "").toLowerCase().indexOf(needle) >= 0) : schools;
+    const items = matched.slice(0, limit).map(school => {
+      const record = { id: school.id, label: school.schoolName, directorate: school.directorate || "" };
+      if (canSeeContact) record.schoolEmail = school.schoolEmail || "";
+      return record;
+    });
+    return { type: "schools", search, items, total: matched.length, contactFieldsIncluded: canSeeContact };
+  }
+
   function dashboardProjection() {
     const user = UserContextService.requireCapability("Events.View"), today = todayKey_();
     return PlatformStoreService.listLarge(EVENTS).filter(event => scopeAllows_(user, event) && !["Cancelled", "Archived"].includes(event.status))
@@ -415,7 +534,14 @@ const EventWorkflowService = (() => {
     const submitted = requests.filter(item => ["Submitted", "Approved", "Declined"].includes(item.status)).length;
     const approved = requests.filter(item => item.status === "Approved").length;
     const declined = requests.filter(item => item.status === "Declined").length;
-    const permissions = Object.assign({}, event.permissions, { status: submitted === requests.length ? "Complete" : "Collecting responses", submittedCount: submitted, approvedCount: approved, declinedCount: declined, requestCount: requests.length, lastResponseAt: new Date().toISOString() });
+    // A lightweight counter only — the sensitive change itself stays in the
+    // restricted Forms response. `requests` was re-read after the update
+    // above, so it already reflects this response's flagged status. There is
+    // no approved command yet to mark a review resolved, so this can
+    // currently only increase; the readiness checklist reports that honestly
+    // rather than implying a review step that doesn't exist.
+    const healthReviewPendingCount = requests.filter(item => item.healthReviewStatus === "Review required").length;
+    const permissions = Object.assign({}, event.permissions, { status: submitted === requests.length ? "Complete" : "Collecting responses", submittedCount: submitted, approvedCount: approved, declinedCount: declined, requestCount: requests.length, healthReviewPendingCount, lastResponseAt: new Date().toISOString() });
     PlatformStoreService.putLarge(EVENTS, Object.assign({}, event, { permissions, version: Number(event.version || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: "public-form-workflow" }), 500);
     if (healthReviewRequired) {
       TaskService.create({ title: "Review updated health/support details", assignedUser: event.createdBy || "", priority: "High", module: "events", entity: { type: "ManagedEvent", id: event.id }, relatedEvent: event.id, notes: "Participant " + participantId + " indicated that their existing details require authorised staff review. Open the restricted Forms response to review the submitted content." });
@@ -475,8 +601,8 @@ const EventWorkflowService = (() => {
   function cleanEmergencyContact_(value) { value = value || {}; return { name: String(value.name || "").slice(0, 180), role: String(value.role || "").slice(0, 120), phone: String(value.phone || "").slice(0, 80) }; }
   function cleanIds_(items) { return Array.from(new Set((Array.isArray(items) ? items : []).map(item => String(item || "").trim().slice(0, 180)).filter(Boolean))).slice(0, 100); }
   function uniqueById_(items) { const seen = {}; return (items || []).filter(item => { const key = String(item && item.id || "").toLowerCase(); if (!key || seen[key]) return false; seen[key] = true; return true; }); }
-  function defaultRisk_(user) { return { id: PlatformStoreService.createId("RSK"), status: "Not started", version: 0, ownerId: user.staffId || user.email, approverId: "", hazards: [], controls: [], emergencyPlan: "", healthConsiderationsRequired: false, updatedAt: "", updatedBy: "", approvedAt: "", approvedBy: "" }; }
-  function defaultPermission_() { return { status: "Not started", formId: "", version: 0, requestIds: [], dueDate: "", generatedAt: "", generatedBy: "", outdatedAt: "", outdatedReason: "" }; }
+  function defaultRisk_(user) { return { id: PlatformStoreService.createId("RSK"), status: "Not started", version: 0, ownerId: user.staffId || user.email, approverId: "", risks: [], hazards: [], controls: [], emergencyPlan: "", healthConsiderationsRequired: false, updatedAt: "", updatedBy: "", approvedAt: "", approvedBy: "" }; }
+  function defaultPermission_() { return { status: "Not started", formId: "", version: 0, requestIds: [], dueDate: "", generatedAt: "", generatedBy: "", outdatedAt: "", outdatedReason: "", requestCount: 0, submittedCount: 0, healthReviewPendingCount: 0 }; }
 
   function withDerived_(event) {
     const copy = JSON.parse(JSON.stringify(event)), schedule = copy.schedule || [], first = schedule.slice().sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] || {};
@@ -489,11 +615,62 @@ const EventWorkflowService = (() => {
     copy.warningCount = readinessWarnings_(copy).length;
     return copy;
   }
-  function readiness_(event) { const states = summaryWorkflow_(event); const done = Object.keys(states).filter(key => states[key] === "Ready" || states[key] === "Approved" || states[key] === "Prepared").length; return { label: done === 5 ? "Ready" : done >= 3 ? "In progress" : "Needs setup", completed: done, total: 5, percent: Math.round(done / 5 * 100), states }; }
+  function readiness_(event) {
+    const checklist = readinessChecklist_(event);
+    // `states` is kept in its original 5-key shape purely so the existing
+    // EventManagerService.readinessWarnings_ merge and the current
+    // renderEventWorkflowSummary UI (both untouched this pass) keep working
+    // unchanged. The headline label/percent/completed below now come from
+    // the explicit 13-point checklist instead of that coarse summary.
+    return { label: checklist.label, completed: checklist.completed, total: checklist.total, percent: checklist.percent, blockers: checklist.blockers, warnings: checklist.warnings, checklist: checklist.entries, states: summaryWorkflow_(event) };
+  }
   function summaryWorkflow_(event) { return { schedule: (event.schedule || []).length ? "Ready" : "Required", roster: rosterCount_(event.participation) ? "Ready" : "Required", risk: event.risk && event.risk.status === "Approved" ? "Approved" : event.risk && event.risk.status || "Not started", permission: event.permissions && !["Not started", "Outdated"].includes(event.permissions.status) ? "Ready" : event.permissions && event.permissions.status || "Not started", attendance: event.attendance && event.attendance.status === "Prepared" ? "Prepared" : event.attendance && event.attendance.status || "Not started" }; }
-  function readinessWarnings_(event) { const state = summaryWorkflow_(event), warnings = []; Object.keys(state).forEach(key => { if (!["Ready", "Approved", "Prepared"].includes(state[key])) warnings.push({ code: "WORKFLOW_" + key.toUpperCase(), severity: key === "risk" || key === "permission" ? "Warning" : "Info", title: key.charAt(0).toUpperCase() + key.slice(1) + " needs attention", message: state[key], source: "Event workflow", action: nextActionFor_(key, state[key]) }); }); return warnings; }
-  function nextAction_(event) { const state = summaryWorkflow_(event), key = Object.keys(state).find(name => !["Ready", "Approved", "Prepared"].includes(state[name])); return key ? nextActionFor_(key, state[key]) : "Open event"; }
-  function nextActionFor_(key) { return ({ schedule: "Add schedule", roster: "Add participants or groups", risk: "Complete and approve risk", permission: "Generate current permission form", attendance: "Prepare Attendance sessions" })[key] || "Review event"; }
+  /**
+   * The explicit readiness checklist the brief asks for, in place of an
+   * unexplained percentage. Every entry is derived only from fields already
+   * stored on the lightweight event record (never a fresh PERMISSION_REQUESTS
+   * or SCHOOL_NOTIFICATIONS scan), so dashboardProjection() stays a single
+   * bulk read regardless of how many events it lists.
+   */
+  function readinessChecklist_(event) {
+    const participation = event.participation || cleanParticipation_({}), schedule = event.schedule || [];
+    const counts = rosterCounts_(participation), schoolGroups = participation.schoolGroups || [];
+    const permissions = event.permissions || defaultPermission_(), travelLegs = (event.logistics && event.logistics.travelLegs) || [];
+    const notificationIds = (event.communications && event.communications.notificationIds) || [];
+    const requestCount = Number(permissions.requestCount || 0), submittedCount = Number(permissions.submittedCount || 0);
+    const permissionFormCurrent = !!(permissions.formId && permissions.status !== "Outdated");
+    const attendanceTracked = schedule.some(item => item.attendanceSessionEnabled !== false);
+    const scheduleComplete = schedule.length > 0 && schedule.every(item => item.date && item.start && item.end && item.end > item.start);
+    const venueConfirmed = schedule.length > 0 && schedule.every(item => item.venueId || item.venueName || item.onlineUrl);
+    const entry = (code, label, complete, applicable, ready, blocked) => ({ code, label, status: !applicable ? "Not applicable" : complete ? "Complete" : "Blocked", detail: !applicable ? "Not applicable to this event." : complete ? ready : blocked });
+    const entries = [
+      entry("details", "Event details complete", !!(String(event.title || "").trim() && String(event.eventType || "").trim() && event.leadStaffId), true, "Title, type and lead Staff are set.", "Add the event title, type and a stable lead Staff ID."),
+      entry("schedule", "Schedule complete", scheduleComplete, true, schedule.length + " schedule entr" + (schedule.length === 1 ? "y" : "ies") + " with valid dates and times.", "Every schedule entry needs a date, start and finish time, and finish after start."),
+      entry("venue", "Venue confirmed", venueConfirmed, true, "Every schedule entry has a venue or online link.", "Add a venue, room or online link to every schedule entry."),
+      entry("roster", "Roster confirmed", counts.participantCount + counts.schoolGroupCount > 0, true, counts.participantCount + " participant(s), " + counts.schoolGroupCount + " school group(s).", "Add participants or school groups to the roster."),
+      entry("staffSupervision", "Staff supervision", counts.staffCount > 0, true, counts.staffCount + " Staff member(s) assigned.", "Assign at least one supervising Staff member."),
+      entry("schoolContacts", "School-group contact teacher present", schoolGroups.every(group => group.contactTeacherId), !!schoolGroups.length, "Every school group has a contact teacher.", "Add a contact teacher for every school group."),
+      entry("riskApproved", "Risk assessment approved", !!(event.risk && event.risk.status === "Approved"), true, "Risk status: Approved.", "Risk status: " + (event.risk && event.risk.status || "Not started") + " — complete and approve the risk assessment."),
+      entry("permissionForm", "Current permission form generated", permissionFormCurrent, true, "Permission form is current (version " + permissions.version + ").", permissions.status === "Outdated" ? "The permission form is outdated after a material change — regenerate it." : "Generate the permission form."),
+      entry("permissionResponses", "Required permission responses received", permissionFormCurrent && requestCount > 0 && submittedCount >= requestCount, permissionFormCurrent, submittedCount + " of " + requestCount + " responses received.", submittedCount + " of " + requestCount + " responses received — follow up outstanding families."),
+      entry("medicalReviews", "Medical/support updates reviewed", !(Number(permissions.healthReviewPendingCount || 0) > 0), true, "No outstanding medical or support review flags.", Number(permissions.healthReviewPendingCount || 0) + " parent-reported update(s) require authorised staff review in the restricted Forms responses."),
+      entry("travel", "Travel and logistics confirmed", travelLegs.every(leg => leg.origin && leg.destination && leg.mode), !!travelLegs.length, "Every travel leg has an origin, destination and transport mode.", "Complete the origin, destination and transport mode for every travel leg."),
+      entry("schoolNotifications", "School notifications prepared", notificationIds.length > 0 && event.communications && event.communications.status !== "Outdated", !!schoolGroups.length || counts.participantCount > 0, notificationIds.length + " school notification draft(s) prepared. Sending is not yet available — Communications remains preview-only.", event.communications && event.communications.status === "Needs school links" ? "Prepared, but no participant or school group has a stable School ID to notify — add a school to the roster first." : "Prepare school notification drafts."),
+      entry("attendance", "Attendance sessions prepared", !!(event.attendance && event.attendance.status === "Prepared" && (event.attendance.sessions || []).length), attendanceTracked, (event.attendance && (event.attendance.sessions || []).length || 0) + " Attendance session draft(s) prepared. Writing to Attendance is blocked — no approved create-session command exists yet.", "Prepare Attendance sessions.")
+    ];
+    const applicable = entries.filter(item => item.status !== "Not applicable");
+    const completed = applicable.filter(item => item.status === "Complete").length, total = applicable.length;
+    const coreBlockerCodes = ["details", "schedule", "venue", "roster"];
+    const blockers = applicable.filter(item => item.status === "Blocked" && coreBlockerCodes.includes(item.code)).map(item => item.label + " — " + item.detail);
+    const warnings = applicable.filter(item => item.status === "Blocked" && !coreBlockerCodes.includes(item.code)).map(item => item.label + " — " + item.detail);
+    const nextBlocked = entries.find(item => item.status === "Blocked");
+    return { label: completed === total ? "Ready" : blockers.length ? "Needs setup" : "In progress", completed, total, percent: total ? Math.round(completed / total * 100) : 100, blockers, warnings, entries, nextAction: nextBlocked ? nextBlocked.label : "Open event" };
+  }
+  function readinessWarnings_(event) {
+    const checklist = readinessChecklist_(event);
+    return checklist.entries.filter(item => item.status === "Blocked").map(item => ({ code: "WORKFLOW_" + item.code.toUpperCase(), severity: ["riskApproved", "permissionForm", "permissionResponses", "medicalReviews"].includes(item.code) ? "Warning" : "Info", title: item.label, message: item.detail, source: "Event workflow", action: item.detail }));
+  }
+  function nextAction_(event) { return readinessChecklist_(event).nextAction; }
   function validateActivation_(event) { const blockers = [], warnings = []; if (!String(event.title || "").trim()) blockers.push("Event name is required"); if (!String(event.eventType || "").trim()) blockers.push("Event type is required"); if (!event.leadStaffId) blockers.push("An event lead with a stable Staff ID is required"); if (!(event.schedule || []).length) blockers.push("At least one schedule is required"); (event.schedule || []).forEach((item, index) => { if (!item.date) blockers.push("Schedule " + (index + 1) + " needs a valid date"); if (!item.start || !item.end) blockers.push("Schedule " + (index + 1) + " needs start and end times"); if (item.start && item.end && item.end <= item.start) blockers.push("Schedule " + (index + 1) + " must finish after it starts"); if (!item.venueId && !item.venueName && !item.onlineUrl) blockers.push("Schedule " + (index + 1) + " needs a venue or online link"); }); if (!rosterCount_(event.participation)) warnings.push("No participants or school groups have been selected yet"); return { valid: !blockers.length, blockers: Array.from(new Set(blockers)), warnings }; }
   function changedFields_(before, after) { return ["title", "shortName", "eventType", "description", "purpose", "publicDescription", "internalNotes", "department", "leadStaffId", "ownerStaffId", "operationalLeadStaffId", "deadlines", "emergencyContact", "schedule", "venue", "participation", "logistics"].filter(field => JSON.stringify(before[field] || null) !== JSON.stringify(after[field] || null)); }
   function recordVersion_(event, user, reason, changedFields) { PlatformStoreService.putLarge(VERSIONS, { id: PlatformStoreService.createId("EVVER"), entityType: "EventVersion", eventId: event.id, version: event.version, status: event.status, reason: reason || "Updated", changedFields: changedFields || [], actor: user.email, occurredAt: new Date().toISOString(), snapshot: { title: event.title, shortName: event.shortName, eventType: event.eventType, purpose: event.purpose, publicDescription: event.publicDescription, timelineEventId: event.timelineEventId, deadlines: event.deadlines, emergencyContact: event.emergencyContact, schedule: event.schedule, venue: event.venue, participation: event.participation, logistics: event.logistics, risk: event.risk, permissions: event.permissions, communications: event.communications, attendance: event.attendance } }, 5000); }
@@ -529,5 +706,5 @@ const EventWorkflowService = (() => {
   function todayKey_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd"); }
   function success_(command, data) { return { ok: true, command, data, generatedAt: new Date().toISOString() }; }
   function failure_(command, code, message) { return { ok: false, command, errorCode: code, error: String(message || "Event command failed."), generatedAt: new Date().toISOString() }; }
-  return { list, get, getByReference, execute, dashboardProjection, toEventSummary, recordPermissionResponse, commands: () => Object.assign({}, COMMANDS), statuses: () => STATUSES.slice() };
+  return { list, get, getByReference, execute, dashboardProjection, toEventSummary, recordPermissionResponse, getBuilderOptions, commands: () => Object.assign({}, COMMANDS), statuses: () => STATUSES.slice(), riskScales: () => ({ likelihood: LIKELIHOOD_SCALE.slice(), consequence: CONSEQUENCE_SCALE.slice(), rowStatuses: RISK_ROW_STATUSES.slice() }) };
 })();

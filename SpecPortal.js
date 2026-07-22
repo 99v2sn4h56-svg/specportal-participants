@@ -603,6 +603,10 @@ function portalGetManagedEventWorkflow(eventId) {
   return EventWorkflowService.get(String(eventId || ""));
 }
 
+function portalGetEventBuilderOptions(type, query) {
+  return PerformanceTelemetryService.measureJourney("event-loading", () => EventWorkflowService.getBuilderOptions(type, query || {}), { route: "operations", phase: "builder-options", projection: "event-builder-options" });
+}
+
 function portalExecuteEventWorkflowCommand(commandName, input) {
   return EventWorkflowService.execute(String(commandName || ""), input || {});
 }

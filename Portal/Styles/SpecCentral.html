@@ -1804,6 +1804,26 @@
     .eventWorkflowHint, .eventWorkflowStatus, .eventWorkflowModule { padding:14px; border:1px solid #c9d8ef; border-radius:15px; background:#eef5ff; }
     .eventWorkflowHint strong, .eventWorkflowHint span, .eventWorkflowStatus strong, .eventWorkflowStatus span { display:block; }
     .eventWorkflowHint span, .eventWorkflowStatus span { margin-top:4px; color:var(--muted); font-size:9px; }
+    .recordPicker { display:grid; gap:8px; padding:14px; border:1px solid #bfd0eb; border-radius:15px; background:#fff; }
+    .recordPickerLabel { color:var(--navy); font-size:11px; font-weight:800; text-transform:none; letter-spacing:normal; }
+    .recordPickerLabel b { color:var(--muted); font-weight:700; }
+    .pickerChips { display:flex; flex-wrap:wrap; gap:8px; }
+    .pickerEmpty { color:var(--muted); font-size:10px; font-style:italic; }
+    .pickerChip { display:flex; align-items:center; gap:8px; padding:6px 8px 6px 12px; border:1px solid #d8e4f7; border-radius:999px; background:#f3f7ff; }
+    .pickerChipLabel { display:grid; line-height:1.25; }
+    .pickerChipLabel strong { color:var(--text); font-size:11px; font-weight:700; }
+    .pickerChipLabel small { color:var(--muted); font-size:9px; }
+    .pickerChip select { border:1px solid #cddcf5; border-radius:999px; padding:3px 8px; font-size:9px; background:#fff; color:var(--text); }
+    .pickerChipRemove { display:grid; place-items:center; width:20px; height:20px; border:0; border-radius:50%; background:#e3ebfb; color:var(--navy); font-weight:800; cursor:pointer; line-height:1; }
+    .pickerChipRemove:hover { background:#d3e0f7; }
+    .pickerSearchWrap { position:relative; }
+    .pickerSearchWrap input { width:100%; border:1px solid #bfd0eb; border-radius:12px; padding:10px 11px; font:500 11px Poppins,sans-serif; color:var(--text); background:#fff; }
+    .pickerResults { position:absolute; z-index:20; left:0; right:0; top:calc(100% + 4px); max-height:220px; overflow:auto; border:1px solid #c9d8ef; border-radius:12px; background:#fff; box-shadow:0 12px 30px rgba(20,40,90,.14); }
+    .pickerResultRow { display:grid; gap:2px; width:100%; padding:9px 12px; border:0; border-bottom:1px solid #eef3fc; background:#fff; text-align:left; cursor:pointer; }
+    .pickerResultRow:last-child { border-bottom:0; }
+    .pickerResultRow:hover { background:#f3f7ff; }
+    .pickerResultRow strong { color:var(--text); font-size:11px; font-weight:700; }
+    .pickerResultRow small { color:var(--muted); font-size:9px; }
     .eventWorkflowModule h4 { margin:4px 0 12px; color:var(--navy); font-size:20px; }
     .eventWorkflowModule p { color:var(--muted); font-size:10px; }
     .eventWorkflowActions { flex-wrap:wrap; }

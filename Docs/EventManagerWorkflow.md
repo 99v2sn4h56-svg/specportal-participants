@@ -107,9 +107,9 @@ Risk approval is prevented when the approver is the same authenticated user who 
 - rehearsals/related sessions, multiple venues, travel legs, meals, costs, dress and equipment
 - school groups with stable School and contact-Teacher IDs
 
-The current editor accepts explicit canonical IDs. Search-and-select pickers backed by the Participant, Staff, School and venue directories are not implemented, so Phase 1 is not considered complete UX.
+The current editor accepts explicit canonical IDs. `EventWorkflowService.getBuilderOptions(type, query)` (exposed as `portalGetEventBuilderOptions`) now provides the permission-scoped, searchable data those pickers need — participants (via `ParticipantProjectionService.getPage`), Staff (via `StaffService.getAll`, deliberately not the headshot-resolving `StaffDirectoryService`), school groups and schools (via `ParticipantService`), plus static event-type/role/schedule-type lists. School and contact-teacher email are only included when the caller holds `Events.ManageCommunications`. The wizard UI itself has not yet been rebuilt to use this endpoint (still typed-ID fields), so Phase 1 is still not complete UX — the backend it needs now exists.
 
-### Phase 2 — implemented foundation
+### Phase 2 — implemented foundation; risk rows now structured
 
 - risk draft, review and separate approval
 - deterministic risk-draft generation from schedule, venue, travel, meals, activity type and multi-day context
@@ -118,6 +118,8 @@ The current editor accepts explicit canonical IDs. Search-and-select pickers bac
 - response-to-request linking using the unique request reference plus stable Participant ID
 - health/support review task creation
 - parent-facing structured event summary in the existing public Forms renderer
+
+Risk assessments now store a `risks` array of full structured rows — hazard, persons at risk, initial/residual likelihood and consequence, a deterministically derived rating (`EventWorkflowService.riskScales()` exposes the two scales), controls, responsible officer, due date, review notes and a per-row status. The legacy flat `hazards`/`controls` label arrays are retained as a read-only derived view for the existing wizard UI (`Portal/App/SpecCentralApp.html`'s risk step still submits/renders that flat shape) and for any other existing caller; `saveRisk_` accepts either shape and always derives the legacy view from whatever `risks` ends up being, so nothing currently reading `.hazards`/`.controls` needed to change. The generator now assigns a sensible default likelihood/consequence per hazard category rather than leaving rating blank.
 
 The existing `AiExtensionService.CreateRiskAssessment` hook remains unconnected. The implemented generator is deterministic, clearly produces a draft, and still requires human editing, submission and separate approval.
 
@@ -131,10 +133,20 @@ External send and Attendance workbook writes remain intentionally disabled until
 ### Phase 4 — preparation and views only
 
 - lightweight dashboard cards
-- readiness and next-action states
+- explicit readiness checklist (see below) and next-action states
 - workflow/risk/permission/communications/Attendance views in the event workspace
 
 Reminder automation and production document generation remain future work.
+
+#### Readiness checklist
+
+`readiness_()` now returns an explicit 13-point checklist (`readiness.checklist`) instead of an unexplained percentage: event details, schedule, venue, roster, Staff supervision, school-group contact completeness, risk approval, current permission form, permission responses received, medical/support review flags, travel/logistics confirmation, school notifications prepared, and Attendance sessions prepared. Items that don't apply to a given event (no travel legs, no school groups, Attendance not enabled on any schedule entry) are marked `Not applicable` and excluded from the completed/total count. `label`/`completed`/`total`/`percent`/`blockers`/`warnings` are all derived from this checklist.
+
+Every check is computed only from fields already stored on the event record itself (including two small counters — `permissions.requestCount`/`submittedCount`, already set at generation/response time, and the new `permissions.healthReviewPendingCount`) — nothing in the checklist triggers an extra `PERMISSION_REQUESTS` or `SCHOOL_NOTIFICATIONS` scan, so `dashboardProjection()` stays a single bulk read regardless of list size.
+
+`readiness.states` (the original 5-key summary: schedule/roster/risk/permission/attendance) is retained unchanged, purely because `EventManagerService.readinessWarnings_` and the current `renderEventWorkflowSummary` step in `SpecCentralApp.html` still read that exact shape and were not touched this pass. It is legacy/internal now — the checklist is the source of truth for readiness display going forward.
+
+The medical/support-review check can currently only report "N pending" and never "resolved," because no approved command exists yet to mark a parent-reported medical update as reviewed (see Phase F limitations above) — this is reported honestly as an open item rather than a fabricated all-clear.
 
 ### Testing and reporting foundation
 
