@@ -11,28 +11,29 @@ function onOpen() {
   .addItem("Open Spec Portal", "openSpecPortalHome")
   .addItem("Enable Auto-open Sidebar", "createSpecPortalOpenTrigger")
   .addToUi();
-  // Spec Tools Menu
+
+  // Spec Tools Menu — grouped into submenus by task area. Every action below
+  // runs through runSpecTool_, so it always gives a starting toast and a
+  // friendly error if something goes wrong, instead of failing silently or
+  // showing Apps Script's raw error dialog.
   ui.createMenu("Spec Tools")
-    .addItem("Refresh School Summary 🎓", "buildSchoolSummary")
-    .addItem("Refresh Email Validation", "highlightNonDETEmailsOnGroups")
-    .addItem("Generate School Map Export", "generateSchoolMapExport")
-    .addItem("Export School Summary to Excel", "exportSchoolSummaryToExcel")
-    .addSeparator()
-
-    .addItem("Sync Individual Acceptance Forms", "ssSyncIndividualAcceptances")
-    .addItem("Sync Group Acceptance Forms", "ssSyncGroupAcceptances")
-    .addSeparator()
-
-    .addItem("Upload Acceptances/New Participant", "openAcceptanceImportCentre")
-    .addSeparator()
-
-    .addItem("Create / Update Dance Workbooks", "createOrUpdateDanceWorkbooks")
-    .addItem("Sync Existing Dance Workbooks Only", "syncExistingDanceWorkbooksOnly")
-    .addItem("Generate Costume Sheets 🕺🏽👯", "generateCostumeSheets")
-    .addItem("Update Existing Costume Sheets", "updateExistingCostumeSheets")
-    .addSeparator()
-    .addItem("Stable ID Migration — Dry Run", "showStableIdMigrationDryRun")
-    .addItem("Stable ID Migration — Apply", "applyStableIdMigrationFromMenu")
+    .addSubMenu(ui.createMenu("📊 School Reports")
+      .addItem("Refresh School Summary", "menuRefreshSchoolSummary")
+      .addItem("Refresh Email Validation", "menuRefreshEmailValidation")
+      .addItem("Generate School Map Export", "menuGenerateSchoolMapExport")
+      .addItem("Export School Summary to Excel", "menuExportSchoolSummaryToExcel"))
+    .addSubMenu(ui.createMenu("✅ Acceptances")
+      .addItem("Sync Individual Acceptance Forms", "menuSyncIndividualAcceptances")
+      .addItem("Sync Group Acceptance Forms", "menuSyncGroupAcceptances")
+      .addItem("Upload Acceptances / New Participant", "menuUploadAcceptances"))
+    .addSubMenu(ui.createMenu("💃 Dance Workbooks & Costumes")
+      .addItem("Create / Update Dance Workbooks", "menuCreateOrUpdateDanceWorkbooks")
+      .addItem("Sync Existing Dance Workbooks Only", "menuSyncExistingDanceWorkbooks")
+      .addItem("Generate Costume Sheets", "menuGenerateCostumeSheets")
+      .addItem("Update Existing Costume Sheets", "menuUpdateExistingCostumeSheets"))
+    .addSubMenu(ui.createMenu("🔑 Stable ID Migration")
+      .addItem("Dry Run", "menuStableIdMigrationDryRun")
+      .addItem("Apply", "menuStableIdMigrationApply"))
     .addToUi();
 
   // Auto-open Spec Central sidebar when spreadsheet opens.
@@ -43,7 +44,50 @@ function onOpen() {
   }
 }
 
-function showStableIdMigrationDryRun() {
+/**
+ * Shared wrapper for every Spec Tools menu action. Gives consistent
+ * start/finish feedback and turns an uncaught error into a clear alert
+ * instead of Apps Script's default error dialog or (for tools that gave no
+ * feedback at all, like the old School Summary refresh) silence.
+ */
+function runSpecTool_(label, fn) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.toast("Working…", label, 5);
+  try {
+    fn();
+    ss.toast("Done.", label, 5);
+  } catch (err) {
+    Logger.log(`Spec Tools · ${label} failed: ${(err && err.stack) || err}`);
+    SpreadsheetApp.getUi().alert(
+      `${label} failed`,
+      `Something went wrong and the action did not complete.\n\n${(err && err.message) || err}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+  }
+}
+
+// --- School Reports ---
+function menuRefreshSchoolSummary() { runSpecTool_("Refresh School Summary", buildSchoolSummary); }
+function menuRefreshEmailValidation() { runSpecTool_("Refresh Email Validation", highlightNonDETEmailsOnGroups); }
+function menuGenerateSchoolMapExport() { runSpecTool_("Generate School Map Export", generateSchoolMapExport); }
+function menuExportSchoolSummaryToExcel() { runSpecTool_("Export School Summary to Excel", exportSchoolSummaryToExcel); }
+
+// --- Acceptances ---
+function menuSyncIndividualAcceptances() { runSpecTool_("Sync Individual Acceptance Forms", ssSyncIndividualAcceptances); }
+function menuSyncGroupAcceptances() { runSpecTool_("Sync Group Acceptance Forms", ssSyncGroupAcceptances); }
+function menuUploadAcceptances() { runSpecTool_("Upload Acceptances / New Participant", openAcceptanceImportCentre); }
+
+// --- Dance Workbooks & Costumes ---
+function menuCreateOrUpdateDanceWorkbooks() { runSpecTool_("Create / Update Dance Workbooks", createOrUpdateDanceWorkbooks); }
+function menuSyncExistingDanceWorkbooks() { runSpecTool_("Sync Existing Dance Workbooks Only", syncExistingDanceWorkbooksOnly); }
+function menuGenerateCostumeSheets() { runSpecTool_("Generate Costume Sheets", generateCostumeSheets); }
+function menuUpdateExistingCostumeSheets() { runSpecTool_("Update Existing Costume Sheets", updateExistingCostumeSheets); }
+
+// --- Stable ID Migration ---
+function menuStableIdMigrationDryRun() { runSpecTool_("Stable ID Migration — Dry Run", showStableIdMigrationDryRun_); }
+function menuStableIdMigrationApply() { runSpecTool_("Stable ID Migration — Apply", applyStableIdMigrationFromMenu_); }
+
+function showStableIdMigrationDryRun_() {
   const report = StableIdMigrationService.dryRun();
   SpreadsheetApp.getUi().alert(
     "Stable ID Migration — Dry Run",
@@ -52,7 +96,7 @@ function showStableIdMigrationDryRun() {
   );
 }
 
-function applyStableIdMigrationFromMenu() {
+function applyStableIdMigrationFromMenu_() {
   const ui = SpreadsheetApp.getUi();
   const preview = StableIdMigrationService.dryRun();
   const prompt = ui.prompt(
