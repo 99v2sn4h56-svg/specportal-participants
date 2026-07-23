@@ -446,7 +446,9 @@ function portalRefreshPhotoCache() {
 /** Admin-only headshot operations. These never expose Drive file IDs. */
 function adminRunHeadshotDiagnostics() {
   requirePortalCapability_("Administration.View");
-  return { generatedAt: new Date().toISOString(), assets: HeadshotAssetService.diagnostics(), delivery: SecureImageService.getHealth() };
+  const result = { generatedAt: new Date().toISOString(), assets: HeadshotAssetService.diagnostics(), delivery: SecureImageService.getHealth() };
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
 }
 
 function adminRefreshHeadshotAssets() {
