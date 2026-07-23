@@ -84,7 +84,18 @@ const HeadshotAssetService = (() => {
     const key = indexKey_(type);
     // Never let a permission-filtered request create a partial shared index.
     // The canonical index is always built from the complete server-side source.
-    return PerformanceCacheService.getOrLoad(key, CACHE_SECONDS, () => buildIndex_(type));
+    try {
+      return PerformanceCacheService.getOrLoad(key, CACHE_SECONDS, () => buildIndex_(type));
+    } catch (error) {
+      if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
+      // Unlike the participant/group sheet reads, a full Drive scan is too
+      // expensive to redo per contended caller -- that would turn one slow
+      // rebuild into several concurrent ones. Degrade to "nothing matched
+      // yet" (callers already treat unmatched as "show initials") instead;
+      // the index builds successfully on a subsequent, less-contended
+      // request within the normal cache window.
+      return { contract: CONTRACT, entityType: type, folderConfigured: false, busy: true, generatedAt: new Date().toISOString(), fileCount: 0, folderCount: 0, scanTruncated: false, inaccessibleFolders: 0, duplicateKeys: 0, counts: { explicit: 0, filename: 0, ambiguous: 0, unmatched: 0, invalidReference: 0 }, assets: {} };
+    }
   }
 
   function indexKey_(type) { return `headshots:index:${CONTRACT}:${type}`; }
@@ -287,7 +298,7 @@ const HeadshotAssetService = (() => {
   }
 
   function diagnostics_(index) {
-    return { entityType: index.entityType, contract: index.contract, folderConfigured: index.folderConfigured, folderCount: index.folderCount || 0, generatedAt: index.generatedAt, fileCount: index.fileCount, duplicateKeys: index.duplicateKeys, scanTruncated: !!index.scanTruncated, inaccessibleFolders: Number(index.inaccessibleFolders || 0), counts: index.counts };
+    return { entityType: index.entityType, contract: index.contract, folderConfigured: index.folderConfigured, busy: !!index.busy, folderCount: index.folderCount || 0, generatedAt: index.generatedAt, fileCount: index.fileCount, duplicateKeys: index.duplicateKeys, scanTruncated: !!index.scanTruncated, inaccessibleFolders: Number(index.inaccessibleFolders || 0), counts: index.counts };
   }
 
   function publicMetadata_(asset) {
