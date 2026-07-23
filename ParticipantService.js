@@ -90,7 +90,7 @@ ParticipantService.getSchoolsMasterSheet = function () {
  */
 ParticipantService.getAll = function () {
   const requestStarted = Date.now();
-  const result = PerformanceCacheService.getOrLoadDetailed("participants:all", 30 * 60, () => {
+  const loadFromSheet_ = () => {
 
   const sheet = this.getIndividualsSheet();
 
@@ -239,7 +239,21 @@ ParticipantService.getAll = function () {
     return EntityModelService.participant(participant);
 
   }).filter(participant => String(participant.firstName || participant.lastName || participant.name || "").trim());
-  });
+  };
+  // The lease-based cache throws CACHE_REBUILD_BUSY under contention instead
+  // of blocking, so every synchronous caller (participant detail, headshots,
+  // filters, groups) that doesn't itself have stale-while-revalidate handling
+  // would otherwise surface a hard error to the user. This is the single
+  // shared read every one of those paths goes through, so falling back to an
+  // uncached direct sheet read here (rather than in each caller separately)
+  // fixes all of them at once.
+  let result;
+  try {
+    result = PerformanceCacheService.getOrLoadDetailed("participants:all", 30 * 60, loadFromSheet_);
+  } catch (error) {
+    if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
+    result = { value: loadFromSheet_(), meta: { cache: "busy-direct-fallback" } };
+  }
   PerformanceTelemetryService.record("participants.dataset.request", Date.now() - requestStarted, { cache: result.meta.cache, records: (result.value || []).length, sourceRows: (result.value || []).length, projection: "canonical-participants" });
   return result.value;
 
@@ -305,7 +319,7 @@ ParticipantService.search = function (query) {
  * Returns every group entry as an array of objects.
  */
 ParticipantService.getGroups = function () {
-  return PerformanceCacheService.getOrLoad("participants:groups", 30 * 60, () => {
+  const loadFromSheet_ = () => {
   const sheet = this.getGroupsSheet();
   if (!sheet) return [];
 
@@ -375,7 +389,13 @@ ParticipantService.getGroups = function () {
       secondTeacherIsSpecAlumni: row[secondTeacherAlumniIndex] || "",
       secondTeacherSpecRoles: row[secondTeacherAlumniRoleIndex] || ""
     }));
-  });
+  };
+  try {
+    return PerformanceCacheService.getOrLoad("participants:groups", 30 * 60, loadFromSheet_);
+  } catch (error) {
+    if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
+    return loadFromSheet_();
+  }
 };
 
 /**
