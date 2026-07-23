@@ -229,6 +229,24 @@ function portalGetPerformanceDiagnostics() {
   };
 }
 
+// TEMPORARY -- checking real recorded latency for the Participants page
+// specifically. Remove once resolved.
+function adminLogParticipantPerformanceSummary() {
+  requirePortalCapability_("Administration.View");
+  var diagnostics = PerformanceTelemetryService.getDiagnostics();
+  var result = {
+    sampleCount: diagnostics.sampleCount,
+    degraded: diagnostics.degraded,
+    degradedReasons: diagnostics.degradedReasons,
+    counters: diagnostics.counters,
+    participantSummary: (diagnostics.summary || []).filter(function (row) {
+      return /participant/i.test(row.route || "") || /participant/i.test(row.projection || "") || /participant/i.test(row.name || "");
+    })
+  };
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
 function portalRecordClientPerformanceBatch(metrics, batchId) {
   const user = UserContextService.getCurrent();
   if (!user.email) throw new Error("Authentication is required.");

@@ -4,6 +4,7 @@ const ParticipantProjectionService = (() => {
   const PAGE_FRESH_SECONDS = 5 * 60, PAGE_RETAIN_SECONDS = 30 * 60;
   const FILTER_FRESH_SECONDS = 15 * 60, FILTER_RETAIN_SECONDS = 60 * 60;
   const GROUP_FRESH_SECONDS = 15 * 60, GROUP_RETAIN_SECONDS = 60 * 60;
+  const DETAIL_FRESH_SECONDS = 5 * 60, DETAIL_RETAIN_SECONDS = 30 * 60;
   const DASHBOARD_FRESH_SECONDS = 5 * 60, DASHBOARD_RETAIN_SECONDS = 30 * 60;
   const DEFAULT_PAGE_SIZE = 50;
   const DASHBOARD_SNAPSHOT_PROPERTY = "SC_DASHBOARD_PARTICIPANT_SUMMARY_V2";
@@ -110,13 +111,33 @@ const ParticipantProjectionService = (() => {
   }
 
   function getDetail(studentKey, user) {
+    // getDetail previously had no cache of its own -- every profile open
+    // called ParticipantService.getAll() (loads/processes all ~323 records)
+    // just to find one, so it was only ever as fast as that much bigger,
+    // more contended cache happening to be warm. This is a small, per-student
+    // cache that survives independently of that: the first open of a given
+    // student still pays the full lookup, but repeat opens (the same staff
+    // member re-checking a student, or a second person opening the same
+    // profile) hit a cheap, low-contention cache instead.
     const started = Date.now(), actor = user || UserContextService.getCurrent(), key = String(studentKey || "").trim();
     if (!key) throw new Error("A stable Student Key is required.");
+    const cacheKey = ProjectionContractService.cacheKey("participantDetail", { studentKey: key }, actor);
+    let cached;
+    try {
+      cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(cacheKey, DETAIL_FRESH_SECONDS, DETAIL_RETAIN_SECONDS, () => buildDetail_(key, actor), cacheOptions_("participantDetail", {}));
+    } catch (error) {
+      if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
+      cached = { value: buildDetail_(key, actor), meta: { cache: "busy-direct-fallback", cacheStatus: "busy-direct-fallback", durationMs: Date.now() - started, isStale: false, generatedAt: new Date().toISOString(), expiresAt: "" } };
+    }
+    PerformanceTelemetryService.record("participants.detail.request", Date.now() - started, { cache: cached.meta.cache, records: 1, payloadBytes: estimateBytes_(cached.value), projection: "participant-detail-v2", isStale: !!cached.meta.isStale });
+    return withRequestMeta_(cached.value, cached.meta);
+  }
+
+  function buildDetail_(key, actor) {
     const participant = filterParticipantsForUser_(ParticipantService.getAll(), actor).find(item => String(item.studentKey || item.id || "") === key);
     if (!participant) throw new Error("Participant not found or outside your permitted scope.");
     const response = { participant: sanitiseDetail_(participant), generatedAt: new Date().toISOString(), projection: ProjectionContractService.contract("participantDetail").version };
     ProjectionContractService.validate("participantDetail", response);
-    PerformanceTelemetryService.record("participants.detail.request", Date.now() - started, { records: 1, payloadBytes: estimateBytes_(response), projection: "participant-detail-v2" });
     return response;
   }
 

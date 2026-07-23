@@ -16,7 +16,7 @@
         if (!stableId) { App.notify("This participant does not have a stable Student Key."); return; }
         if (panel) { panel.hidden = false; panel.innerHTML = App.loadingState("Loading participant details"); }
         var started = performance.now();
-        App.services.request("participantDetail:" + stableId, "portalGetParticipantDetail", { args: [stableId], cacheMs: 2 * 60 * 1000, timeoutMs: 30000 })
+        App.services.request("participantDetail:" + stableId, "portalGetParticipantDetail", { args: [stableId], cacheMs: 2 * 60 * 1000, timeoutMs: 45000 })
           .then(function (response) {
             if (!App.state.selectedParticipant || String(App.state.selectedParticipant.studentKey || App.state.selectedParticipant.id || "") !== stableId) return;
             var detail = response && response.participant;
