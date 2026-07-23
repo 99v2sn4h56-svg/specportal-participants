@@ -228,7 +228,12 @@ const ParticipantProjectionService = (() => {
   }
   function toGroupItem_(item) { return pick_(item, ["id", "groupId", "school", "segment", "item", "category", "groupName", "acceptedCount", "allocatedCount", "count", "acceptanceStatus", "teacherName", "secondTeacherName", "classroom"]); }
   function toSchoolItem_(item) { return pick_(item, ["id", "schoolId", "code", "schoolName", "name", "directorate", "region"]); }
-  function sanitiseDetail_(item) { const value = JSON.parse(JSON.stringify(item || {})); const stableId = String(value.studentKey || value.id || ""); const headshot = HeadshotAssetService.getMetadataMany("participant", [item])[stableId] || {}; value.hasPhoto = !!headshot.hasPhoto; value.assetKey = headshot.assetKey || ""; value.assetVersion = headshot.assetVersion || ""; delete value.photoId; delete value.photoUrl; delete value.driveUrl; return value; }
+  // Uses the no-scan fast path deliberately: participant detail (name, parent
+  // contacts, etc.) must never wait on a live Drive folder scan. The profile
+  // renderer requests the secure avatar unconditionally, so a cold photo
+  // index is filled in afterwards by that lazy per-avatar resolution instead
+  // of blocking this response.
+  function sanitiseDetail_(item) { const value = JSON.parse(JSON.stringify(item || {})); const stableId = String(value.studentKey || value.id || ""); const headshot = HeadshotAssetService.getMetadataManyFast("participant", [item])[stableId] || {}; value.hasPhoto = !!headshot.hasPhoto; value.assetKey = headshot.assetKey || ""; value.assetVersion = headshot.assetVersion || ""; delete value.photoId; delete value.photoUrl; delete value.driveUrl; return value; }
   function normalisePageQuery_(query) {
     const value = query && typeof query === "object" ? query : {}, allowed = ["school", "year", "discipline", "category", "item", "region", "gender", "directorate", "applicationStatus", "participationType", "segment", "schoolGroup", "hasAttendance", "missingAttendance", "productionText"], filters = {};
     Object.keys(value.filters || {}).filter(field => allowed.includes(field)).forEach(field => { const cleaned = String(value.filters[field] || "").trim().slice(0, 120); if (cleaned) filters[field] = cleaned; });
