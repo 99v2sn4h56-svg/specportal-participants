@@ -53,7 +53,12 @@
             if (groupResults) groupResults.innerHTML = App.loadingState("Loading school groups");
             var groupStatus = document.getElementById("participantStatus");
             if (groupStatus) groupStatus.textContent = "Loading school groups…";
-            if (!App.state.participantGroupListLoading) App.loadParticipantGroups(false).then(App.renderParticipantExplorer).catch(function (error) { if (groupResults) groupResults.innerHTML = App.emptyState("School groups could not be loaded", App.getErrorMessage(error)); });
+            if (!App.state.participantGroupListLoading) App.loadParticipantGroups(false).then(App.renderParticipantExplorer).catch(function (error) {
+              // This can resolve after the user has already switched back to
+              // Individuals; only paint the error if Groups is still the active
+              // tab, otherwise it silently clobbers whatever is now showing.
+              if (groupResults && App.state.participantExplorerMode === "groups") groupResults.innerHTML = App.emptyState("School groups could not be loaded", App.getErrorMessage(error));
+            });
             return;
           }
           var groups = App.getFilteredParticipantGroups();

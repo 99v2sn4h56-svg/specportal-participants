@@ -57,7 +57,12 @@ const ParticipantProjectionService = (() => {
   function getGroups(user, options) {
     const actor = user || UserContextService.getCurrent(), key = ProjectionContractService.cacheKey("participantGroups", {}, actor), started = Date.now();
     const cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(key, GROUP_FRESH_SECONDS, GROUP_RETAIN_SECONDS, () => {
-      const groups = filterGroupsForUser_(ParticipantService.getGroups(), actor).map(toGroupItem_);
+      // A source row with no school/item/groupName/category/teacherEmail has no
+      // basis for a stable ID (EntityModelService.group falls back to hashing
+      // that identity, which is empty too) and isn't a usable group record.
+      // Drop it here rather than letting one incomplete row fail validation
+      // for every user's Groups tab.
+      const groups = filterGroupsForUser_(ParticipantService.getGroups(), actor).map(toGroupItem_).filter(item => String(item && (item.id || item.groupId) || "").trim());
       const response = { groups, generatedAt: new Date().toISOString(), projection: ProjectionContractService.contract("participantGroups").version };
       ProjectionContractService.validate("participantGroups", response);
       return response;
