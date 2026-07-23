@@ -484,6 +484,21 @@ function portalGetParticipantGroupsProjection(options) {
   return ParticipantProjectionService.getGroups(requirePortalCapability_("Participants.View"), options || {});
 }
 
+// Same capability as the detail view, which already exposes this same
+// contact data one record at a time -- these just make it reachable for a
+// deliberate copy-to-clipboard action instead of a new/looser permission.
+function portalGetParticipantContactEmailsFor(studentKey) {
+  return ParticipantProjectionService.getContactEmailsFor(studentKey, requirePortalCapability_("Participants.View"));
+}
+
+function portalGetParticipantContactEmails(query) {
+  return ParticipantProjectionService.getContactEmails(query, requirePortalCapability_("Participants.View"));
+}
+
+function portalGetGroupContactEmails() {
+  return ParticipantProjectionService.getGroupContactEmails(requirePortalCapability_("Participants.View"));
+}
+
 function portalGetActiveAttendanceProjection(options) {
   requirePortalCapability_("Attendance.View");
   return AttendanceProjectionService.getActive(options || {});

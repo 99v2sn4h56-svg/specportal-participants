@@ -262,7 +262,7 @@
     },
 
     getParticipantColumns: function (includeHidden) { var columns = [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Yr"], ["region", "Region"], ["status", "Status"]]; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
-    participantCopyIcon_: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>',
+    participantCopyIcon_: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M2 6l10 7 10-7"></path></svg>',
     participantOpenIcon_: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>',
     renderParticipantRowActions: function (copyOnclick, openOnclick) {
       return '<div class="participantRowActions">' +
@@ -302,11 +302,30 @@
     openExplorerGroup: function (index) { var group = (App.state.participantExplorerCurrentGroups || [])[index]; if (!group) return; App.openGroup(group); var panel = document.getElementById("participantProfilePanel"); if (panel) panel.hidden = false; },
     sortParticipantExplorer: function (key) { var sort = App.state.participantExplorerSort || {}; App.state.participantExplorerSort = { key: key, direction: sort.key === key && sort.direction === "asc" ? "desc" : "asc" }; App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); },
     changeParticipantPage: function (delta) { App.state.participantExplorerPage = Math.max(1, (App.state.participantExplorerPage || 1) + delta); App.renderParticipantExplorer(); },
-    getParticipantFamilyEmails: function (participant) { return App.normaliseParticipantEmailList([App.getParticipantStudentEmail(participant), App.getParticipantParentEmail(participant), App.getParticipantAdditionalParentEmail(participant)]); },
     normaliseParticipantEmailList: function (values) { var emails = [], seen = {}; (values || []).forEach(function (value) { String(value || "").split(/[;,\n]+/).forEach(function (email) { var clean = email.trim(), key = clean.toLowerCase(); if (!clean || clean.indexOf("@") < 1 || seen[key]) return; seen[key] = true; emails.push(clean); }); }); return emails; },
     copyParticipantEmailList: function (emails, label) { if (!emails.length) { App.notify("No " + label + " email addresses are available."); return; } var text = emails.join("; "), copied = function () { App.notify(emails.length + " " + label + " email address" + (emails.length === 1 ? "" : "es") + " copied."); }; var fallback = function () { var input = document.createElement("textarea"); input.value = text; input.setAttribute("readonly", ""); input.style.position = "fixed"; input.style.opacity = "0"; document.body.appendChild(input); input.select(); document.execCommand("copy"); document.body.removeChild(input); copied(); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(copied).catch(fallback); else fallback(); },
-    copyExplorerParticipantFamilyEmails: function (index) { var participant = (App.state.participantExplorerCurrentRows || [])[index]; if (participant) App.copyParticipantEmailList(App.getParticipantFamilyEmails(participant), "family"); },
-    copyExplorerGroupTeacherEmails: function (index) { var group = (App.state.participantExplorerCurrentGroups || [])[index]; if (group) App.copyParticipantEmailList(App.normaliseParticipantEmailList([group.teacherEmail, group.secondTeacherEmail]), "teacher"); },
+    // Family/teacher emails are deliberately absent from the list/group row
+    // objects already in memory (see ProjectionContractService's LIST_FIELDS /
+    // GROUP_FIELDS) -- they have to be fetched from the dedicated contact-email
+    // endpoints on demand rather than read off the row.
+    copyExplorerParticipantFamilyEmails: function (index) {
+      var participant = (App.state.participantExplorerCurrentRows || [])[index]; if (!participant) return;
+      var studentKey = String(participant.studentKey || participant.id || "").trim(); if (!studentKey) return;
+      App.services.request("participantContactEmails:" + studentKey, "portalGetParticipantContactEmailsFor", { args: [studentKey], cacheMs: 2 * 60 * 1000, timeoutMs: 30000 })
+        .then(function (data) { App.copyParticipantEmailList((data && data.emails) || [], "family"); })
+        .catch(function (error) { App.notify("Could not gather family emails: " + App.getErrorMessage(error)); });
+    },
+    ensureGroupContactEmails: function () {
+      if (App.state.groupContactEmailsById) return Promise.resolve(App.state.groupContactEmailsById);
+      return App.services.request("groupContactEmails:v1", "portalGetGroupContactEmails", { cacheMs: 10 * 60 * 1000, timeoutMs: 30000 })
+        .then(function (data) { App.state.groupContactEmailsById = (data && data.emailsById) || {}; return App.state.groupContactEmailsById; });
+    },
+    copyExplorerGroupTeacherEmails: function (index) {
+      var group = (App.state.participantExplorerCurrentGroups || [])[index]; if (!group) return;
+      var id = String(group.id || group.groupId || "").trim();
+      App.ensureGroupContactEmails().then(function (byId) { App.copyParticipantEmailList(byId[id] || [], "teacher"); })
+        .catch(function (error) { App.notify("Could not gather teacher emails: " + App.getErrorMessage(error)); });
+    },
     // Individuals are server-paginated, so participantExplorerPageData only ever
     // holds the current ~50-100 row page. Actions that must cover every filtered
     // participant (not just the visible page) fetch every page of the same
@@ -332,15 +351,18 @@
     },
     copyParticipantExplorerAllEmails: function () {
       if (App.state.participantExplorerMode === "groups") {
-        var teacherEmails = App.normaliseParticipantEmailList(App.getFilteredParticipantGroups().reduce(function (values, group) { return values.concat([group.teacherEmail, group.secondTeacherEmail]); }, []));
-        App.copyParticipantEmailList(teacherEmails, "teacher");
+        App.notify("Gathering teacher emails across all matching groups…");
+        App.ensureGroupContactEmails().then(function (byId) {
+          var teacherEmails = App.normaliseParticipantEmailList(App.getFilteredParticipantGroups().reduce(function (values, group) { return values.concat(byId[String(group.id || group.groupId || "").trim()] || []); }, []));
+          App.copyParticipantEmailList(teacherEmails, "teacher");
+        }).catch(function (error) { App.notify("Could not gather teacher emails: " + App.getErrorMessage(error)); });
         return;
       }
-      App.notify("Gathering family emails across all matching pages…");
-      App.fetchAllFilteredParticipants().then(function (participants) {
-        var familyEmails = App.normaliseParticipantEmailList(participants.reduce(function (values, participant) { return values.concat(App.getParticipantFamilyEmails(participant)); }, []));
-        App.copyParticipantEmailList(familyEmails, "family");
-      }).catch(function (error) { App.notify("Could not gather family emails: " + App.getErrorMessage(error)); });
+      App.notify("Gathering family emails across all matching participants…");
+      var query = App.participantExplorerPageQuery().params;
+      App.services.request("participantContactEmails:bulk:" + JSON.stringify(query.filters) + ":" + query.search, "portalGetParticipantContactEmails", { args: [query], cacheMs: 2 * 60 * 1000, timeoutMs: 45000 })
+        .then(function (data) { App.copyParticipantEmailList((data && data.emails) || [], "family"); })
+        .catch(function (error) { App.notify("Could not gather family emails: " + App.getErrorMessage(error)); });
     },
     exportParticipantExplorer: function () {
       var groupMode = App.state.participantExplorerMode === "groups";

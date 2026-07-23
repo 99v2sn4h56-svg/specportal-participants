@@ -71,6 +71,44 @@ const ParticipantProjectionService = (() => {
     return withRequestMeta_(cached.value, cached.meta);
   }
 
+  // Contact emails are intentionally not part of LIST_FIELDS/GROUP_FIELDS (see
+  // ProjectionContractService's FORBIDDEN_LIST_FIELD) -- the bulk list/group
+  // projections must never carry family or teacher email addresses. These
+  // three functions are the deliberate, purpose-built exception: they return
+  // only normalised email strings for an explicit copy-to-clipboard action,
+  // never a full record, and reuse the same capability gate as the detail
+  // view that already exposes this same contact data one record at a time.
+  function getContactEmailsFor(studentKey, user) {
+    const actor = user || UserContextService.getCurrent(), key = String(studentKey || "").trim();
+    const emails = [], seen = {};
+    if (key) {
+      const record = filterParticipantsForUser_(ParticipantService.getAll(), actor).find(item => String(item.studentKey || item.id || "") === key);
+      if (record) collectEmails_([record.studentEmail, record.parentEmail, record.additionalParentEmail], seen, emails);
+    }
+    return { emails };
+  }
+
+  function getContactEmails(query, user) {
+    const actor = user || UserContextService.getCurrent(), request = normalisePageQuery_(query);
+    const filtered = applyQuery_(filterParticipantsForUser_(ParticipantService.getAll(), actor), request);
+    const emails = [], seen = {};
+    filtered.forEach(item => collectEmails_([item.studentEmail, item.parentEmail, item.additionalParentEmail], seen, emails));
+    return { emails, participantCount: filtered.length };
+  }
+
+  function getGroupContactEmails(user) {
+    const actor = user || UserContextService.getCurrent();
+    const emailsById = {};
+    filterGroupsForUser_(ParticipantService.getGroups(), actor).forEach(group => {
+      const id = String(group.id || group.groupId || "").trim();
+      if (!id) return;
+      const emails = [], seen = {};
+      collectEmails_([group.teacherEmail, group.secondTeacherEmail], seen, emails);
+      emailsById[id] = emails;
+    });
+    return { emailsById };
+  }
+
   function getDetail(studentKey, user) {
     const started = Date.now(), actor = user || UserContextService.getCurrent(), key = String(studentKey || "").trim();
     if (!key) throw new Error("A stable Student Key is required.");
@@ -260,6 +298,16 @@ const ParticipantProjectionService = (() => {
   function uniqueListField_(rows, field) { return Array.from(new Set((rows || []).flatMap(item => splitListValue_(item && item[field])))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); }
   function splitListValue_(value) { return String(value || "").split(/[;,\n]+/).map(item => item.trim()).filter(Boolean); }
   function notesContain_(notes, pattern) { return pattern.test(String(notes || "")); }
+  function collectEmails_(values, seen, emails) {
+    (values || []).forEach(value => {
+      String(value || "").split(/[;,\n]+/).forEach(email => {
+        const clean = email.trim(), key = clean.toLowerCase();
+        if (!clean || clean.indexOf("@") < 1 || seen[key]) return;
+        seen[key] = true;
+        emails.push(clean);
+      });
+    });
+  }
   function pick_(source, fields) { return fields.reduce((output, field) => { if (source && source[field] !== undefined) output[field] = source[field]; return output; }, {}); }
   function digest_(value, length) { return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ""))).replace(/=+$/, "").slice(0, length || 24); }
   function estimateBytes_(value) { try { return JSON.stringify(value || {}).length; } catch (_) { return 0; } }
@@ -270,5 +318,5 @@ const ParticipantProjectionService = (() => {
   function emptyDashboard_(status, cache) { return { categories: [], totalParticipants: 0, status, generatedAt: "", projection: ProjectionContractService.contract("dashboard").version, cache }; }
   function withRequestMeta_(value, meta) { const control = PlatformControlService.getConfig(); return Object.assign({}, value || {}, { requestMeta: { cache: meta.cache, cacheStatus: meta.cacheStatus || meta.cache, durationMs: meta.durationMs, payloadBytes: estimateBytes_(value), isStale: !!meta.isStale, schemaVersion: control.schemaVersion, cacheEpoch: control.cacheEpoch, generatedAt: meta.generatedAt || value && value.generatedAt || "", expiresAt: meta.expiresAt || "" } }); }
 
-  return { getList, getPage, getFilters, getGroups, pageQueryKey, getDetail, getDashboardSnapshot, rebuildDashboardSnapshot, warm, warmShared, invalidate };
+  return { getList, getPage, getFilters, getGroups, getContactEmailsFor, getContactEmails, getGroupContactEmails, pageQueryKey, getDetail, getDashboardSnapshot, rebuildDashboardSnapshot, warm, warmShared, invalidate };
 })();
