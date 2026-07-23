@@ -12,27 +12,6 @@
     <?!= HtmlService.createHtmlOutputFromFile('Portal/Components/SidebarHeader').getContent(); ?>
 
     <div class="wrap">
-      <div id="dashboard" class="dashboard" onclick="focusPortalSearch()">
-        <button class="heroSearchButton" type="button" onclick="focusPortalSearch()">Search Spec Central</button>
-
-        <div class="sectionTitle">Live Statistics</div>
-        <div id="dashboardStats" class="dashboardGrid"></div>
-
-        <div class="sectionTitle">Quick Actions</div>
-        <div class="dashboardGrid">
-          <button class="quickAction" type="button" onclick="browseDashboard('schools')">🏫 Browse Schools</button>
-          <button class="quickAction" type="button" onclick="browseDashboard('items')">🎭 Browse Items</button>
-          <button class="quickAction" type="button" onclick="browseDashboard('teachers')">👩‍🏫 Browse Teachers</button>
-          <button class="quickAction" type="button" onclick="browseDashboard('rehearsals')">📅 Rehearsals</button>
-        </div>
-
-        <div class="sectionTitle">Recently Viewed</div>
-        <div id="recentlyViewed" class="recentList"></div>
-
-        <div class="sectionTitle">Recent Searches</div>
-        <div id="recentSearches" class="searchChipRow"></div>
-      </div>
-
       <input
         id="search"
         class="searchBox"
@@ -70,11 +49,6 @@
     const profileView = document.getElementById("profileView");
     const profileEl = document.getElementById("profile");
     const profileSearchInput = document.getElementById("profileSearch");
-    const dashboardEl = document.getElementById("dashboard");
-    const dashboardStatsEl = document.getElementById("dashboardStats");
-    const recentlyViewedEl = document.getElementById("recentlyViewed");
-    const recentSearchesEl = document.getElementById("recentSearches");
-    const greetingEl = document.getElementById("greeting");
 
 let timer = null;
 let latestResults = [];
@@ -91,8 +65,6 @@ let searchIndex = [];
 let itemSearchRecords = [];
 let photoCache = {};
 let portalReady = false;
-const RECENTLY_VIEWED_KEY = "specPortalRecentlyViewed";
-const RECENT_SEARCHES_KEY = "specPortalRecentSearches";
 
     function getField(source, names) {
       if (!source) return "";

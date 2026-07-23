@@ -7,7 +7,6 @@
 
     searchInput.addEventListener("keydown", handleSearchKeydown);
 
-    renderDashboard();
     loadPortalData();
 
     function handleSearchKeydown(e) {
@@ -39,7 +38,6 @@
       latestResults = [];
       selectedResultIndex = -1;
       resultsEl.innerHTML = "";
-      setDashboardVisible(true);
       statusEl.textContent = portalReady
         ? `Ready · ${getTotalParticipantCount()} participant${getTotalParticipantCount() === 1 ? "" : "s"} loaded${getParticipantTotalNote() ? " · " + getParticipantTotalNote() : ""}`
         : "Loading participant data...";
@@ -180,7 +178,6 @@
           buildPortalIndexes();
           portalReady = true;
           statusEl.textContent = `Ready · ${getTotalParticipantCount()} participant${getTotalParticipantCount() === 1 ? "" : "s"}, ${allGroups.length} group${allGroups.length === 1 ? "" : "s"} and ${allSchools.length} school${allSchools.length === 1 ? "" : "s"} loaded${getParticipantTotalNote() ? " · " + getParticipantTotalNote() : ""}`;
-          renderDashboard();
 
           if (searchInput.value.trim()) {
             runSearch();
@@ -230,11 +227,8 @@
         statusEl.textContent = `Ready · ${getTotalParticipantCount()} participant${getTotalParticipantCount() === 1 ? "" : "s"} loaded${getParticipantTotalNote() ? " · " + getParticipantTotalNote() : ""}`;
         latestResults = [];
         selectedResultIndex = -1;
-        setDashboardVisible(true);
         return;
       }
-
-      setDashboardVisible(false);
 
       const q = query.toLowerCase();
       const schoolResults = getSchoolSearchResults(q);
@@ -254,7 +248,6 @@
         resultsEl.innerHTML = `<div class="empty">No matches found.</div>`;
         statusEl.textContent = "No matches found.";
       } else {
-        saveRecentSearch(query);
         statusEl.textContent = `${latestResults.length} result${latestResults.length === 1 ? "" : "s"}`;
       }
     }

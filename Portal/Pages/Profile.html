@@ -53,14 +53,6 @@
       const familyEmails = [getParticipantStudentEmail(p), getParticipantParentEmail(p), getParticipantAdditionalParentEmail(p)].filter(Boolean).join(";");
       const sharedStudentPhone = isSamePhone(getParticipantStudentMobile(p), parentPhone) || isSamePhone(getParticipantStudentMobile(p), getParticipantAdditionalParentPhone(p));
 
-      saveRecentlyViewed({
-        type: "participant",
-        key: `participant:${getParticipantRecentKey(p)}`,
-        participantKey: getParticipantRecentKey(p),
-        label: name,
-        meta: [getParticipantSchool(p), item].filter(Boolean).join(" · ")
-      });
-
       profileEl.innerHTML = `
         <div class="profileCard">
           <div class="profileHero profileHero--student">
@@ -119,7 +111,6 @@
       searchView.style.display = "block";
       profileSearchInput.value = "";
       selectedResultIndex = -1;
-      setDashboardVisible(!String(searchInput.value || "").trim());
       updateSelectedResult();
       searchInput.focus();
     }
@@ -130,7 +121,6 @@
 
       profileView.style.display = "none";
       searchView.style.display = "block";
-      setDashboardVisible(false);
       searchInput.value = query;
       searchInput.focus();
       runSearch();
@@ -249,14 +239,6 @@
     function openSchoolProfile(schoolName) {
       const target = String(schoolName || "").trim();
       if (!target) return;
-
-      saveRecentlyViewed({
-        type: "school",
-        key: `school:${target.toLowerCase()}`,
-        schoolName: target,
-        label: target,
-        meta: "School"
-      });
 
       searchView.style.display = "none";
       profileView.style.display = "block";
@@ -573,14 +555,6 @@
       const target = String(teacherKey || "").trim();
       if (!target) return;
 
-      saveRecentlyViewed({
-        type: "teacher",
-        key: `teacher:${target.toLowerCase()}`,
-        teacherKey: target,
-        label: target,
-        meta: "Teacher"
-      });
-
       searchView.style.display = "none";
       profileView.style.display = "block";
       profileSearchInput.value = "";
@@ -769,13 +743,6 @@
 
       const group = result.group || {};
       const title = [group.item, group.groupName].filter(Boolean).join(" · ") || group.category || "Unnamed group";
-      saveRecentlyViewed({
-        type: "group",
-        key: `group:${getGroupRecentKey(group)}`,
-        groupKey: getGroupRecentKey(group),
-        label: title,
-        meta: [group.school, group.teacherName].filter(Boolean).join(" · ") || "Group"
-      });
 
       const students = group.item ? (participantsByItem.get(String(group.item || "").toLowerCase()) || []) : [];
       const matchingStudents = students.filter(p => String(getParticipantSchool(p) || "").trim().toLowerCase() === String(group.school || "").trim().toLowerCase());
@@ -853,14 +820,6 @@
     function openItemProfile(itemName) {
       const target = String(itemName || "").trim();
       if (!target) return;
-
-      saveRecentlyViewed({
-        type: "item",
-        key: `item:${target.toLowerCase()}`,
-        itemName: target,
-        label: target,
-        meta: "Item"
-      });
 
       searchView.style.display = "none";
       profileView.style.display = "block";
