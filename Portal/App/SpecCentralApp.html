@@ -754,7 +754,7 @@
 
       participantExplorerPageQuery: function () {
         var filters = App.state.participantExplorerFilters || {}, serverFilters = {}, mapping = { status: "applicationStatus" };
-        ["category", "item", "school", "region", "year", "gender", "directorate", "participationType", "segment", "schoolGroup", "hasAttendance", "missingAttendance", "productionText"].forEach(function (key) {
+        ["category", "item", "school", "region", "year", "gender", "directorate", "participationType", "segment", "schoolGroup", "hasAttendance", "missingAttendance", "productionText", "culturalIdentity", "loteNote", "supportNeededNote", "medicalNote", "firstTimeNote"].forEach(function (key) {
           if (filters[key] !== undefined && filters[key] !== false && filters[key] !== "") serverFilters[mapping[key] || key] = filters[key] === true ? "true" : String(filters[key]);
         });
         if (filters.status) serverFilters.applicationStatus = String(filters.status);

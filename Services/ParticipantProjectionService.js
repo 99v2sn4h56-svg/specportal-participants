@@ -164,15 +164,17 @@ const ParticipantProjectionService = (() => {
     // The first-page route should not build the complete participant-list
     // projection or resolve every headshot. Filter the canonical rows first,
     // then resolve asset metadata only for the records actually being returned.
+    //
+    // applyQuery_ runs against the raw canonical records, not the browser-safe
+    // projection, on purpose: some filters (medical alert, support needs,
+    // cultural identity, free-text notes) need fields ProjectionContractService
+    // deliberately excludes from LIST_FIELDS. Only the resulting page slice is
+    // ever sanitised through toListItem_ below -- the full match set (filtered)
+    // never leaves this function.
     const visibleRecords = filterParticipantsForUser_(ParticipantService.getAll(), actor);
-    const recordsById = visibleRecords.reduce((output, item) => {
-      output[String(item.studentKey || item.id || "")] = item;
-      return output;
-    }, {});
-    const filtered = applyQuery_(visibleRecords.map(item => toListItem_(item, null)), request);
+    const filtered = applyQuery_(visibleRecords, request);
     const start = (request.page - 1) * request.pageSize;
-    const pageItems = filtered.slice(start, start + request.pageSize);
-    const pageRecords = pageItems.map(item => recordsById[String(item.studentKey || item.id || "")]).filter(Boolean);
+    const pageRecords = filtered.slice(start, start + request.pageSize);
     // Never block the participant route on a full Drive folder scan. Explicit
     // photo references and a previously warmed index are enough for first paint.
     const headshots = HeadshotAssetService.getMetadataManyFast("participant", pageRecords);
@@ -212,6 +214,14 @@ const ParticipantProjectionService = (() => {
         if (field === "hasAttendance") return !!String(item.attendanceStatus || "").trim();
         if (field === "missingAttendance") return !String(item.attendanceStatus || "").trim();
         if (field === "productionText") return [item.discipline, item.category, item.categoryDetail, item.item, item.schoolGroup].filter(Boolean).join(" ").toLowerCase().indexOf(String(filters[field]).toLowerCase()) >= 0;
+        // These read notes/medical/cultural-identity fields that ProjectionContractService
+        // deliberately never sends to the browser (see FORBIDDEN_LIST_FIELD) -- matching
+        // must happen here, server-side, against the raw record.
+        if (field === "culturalIdentity") return !!(item.aboriginal || item.torresStraitIslander || notesContain_(item.notes, /\b(?:aboriginal|torres\s+strait\s+islander|atsi|tsi)\b/i));
+        if (field === "loteNote") return notesContain_(item.notes, /\blote\b/i);
+        if (field === "supportNeededNote") return notesContain_(item.notes, /\bsupport\s+needed\b/i);
+        if (field === "medicalNote") return !!(item.hasMedicalAlert || notesContain_(item.notes, /\b(?:medical|med\s*plan)\b/i));
+        if (field === "firstTimeNote") return notesContain_(item.notes, /\b1st\b/i);
         return String(item[field] || "") === filters[field];
       });
     }).sort((a, b) => {
@@ -240,7 +250,7 @@ const ParticipantProjectionService = (() => {
   // of blocking this response.
   function sanitiseDetail_(item) { const value = JSON.parse(JSON.stringify(item || {})); const stableId = String(value.studentKey || value.id || ""); const headshot = HeadshotAssetService.getMetadataManyFast("participant", [item])[stableId] || {}; value.hasPhoto = !!headshot.hasPhoto; value.assetKey = headshot.assetKey || ""; value.assetVersion = headshot.assetVersion || ""; delete value.photoId; delete value.photoUrl; delete value.driveUrl; return value; }
   function normalisePageQuery_(query) {
-    const value = query && typeof query === "object" ? query : {}, allowed = ["school", "year", "discipline", "category", "item", "region", "gender", "directorate", "applicationStatus", "participationType", "segment", "schoolGroup", "hasAttendance", "missingAttendance", "productionText"], filters = {};
+    const value = query && typeof query === "object" ? query : {}, allowed = ["school", "year", "discipline", "category", "item", "region", "gender", "directorate", "applicationStatus", "participationType", "segment", "schoolGroup", "hasAttendance", "missingAttendance", "productionText", "culturalIdentity", "loteNote", "supportNeededNote", "medicalNote", "firstTimeNote"], filters = {};
     Object.keys(value.filters || {}).filter(field => allowed.includes(field)).forEach(field => { const cleaned = String(value.filters[field] || "").trim().slice(0, 120); if (cleaned) filters[field] = cleaned; });
     const sortKeys = ["name", "school", "category", "item", "year", "region", "applicationStatus"];
     return { page: Math.max(1, Math.floor(Number(value.page) || 1)), pageSize: Math.min(100, Math.max(10, Math.floor(Number(value.pageSize) || DEFAULT_PAGE_SIZE))), search: String(value.search || "").trim().slice(0, 160), filters, sortKey: sortKeys.includes(value.sortKey) ? value.sortKey : "name", sortDirection: value.sortDirection === "desc" ? "desc" : "asc" };
@@ -249,6 +259,7 @@ const ParticipantProjectionService = (() => {
   function uniqueField_(rows, field) { return Array.from(new Set((rows || []).map(item => String(item && item[field] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); }
   function uniqueListField_(rows, field) { return Array.from(new Set((rows || []).flatMap(item => splitListValue_(item && item[field])))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })); }
   function splitListValue_(value) { return String(value || "").split(/[;,\n]+/).map(item => item.trim()).filter(Boolean); }
+  function notesContain_(notes, pattern) { return pattern.test(String(notes || "")); }
   function pick_(source, fields) { return fields.reduce((output, field) => { if (source && source[field] !== undefined) output[field] = source[field]; return output; }, {}); }
   function digest_(value, length) { return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ""))).replace(/=+$/, "").slice(0, length || 24); }
   function estimateBytes_(value) { try { return JSON.stringify(value || {}).length; } catch (_) { return 0; } }
