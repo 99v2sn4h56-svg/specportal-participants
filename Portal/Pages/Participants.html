@@ -227,7 +227,20 @@
     setParticipantExplorerFilter: function (key, value) { if (value === false || value === "") delete App.state.participantExplorerFilters[key]; else App.state.participantExplorerFilters[key] = value; App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); },
     clearParticipantExplorerFilters: function () { App.state.participantExplorerFilters = {}; App.state.participantExplorerSearch = ""; App.state.participantExplorerPage = 1; App.renderParticipantExplorer(); },
     toggleParticipantMobileFilters: function () { var root = document.querySelector(".participantExplorerHeader"), button = document.getElementById("participantMobileFilterToggle"); if (!root) return; var open = !root.classList.contains("mobileFiltersOpen"); root.classList.toggle("mobileFiltersOpen", open); if (button) { button.setAttribute("aria-expanded", open ? "true" : "false"); button.textContent = open ? "Hide filters" : "Filters"; } },
-    renderParticipantQuickFilters: function () { var el = document.getElementById("participantQuickFilters"); if (!el) return; var quick = [["hasAttendance", "Has attendance"], ["missingAttendance", "Missing attendance"]]; el.innerHTML = quick.map(function (item) { var active = !!(App.state.participantExplorerFilters || {})[item[0]]; return '<button class="filterChip ' + (active ? 'active' : '') + '" type="button" onclick="App.setParticipantExplorerFilter(\'' + item[0] + '\',' + (!active) + ')">' + App.escapeHtml(item[1]) + '</button>'; }).join(""); },
+    // These filters must stay as toolbar toggles, not per-row indicators: the
+    // underlying notes/medical/support fields are deliberately never sent to
+    // the browser (ProjectionContractService's LIST_FIELDS boundary), so a
+    // chip here only ever needs to flip a filter flag -- the server does the
+    // actual matching against data that never leaves it.
+    renderParticipantQuickFilters: function () {
+      var el = document.getElementById("participantQuickFilters"); if (!el) return;
+      var quick = App.state.participantExplorerMode === "groups" ? [] : [
+        ["hasAttendance", "Has attendance"], ["missingAttendance", "Missing attendance"],
+        ["firstTimeNote", "First time"], ["loteNote", "LOTE / EAL-D"], ["supportNeededNote", "Support needed"],
+        ["medicalNote", "Medical"], ["culturalIdentity", "Aboriginal / TSI"]
+      ];
+      el.innerHTML = quick.map(function (item) { var active = !!(App.state.participantExplorerFilters || {})[item[0]]; return '<button class="filterChip ' + (active ? 'active' : '') + '" type="button" onclick="App.setParticipantExplorerFilter(\'' + item[0] + '\',' + (!active) + ')">' + App.escapeHtml(item[1]) + '</button>'; }).join("");
+    },
     renderParticipantActiveFilters: function () { var el = document.getElementById("participantActiveFilters"); if (!el) return; var filters = App.state.participantExplorerFilters || {}, labels = { culturalIdentity: "Aboriginal / Torres Strait Islander", loteNote: "LOTE / EAL-D", supportNeededNote: "Support needed", medicalNote: "Medical", firstTimeNote: "First time" }; var activeKeys = Object.keys(filters).filter(function (key) { return filters[key] !== false && filters[key] !== ""; }); var chips = activeKeys.map(function (key) { return '<button type="button" onclick="App.setParticipantExplorerFilter(\'' + key + '\',\'\')">' + App.escapeHtml((labels[key] || App.toTitle(key)) + (filters[key] === true ? "" : ": " + filters[key])) + ' ×</button>'; }); el.innerHTML = chips.join(""); var toggle = document.getElementById("participantMobileFilterToggle"), root = document.querySelector(".participantExplorerHeader"); if (toggle) toggle.textContent = root && root.classList.contains("mobileFiltersOpen") ? "Hide filters" : "Filters" + (activeKeys.length ? " (" + activeKeys.length + ")" : ""); },
 
     renderParticipantExplorerStats: function (participants) {
