@@ -129,7 +129,11 @@
         preloadInFlight: {},
         preloadedModules: {},
         pendingPerformanceMetrics: [],
-        performanceFlushTimer: null
+        performanceFlushTimer: null,
+        performanceInFlightBatch: null,
+        performanceRetryCount: 0,
+        performanceDroppedSamples: 0,
+        performanceMaxQueue: 100
       },
 
       pages: {
@@ -642,7 +646,7 @@
             App.state.bootstrapContext = bootstrap;
             App.state.applicationVersion = bootstrap.platform.buildVersion || App.state.applicationVersion;
             App.applyStaffContext(App.bootstrapStaffContext(bootstrap));
-            App.recordClientPerformance("bootstrap", started, { payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(bootstrap) : 0, projection: "bootstrap" });
+            App.recordPerformance("bootstrap", started, { payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(bootstrap) : 0, projection: "bootstrap" });
             App.renderDashboardPage();
             return bootstrap;
           })
@@ -704,10 +708,14 @@
         return App.services.request("portalData", "portalGetParticipantListProjection", { cacheMs: 5 * 60 * 1000, timeoutMs: 45000, forceRefresh: !!forceRefresh })
           .then(function (data) {
             data = data || {};
+            clearTimeout(App.state.participantListRetryTimer);
             App.cachePriorityParticipantData(data);
             App.state.participants = data.participants || [];
-            App.state.groups = data.groups || [];
-            App.state.schools = data.schools || [];
+            if (Array.isArray(data.groups)) {
+              App.state.groups = data.groups;
+              App.state.participantGroupsReady = true;
+            }
+            if (Array.isArray(data.schools)) App.state.schools = data.schools;
             App.state.photos = data.photos || {};
             App.state.ready = true;
             App.state.participantListComplete = true;
@@ -720,18 +728,23 @@
             if (App.state.currentPage === "participants" && App.renderParticipantExplorer) App.renderParticipantExplorer();
             if (!App.state.participantsUsableRecorded) {
               App.state.participantsUsableRecorded = true;
-              App.recordClientPerformance("participants-usable", App.state.startupStartedAt, { records: App.state.participants.length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, projection: "participant-list" });
+              App.recordPerformance("participants-usable", App.state.startupStartedAt, { records: App.state.participants.length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, projection: "participant-list" });
             }
-            App.recordClientPerformance("participant-list-request", started, { records: App.state.participants.length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, cache: data.requestMeta && data.requestMeta.cache || "unknown", projection: "participant-list" });
+            App.recordPerformance("participant-list-request", started, { records: App.state.participants.length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, cache: data.requestMeta && data.requestMeta.cache || "unknown", projection: "participant-list" });
             return data;
           })
           .catch(function (error) {
             App.state.ready = !!(App.state.participants && App.state.participants.length);
-            var message = App.getErrorMessage(error), pageFallback = message.indexOf("CACHE_REBUILD_BUSY") >= 0 && App.state.participantExplorerPageData;
+            var message = App.getErrorMessage(error), busy = message.indexOf("CACHE_REBUILD_BUSY") >= 0;
+            var pageFallback = busy && (App.state.participantExplorerPageData || App.state.participantFirstPageData || (App.state.participants || []).length);
+            if (busy && !App.state.participantListComplete) {
+              clearTimeout(App.state.participantListRetryTimer);
+              App.state.participantListRetryTimer = setTimeout(function () { App.loadPortalData(true).catch(function () {}); }, 5000);
+            }
             if (!pageFallback) App.notify("Portal data could not be loaded: " + message);
             App.renderStatusRibbon();
             App.renderParticipantStatus();
-            return pageFallback ? App.state.participantExplorerPageData : null;
+            return pageFallback ? (App.state.participantExplorerPageData || App.state.participantFirstPageData) : null;
           });
       },
 
@@ -758,8 +771,8 @@
         return { params: params, signature: JSON.stringify(params) };
       },
 
-      loadParticipantExplorerPage: function (forceRefresh, retryAttempt) {
-        var query = App.participantExplorerPageQuery(), attempt = Number(retryAttempt || 0);
+      loadParticipantExplorerPage: function (forceRefresh, retryAttempt, journeyStartedAt) {
+        var query = App.participantExplorerPageQuery(), attempt = Number(retryAttempt || 0), started = typeof journeyStartedAt === "number" ? journeyStartedAt : performance.now();
         if (!forceRefresh && App.state.participantExplorerPageSignature === query.signature && App.state.participantExplorerPageData) return Promise.resolve(App.state.participantExplorerPageData);
         if (App.state.participantExplorerPageLoading && App.state.participantExplorerPendingSignature === query.signature) return App.state.participantExplorerPagePromise;
         App.state.participantExplorerPageLoading = true;
@@ -771,17 +784,21 @@
           if (!Array.isArray(data.participants) || !data.pagination) throw new Error("Participant page response is incomplete.");
           App.state.participantExplorerPageData = data;
           App.state.participantExplorerPageSignature = query.signature;
-          App.state.participants = data.participants;
+          // Keep the complete list once it has arrived. Page rows live in the
+          // explorer projection and must never collapse 325 records back to 50.
+          if (!App.state.participantListComplete) App.state.participants = data.participants;
           App.state.ready = true;
           App.state.participantExplorerPage = data.pagination.page || query.params.page;
+          if (query.params.search) App.recordClientPerformance("journey.participant-search", started, { route: "participants", status: "completed", records: data.participants.length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, cache: data.requestMeta && data.requestMeta.cache || "unknown", projection: "participant-list-page" });
           return data;
         }).catch(function (error) {
           if (App.getErrorMessage(error).indexOf("CACHE_REBUILD_BUSY") >= 0 && attempt < 5) {
             var delay = Math.min(8000, 1000 * Math.pow(2, attempt));
             App.state.participantExplorerPageLoading = false;
             App.state.participantExplorerPendingSignature = "";
-            return new Promise(function (resolve) { setTimeout(resolve, delay); }).then(function () { return App.loadParticipantExplorerPage(true, attempt + 1); });
+            return new Promise(function (resolve) { setTimeout(resolve, delay); }).then(function () { return App.loadParticipantExplorerPage(true, attempt + 1, started); });
           }
+          if (query.params.search) App.recordClientPerformance("journey.participant-search", started, { route: "participants", status: "failed", reason: "request-failed", projection: "participant-list-page" });
           throw error;
         }).finally(function () {
           if (App.state.participantExplorerPendingSignature === query.signature) {
@@ -807,8 +824,7 @@
           App.cachePriorityParticipantData(data);
           App.applyParticipantFirstPage(data);
           App.loadParticipantFilterProjection(false).catch(function () {});
-          App.recordClientPerformance("participant-page-" + (trigger || "route"), started, { records: (data.participants || []).length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, cache: data.requestMeta && data.requestMeta.cache || "unknown", isStale: !!(data.requestMeta && data.requestMeta.isStale), projection: "participant-list-page" });
-          if (App.state.currentPage === "participants" && !App.state.dashboardUsableRecorded) setTimeout(function () { App.flushClientPerformance(true); }, 0);
+          App.recordPerformance("participant-page-" + (trigger || "route"), started, { records: (data.participants || []).length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, cache: data.requestMeta && data.requestMeta.cache || "unknown", isStale: !!(data.requestMeta && data.requestMeta.isStale), projection: "participant-list-page" });
           if (data.requestMeta && data.requestMeta.isStale && !refreshServer) setTimeout(function () { App.loadParticipantFirstPage(true, "stale-refresh", true).catch(function () {}); }, 0);
           return data;
         }).catch(function (error) {
@@ -864,6 +880,26 @@
         });
       },
 
+      loadParticipantGroups: function (forceRefresh) {
+        if (App.state.participantGroupsReady && !forceRefresh) return Promise.resolve({ groups: App.state.groups || [] });
+        if (App.state.participantGroupListLoading && App.state.participantGroupListPromise) return App.state.participantGroupListPromise;
+        App.state.participantGroupListLoading = true;
+        var request = App.services.request("participantGroups:v1", "portalGetParticipantGroupsProjection", {
+          args: [{ refresh: !!forceRefresh }], cacheMs: 15 * 60 * 1000, timeoutMs: 45000, forceRefresh: !!forceRefresh
+        }).then(function (data) {
+          data = data || {};
+          if (!Array.isArray(data.groups)) throw new Error("School group response is incomplete.");
+          App.state.groups = data.groups;
+          App.state.participantGroupsReady = true;
+          App.rebuildSearchProviders();
+          return data;
+        }).finally(function () {
+          App.state.participantGroupListLoading = false;
+        });
+        App.state.participantGroupListPromise = request;
+        return request;
+      },
+
       ensurePortalDataLoaded: function (options) {
         options = options || {};
         if (App.state.participantListComplete) return Promise.resolve({
@@ -873,7 +909,9 @@
           photos: App.state.photos
         });
 
-        var completeInBackground = function () { if (!options.firstPageOnly) setTimeout(function () { App.loadPortalData(false).catch(function () {}); }, 0); };
+        // First paint remains paged, but the complete safe list is always the
+        // next participant request because it feeds search, exports and profiles.
+        var completeInBackground = function () { setTimeout(function () { App.loadPortalData(false).catch(function () {}); }, 0); };
         if (App.state.participantFirstPageReady || App.restorePriorityParticipantCache()) {
           completeInBackground();
           return Promise.resolve(App.state.participantFirstPageData || { participants: App.state.participants, groups: [], schools: App.state.schools, photos: {} });
@@ -882,28 +920,75 @@
       },
 
       recordClientPerformance: function (name, started, detail) {
+        var acceptedNames = ["journey.dashboard-bootstrap", "journey.participant-search", "journey.participant-passport", "journey.event-loading", "journey.communications-loading", "journey.forms-loading"];
+        if (acceptedNames.indexOf(String(name || "")) < 0) return App.recordPerformance(name, started, detail);
         var duration = typeof started === "number" ? Math.max(0, Math.round(performance.now() - started)) : 0;
-        App.state.pendingPerformanceMetrics.push({ name: name, durationMs: duration, detail: detail || {} });
-        if (App.state.pendingPerformanceMetrics.length > 20) App.state.pendingPerformanceMetrics.shift();
-        if (App.state.dashboardUsableRecorded) {
-          clearTimeout(App.state.performanceFlushTimer);
-          App.state.performanceFlushTimer = setTimeout(App.flushClientPerformance, 250);
+        var eventId = App.makeTelemetryId("c");
+        if (App.state.pendingPerformanceMetrics.length >= App.state.performanceMaxQueue) {
+          var inFlightIds = new Set((App.state.performanceInFlightBatch && App.state.performanceInFlightBatch.metrics || []).map(function (item) { return item.eventId; }));
+          var removable = App.state.pendingPerformanceMetrics.findIndex(function (item) { return !inFlightIds.has(item.eventId); });
+          if (removable >= 0) App.state.pendingPerformanceMetrics.splice(removable, 1);
+          else { App.state.performanceDroppedSamples++; return duration; }
+          App.state.performanceDroppedSamples++;
         }
+        App.state.pendingPerformanceMetrics.push({ name: name, durationMs: duration, detail: detail || {}, eventId: eventId, correlationId: eventId });
+        App.scheduleClientPerformanceFlush(250);
         return duration;
       },
 
+      makeTelemetryId: function (prefix) { return String(prefix || "c") + Date.now().toString(36) + Math.random().toString(36).slice(2, 12); },
+
+      scheduleClientPerformanceFlush: function (delay) {
+        if (App.state.performanceInFlightBatch || !App.state.pendingPerformanceMetrics.length) return;
+        clearTimeout(App.state.performanceFlushTimer);
+        App.state.performanceFlushTimer = setTimeout(function () { App.flushClientPerformance(false); }, Math.max(0, Number(delay) || 0));
+      },
+
       flushClientPerformance: function (force) {
-        if ((!App.state.dashboardUsableRecorded && !force) || !App.state.pendingPerformanceMetrics.length) return;
-        var metrics = App.state.pendingPerformanceMetrics.splice(0, 20);
-        try { google.script.run.portalRecordClientPerformanceBatch(metrics); } catch (_) {}
+        if (App.state.performanceInFlightBatch || !App.state.pendingPerformanceMetrics.length) return;
+        var metrics = App.state.pendingPerformanceMetrics.slice(0, 20);
+        var batch = { batchId: App.makeTelemetryId("b"), metrics: metrics, attempts: 0 };
+        App.state.performanceInFlightBatch = batch;
+        App.sendClientPerformanceBatch(batch, !!force);
+      },
+
+      sendClientPerformanceBatch: function (batch, force) {
+        if (!batch || App.state.performanceInFlightBatch !== batch) return;
+        batch.attempts++;
+        var complete = function (acknowledgement) {
+          if (App.state.performanceInFlightBatch !== batch) return;
+          acknowledgement = acknowledgement || {};
+          if (!acknowledgement.writeSuccess) { retry(); return; }
+          var delivered = new Set(batch.metrics.map(function (item) { return item.eventId; }));
+          App.state.pendingPerformanceMetrics = App.state.pendingPerformanceMetrics.filter(function (item) { return !delivered.has(item.eventId); });
+          App.state.performanceDroppedSamples += Number(acknowledgement.rejectedSampleCount || 0) + Number(acknowledgement.droppedSampleCount || 0);
+          App.state.performanceInFlightBatch = null;
+          App.state.performanceRetryCount = 0;
+          App.scheduleClientPerformanceFlush(0);
+        };
+        var retry = function () {
+          if (App.state.performanceInFlightBatch !== batch) return;
+          if (batch.attempts >= 3 || force) {
+            var abandoned = new Set(batch.metrics.map(function (item) { return item.eventId; }));
+            App.state.pendingPerformanceMetrics = App.state.pendingPerformanceMetrics.filter(function (item) { return !abandoned.has(item.eventId); });
+            App.state.performanceDroppedSamples += batch.metrics.length;
+            App.state.performanceInFlightBatch = null;
+            App.state.performanceRetryCount = batch.attempts;
+            App.scheduleClientPerformanceFlush(0);
+            return;
+          }
+          App.state.performanceRetryCount = batch.attempts;
+          setTimeout(function () { App.sendClientPerformanceBatch(batch, false); }, [1000, 3000, 8000][Math.min(batch.attempts - 1, 2)]);
+        };
+        try {
+          google.script.run.withSuccessHandler(complete).withFailureHandler(retry).portalRecordClientPerformanceBatch(batch.metrics, batch.batchId);
+        } catch (_) { retry(); }
       },
 
       markDashboardUsable: function () {
         if (App.state.dashboardUsableRecorded) return;
         App.state.dashboardUsableRecorded = true;
-        App.recordClientPerformance("dashboard-usable", App.state.startupStartedAt, { route: "dashboard", projection: "dashboard" });
-        clearTimeout(App.state.performanceFlushTimer);
-        App.state.performanceFlushTimer = setTimeout(App.flushClientPerformance, 0);
+        App.recordClientPerformance("journey.dashboard-bootstrap", App.state.startupStartedAt, { route: "dashboard", phase: "dashboard", status: "completed", outcome: "success", projection: "dashboard" });
       },
 
       loadProductionOverview: function (forceRefresh) {
@@ -1201,9 +1286,6 @@
         App.renderProductionOverview();
         App.renderDashboardSchedule();
         App.renderDashboardManagedEvents();
-        App.renderDashboardTasks();
-        App.renderDashboardNotifications();
-        App.renderDashboardProjects();
         App.renderUnmatchedUserState();
       },
 
@@ -1304,7 +1386,7 @@
         var user = App.state.staff || {};
         var unmatched = user.isMatched === false;
         el.hidden = !unmatched;
-        Array.prototype.forEach.call((el.parentElement || document).querySelectorAll(".dashboardPrimaryGrid, .dashboardSecondaryGrid"), function (section) { section.hidden = unmatched; });
+        Array.prototype.forEach.call((el.parentElement || document).querySelectorAll(".dashboardOverviewScheduleGrid"), function (section) { section.hidden = unmatched; });
         if (el.hidden) { el.innerHTML = ""; return; }
         el.innerHTML = '<div class="unmatchedIdentity"><div class="stateIcon">!</div><div><div class="scProfileKicker">Signed in as ' + App.escapeHtml(user.email || "Google user") + '</div><h3>' + App.escapeHtml(user.displayName || "Authenticated user") + '</h3><strong>' + App.escapeHtml(user.status || "No Staff Profile Found") + '</strong><p>You are authenticated, but no unique Staff Production Team record could be matched.</p><div class="profileActions"><a class="quickLink compact" href="mailto:?subject=SpecCentral access request&body=' + encodeURIComponent('Please add or repair my SpecCentral Staff Production Team profile for ' + (user.email || 'my Google account') + '.') + '">Request Access</a><button class="quickLink compact" type="button" onclick="App.retryUserContext()">Retry</button><button class="quickLink compact" type="button" onclick="App.openIdentityDiagnostics()">Diagnostics</button></div></div></div>';
       },
@@ -1321,13 +1403,19 @@
       renderDashboardTasks: function () {
         var el = document.getElementById("dashboardTasks");
         if (!el) return;
+        el.innerHTML = App.renderMyTasksHtml();
+      },
+
+      renderMyTasksHtml: function () {
         var tasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; }).slice(0, 7);
-        el.innerHTML = tasks.length ? tasks.map(function (item) {
+        return tasks.length ? tasks.map(function (item) {
           var priority = String(item.priority || "Normal");
           var workflow = item.workflow || item.module || item.workstream || item.relatedEvent || "Task Service";
-          return '<button class="dashboardTask" type="button" onclick="App.openOperationsView(\'projects\')"><span class="taskPriority priority' + App.escapeHtml(priority.replace(/[^a-z]/gi, "")) + '">' + App.escapeHtml(priority) + '</span><span class="dashboardTaskBody"><strong>' + App.escapeHtml(item.title || item.task || "Task") + '</strong><small>' + App.escapeHtml([workflow, item.dueDate ? "Due " + item.dueDate : "No due date"].join(" · ")) + '</small></span><span class="taskStatus">' + App.escapeHtml(item.status || "Open") + '</span></button>';
+          return '<button class="dashboardTask" type="button" onclick="App.openTaskFromNotificationCentre()"><span class="taskPriority priority' + App.escapeHtml(priority.replace(/[^a-z]/gi, "")) + '">' + App.escapeHtml(priority) + '</span><span class="dashboardTaskBody"><strong>' + App.escapeHtml(item.title || item.task || "Task") + '</strong><small>' + App.escapeHtml([workflow, item.dueDate ? "Due " + item.dueDate : "No due date"].join(" · ")) + '</small></span><span class="taskStatus">' + App.escapeHtml(item.status || "Open") + '</span></button>';
         }).join("") : App.emptyState("No open tasks", "Your task queue has no pending work.");
       },
+
+      openTaskFromNotificationCentre: function () { App.closeNotificationCentre(); App.openOperationsView("projects"); },
 
       renderDashboardProjects: function () {
         var el = document.getElementById("dashboardProjects");
@@ -1856,17 +1944,29 @@
         }
       },
 
-      buildAttendanceCheckinUrl: function (sessionId) {
+      buildAttendanceCheckinUrl: function (sessionId, token) {
         var baseUrl = String(App.state.attendanceUrl || "");
         if (!baseUrl || !sessionId) return "";
         try {
           var url = new URL(baseUrl, window.location.href);
           url.searchParams.set("page", "student");
-          url.searchParams.set("sessionId", String(sessionId));
+          if (token) {
+            // Preferred: opaque, expiring token (see Attendance/PublicCheckinTokens.gs).
+            url.searchParams.set("token", String(token));
+          } else {
+            // Legacy fallback: the deterministic session ID. Still works —
+            // the Attendance app now validates session eligibility
+            // server-side on every request regardless of how it was
+            // reached — but carries no expiry of its own, so the token
+            // path above is preferred whenever it's available.
+            url.searchParams.set("sessionId", String(sessionId));
+          }
           return url.toString();
         } catch (error) {
-          return baseUrl + (baseUrl.indexOf("?") >= 0 ? "&" : "?") +
-            "page=student&sessionId=" + encodeURIComponent(String(sessionId));
+          var query = token
+            ? "token=" + encodeURIComponent(String(token))
+            : "sessionId=" + encodeURIComponent(String(sessionId));
+          return baseUrl + (baseUrl.indexOf("?") >= 0 ? "&" : "?") + "page=student&" + query;
         }
       },
 
@@ -1874,22 +1974,78 @@
         var safeSessionId = String(sessionId || App.state.selectedAttendanceSessionId || "").trim();
         var safeEventName = String(eventName || App.state.selectedAttendanceEventName || "Attendance event");
         var drawer = document.getElementById("attendanceQrDrawer");
-        var checkinUrl = App.buildAttendanceCheckinUrl(safeSessionId);
-        if (!drawer || !checkinUrl) {
+        var legacyUrl = App.buildAttendanceCheckinUrl(safeSessionId);
+        if (!drawer || !legacyUrl) {
           App.notify("Select an Attendance event before opening its check-in QR code.");
           return;
         }
         App.state.selectedAttendanceSessionId = safeSessionId;
         App.state.selectedAttendanceEventName = safeEventName;
-        var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=16&data=" + encodeURIComponent(checkinUrl);
+
         drawer.hidden = false;
         drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">Student and staff check-in</span><h3>' +
           App.escapeHtml(safeEventName) + '</h3></div><button type="button" onclick="App.closeAttendanceQr()" aria-label="Close QR code">×</button></div>' +
+          '<div class="drawerBody attendanceQrBody"><p>Preparing a secure check-in link…</p></div>';
+
+        // Mint a short-lived token before rendering. If the secure token
+        // channel is unavailable for any reason, fall back to the legacy
+        // sessionId-only link rather than blocking the manager — that link
+        // still works (see buildAttendanceCheckinUrl above).
+        google.script.run
+          .withSuccessHandler(function (result) {
+            var hasToken = !!(result && result.ok && result.token);
+            var checkinUrl = hasToken ? App.buildAttendanceCheckinUrl(safeSessionId, result.token) : legacyUrl;
+            var note = hasToken
+              ? "This code expires automatically and is scoped to this event only."
+              : "Using a standard link — secure check-in tokens are temporarily unavailable.";
+            App.renderAttendanceQrDrawer(drawer, safeEventName, checkinUrl, note);
+          })
+          .withFailureHandler(function () {
+            App.renderAttendanceQrDrawer(drawer, safeEventName, legacyUrl, "Using a standard link — secure check-in tokens are temporarily unavailable.");
+          })
+          .portalIssueAttendanceCheckinToken(safeSessionId);
+      },
+
+      renderAttendanceQrDrawer: function (drawer, safeEventName, checkinUrl, note) {
+        if (!drawer) return;
+        drawer.innerHTML = '<div class="drawerHeader"><div><span class="scProfileKicker">Student and staff check-in</span><h3>' +
+          App.escapeHtml(safeEventName) + '</h3></div><button type="button" onclick="App.closeAttendanceQr()" aria-label="Close QR code">×</button></div>' +
           '<div class="drawerBody attendanceQrBody"><p>Students and staff can scan this code to open the check-in page with this event selected.</p>' +
-          '<img src="' + App.escapeHtml(qrUrl) + '" alt="QR code for event check-in to ' + App.escapeHtml(safeEventName) + '">' +
-          '<p class="moduleMeta">The link contains only the Attendance Session ID. Each person chooses Student or Staff before finding their profile.</p></div>' +
+          '<div id="attendanceQrCanvas" class="attendanceQrCanvas" role="img" aria-label="QR code for event check-in to ' + App.escapeHtml(safeEventName) + '"></div>' +
+          '<p class="moduleMeta">' + App.escapeHtml(note || "") + ' Each person still chooses Student or Staff before finding their own profile — the link carries no participant information.</p></div>' +
           '<div class="drawerActions"><button class="quickLink primaryAction" type="button" onclick="window.open(\'' +
           App.escapeJs(checkinUrl) + '\',\'_blank\')">Open check-in page ↗</button><button class="quickLink" type="button" onclick="App.closeAttendanceQr()">Close</button></div>';
+        App.renderQrCodeInto("attendanceQrCanvas", checkinUrl);
+      },
+
+      /**
+       * Renders a QR code entirely client-side (kazuhikoarase/qrcode-generator,
+       * loaded in SpecCentral.html's <head>). Deliberately does NOT call a
+       * third-party QR image API — sending the check-in URL/token to an
+       * external service was flagged as finding H2 in
+       * Attendance/Docs/StudentCheckinAudit.md. If the library failed to
+       * load, this falls back to a plain link rather than reintroducing
+       * that dependency.
+       */
+      renderQrCodeInto: function (elementId, value) {
+        var el = document.getElementById(elementId);
+        if (!el) return;
+        try {
+          if (typeof qrcode !== "function") throw new Error("QR library unavailable");
+          var qr = qrcode(0, "M");
+          qr.addData(String(value || ""));
+          qr.make();
+          if (typeof qr.createImgTag === "function") {
+            el.innerHTML = qr.createImgTag(6, 12);
+          } else if (typeof qr.createSvgTag === "function") {
+            el.innerHTML = qr.createSvgTag(6, 12);
+          } else {
+            throw new Error("No supported QR render method");
+          }
+        } catch (error) {
+          el.innerHTML = '<p class="moduleMeta">QR image unavailable right now — use the "Open check-in page" button below, or share this link directly: ' +
+            App.escapeHtml(String(value || "")) + '</p>';
+        }
       },
 
       closeAttendanceQr: function () {
@@ -2288,9 +2444,10 @@
       },
 
       loadEventManagerLanding: function (forceRefresh) {
+        var started = performance.now();
         return App.services.request("eventManagerLanding", "portalGetEventManagerLanding", { cacheMs: 120000, timeoutMs: 45000, forceRefresh: !!forceRefresh })
-          .then(function (data) { App.state.eventManagerData = data; if (App.state.currentPage === "operations" && App.state.operationsView === "events") App.renderOperationsPage(); return data; })
-          .catch(function (error) { App.notify("Event Manager could not be loaded: " + App.getErrorMessage(error)); App.state.eventManagerData = { events: [], summary: {}, filters: {}, source: "Timeline unavailable", generatedAt: new Date().toISOString() }; App.renderOperationsPage(); });
+          .then(function (data) { App.state.eventManagerData = data; App.recordClientPerformance("journey.event-loading", started, { route: "operations", phase: "landing", status: "completed", records: (data && data.events || []).length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0 }); if (App.state.currentPage === "operations" && App.state.operationsView === "events") App.renderOperationsPage(); return data; })
+          .catch(function (error) { App.recordClientPerformance("journey.event-loading", started, { route: "operations", phase: "landing", status: "failed", reason: "request-failed" }); App.notify("Event Manager could not be loaded: " + App.getErrorMessage(error)); App.state.eventManagerData = { events: [], summary: {}, filters: {}, source: "Timeline unavailable", generatedAt: new Date().toISOString() }; App.renderOperationsPage(); });
       },
 
       renderEventManager: function () {
@@ -2357,8 +2514,10 @@
         App.updateBrowserRoute(false);
         var drawer = document.getElementById("eventWorkspaceDrawer");
         if (drawer) { drawer.hidden = false; drawer.innerHTML = App.loadingState("Loading event workspace"); }
+        var started = performance.now();
         App.services.request("eventWorkspace:" + eventId + ":" + App.state.selectedEventWorkspaceSection, "portalGetEventWorkspace", { args: [eventId, App.state.selectedEventWorkspaceSection], cacheMs: 60000, timeoutMs: 45000 })
-          .then(App.renderEventWorkspace).catch(function (error) { if (drawer) drawer.innerHTML = App.emptyState("Event workspace unavailable", App.getErrorMessage(error)); });
+          .then(function (workspace) { App.recordClientPerformance("journey.event-loading", started, { route: "operations", phase: "workspace", status: "completed", payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(workspace) : 0 }); App.renderEventWorkspace(workspace); })
+          .catch(function (error) { App.recordClientPerformance("journey.event-loading", started, { route: "operations", phase: "workspace", status: "failed", reason: "request-failed" }); if (drawer) drawer.innerHTML = App.emptyState("Event workspace unavailable", App.getErrorMessage(error)); });
       },
 
       renderEventWorkspace: function (workspace) {

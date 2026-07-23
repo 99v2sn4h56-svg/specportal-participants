@@ -164,6 +164,10 @@
     renderNotificationCount: function () { var prefs = App.getNotificationPrefs(); var count = (App.state.notifications || []).filter(function (item) { return !(prefs[item.id] || {}).read; }).length; var el = document.getElementById("notificationCount"); if (!el) return; el.textContent = count || ""; el.hidden = count === 0; var trigger = el.closest("button"); if (trigger) trigger.setAttribute("aria-label", count ? "Open notifications, " + count + " unread" : "Open notifications"); },
     renderNotificationCentre: function () {
       var el = document.getElementById("notificationCentreList"); if (!el) return;
+      var taskEl = document.getElementById("notificationCentreTasks"), taskCount = document.getElementById("notificationTaskCount");
+      var openTasks = (App.state.tasks || []).filter(function (item) { return ["Completed", "Cancelled"].indexOf(item.status) < 0; });
+      if (taskEl) taskEl.innerHTML = App.renderMyTasksHtml();
+      if (taskCount) { taskCount.textContent = openTasks.length + " open"; taskCount.hidden = false; }
       var prefs = App.getNotificationPrefs();
       var rows = (App.state.notifications || []).filter(function (item) { var state = prefs[item.id] || {}; return App.notificationFilter === "unread" ? !state.read : App.notificationFilter === "pinned" ? state.pinned : true; });
       el.innerHTML = rows.length ? rows.map(function (item) { var state = prefs[item.id] || {}; return '<article class="notificationCard ' + (state.read ? "read" : "unread") + '"><div><span class="statusChip">' + App.escapeHtml(item.severity || "Info") + '</span><strong>' + App.escapeHtml(item.title) + '</strong><p>' + App.escapeHtml(item.body) + '</p><small>' + App.escapeHtml(item.createdAt || "") + '</small></div><div><button type="button" onclick="App.toggleNotificationPref(\'' + App.escapeJs(item.id) + '\',\'pinned\')">' + (state.pinned ? "Unpin" : "Pin") + '</button><button type="button" onclick="App.toggleNotificationPref(\'' + App.escapeJs(item.id) + '\',\'read\')">' + (state.read ? "Unread" : "Read") + '</button></div></article>'; }).join("") : App.emptyState("You are caught up", "No notifications match this filter.");

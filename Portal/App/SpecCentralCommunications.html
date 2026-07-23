@@ -16,9 +16,11 @@
     }).catch(function (error) { App.notify("Communications: " + App.getErrorMessage(error)); throw error; });
   }
   function reload(next) {
+    var started = performance.now();
     return App.services.request("communicationsWorkspace", "portalGetCommunicationsWorkspace", { forceRefresh: true, timeoutMs: 45000 }).then(function (data) {
+      App.recordClientPerformance("journey.communications-loading", started, { route: "communications", status: "completed", records: (data && data.campaigns || []).length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, projection: "communications-workspace" });
       state().communicationsWorkspace = data || {}; if (next) next(data || {}); if (state().currentPage === "communications") render();
-    }).catch(function (error) { if (root()) root().innerHTML = '<div class="errorState panel"><strong>Communications could not be loaded</strong><p>' + e(App.getErrorMessage(error)) + '</p><button class="quickLink" type="button" onclick="App.loadCommunicationsWorkspace()">Try again</button></div>'; });
+    }).catch(function (error) { App.recordClientPerformance("journey.communications-loading", started, { route: "communications", status: "failed", reason: "request-failed", projection: "communications-workspace" }); if (root()) root().innerHTML = '<div class="errorState panel"><strong>Communications could not be loaded</strong><p>' + e(App.getErrorMessage(error)) + '</p><button class="quickLink" type="button" onclick="App.loadCommunicationsWorkspace()">Try again</button></div>'; });
   }
   App.loadCommunicationsWorkspace = reload;
   App.renderCommunicationsPage = function () { if (!root()) return; if (!state().communicationsWorkspace) { root().innerHTML = '<div class="communicationsLoading panel"><span class="spinner"></span><strong>Loading Communications Centre</strong><p>Checking campaigns, permissions, audiences and provider status…</p></div>'; reload(); return; } render(); };

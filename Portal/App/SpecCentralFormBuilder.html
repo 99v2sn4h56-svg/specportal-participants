@@ -43,11 +43,13 @@
     function loadSharedDefinitions() {
       if (!App.state.sharedClientCache || App.state.sharedFormDefinitionsLoaded || App.state.sharedFormDefinitionsLoading) return;
       App.state.sharedFormDefinitionsLoading = true;
+      var started = performance.now();
       App.services.request("formsWorkspace", "portalGetFormsWorkspaceData", { args: [workspace().responseFormId || ""], forceRefresh: true, timeoutMs: 30000 }).then(function (data) {
+        App.recordClientPerformance("journey.forms-loading", started, { route: "forms", status: "completed", records: (data && data.forms || []).length, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(data) : 0, projection: "forms-workspace" });
         App.state.sharedFormDefinitionsLoaded = true; App.state.sharedFormDefinitionsLoading = false; App.state.formsWorkspaceData = data || {};
         if (data && Array.isArray(data.forms)) store(data.forms);
         if (App.state.currentPage === "formBuilder") App.renderFormBuilderPage();
-      }).catch(function () { App.state.sharedFormDefinitionsLoaded = true; App.state.sharedFormDefinitionsLoading = false; });
+      }).catch(function () { App.recordClientPerformance("journey.forms-loading", started, { route: "forms", status: "failed", reason: "request-failed", projection: "forms-workspace" }); App.state.sharedFormDefinitionsLoaded = true; App.state.sharedFormDefinitionsLoading = false; });
     }
 
     function renderDashboard() {

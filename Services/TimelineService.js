@@ -1,13 +1,27 @@
 const TimelineService = (() => {
   function getDashboardSummary() {
-    const rehearsals = getTimelineEvents({ upcomingOnly: true, limit: 12, rehearsalsOnly: true });
+    return buildDashboardSummary_(getTimelineEvents({ upcomingOnly: true, limit: 12, rehearsalsOnly: true }), "Connected");
+  }
+
+  /**
+   * Dashboard first paint is cache-only. Opening Calendar/Operations performs
+   * the authoritative Timeline load and warms this projection for later visits.
+   */
+  function getDashboardSummaryFast() {
+    const cached = RehearsalService.peek();
+    if (!Array.isArray(cached)) return buildDashboardSummary_([], "Timeline loads when Calendar is opened");
+    const rehearsals = timelineEventsFrom_(cached, { upcomingOnly: true, limit: 12, rehearsalsOnly: true });
+    return buildDashboardSummary_(rehearsals, rehearsals.length ? "Connected · cached" : "No upcoming rehearsals");
+  }
+
+  function buildDashboardSummary_(rehearsals, status) {
     const todayKey = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
     return {
       upcomingRehearsals: rehearsals,
       todaysRehearsals: rehearsals.filter(rehearsal => rehearsal.dateKey === todayKey),
       allEvents: rehearsals,
-      status: rehearsals.length ? "Connected" : "No timeline records loaded",
+      status: status || (rehearsals.length ? "Connected" : "No timeline records loaded"),
       lastRefreshed: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE, d MMM h:mma")
     };
   }
@@ -23,7 +37,11 @@ const TimelineService = (() => {
       throw new Error("Timeline data is unavailable: " + (err && err.message ? err.message : String(err)));
     }
 
-    let events = rehearsals.map(normaliseTimelineEvent_).filter(event => event.status !== "Archived");
+    return timelineEventsFrom_(rehearsals, opts);
+  }
+
+  function timelineEventsFrom_(rehearsals, opts) {
+    let events = (rehearsals || []).map(normaliseTimelineEvent_).filter(event => event.status !== "Archived");
     if (!canViewOperationalEvents_()) events = events.filter(event => event.eventType === "Rehearsal");
     if (opts.rehearsalsOnly) events = events.filter(event => event.eventType === "Rehearsal");
     if (opts.upcomingOnly) {
@@ -107,6 +125,7 @@ const TimelineService = (() => {
 
   return {
     getDashboardSummary,
+    getDashboardSummaryFast,
     getTimelineEvents,
     getCalendarData
   };

@@ -16,6 +16,16 @@ function runTimelineDateTests() {
     assert("explicit Australian numeric date", RehearsalService._test.buildDateKey("27/11/2026") === "2026-11-27");
     assert("ISO date", RehearsalService._test.buildDateKey("2026-11-27") === "2026-11-27");
     assert("invalid calendar date rejected", RehearsalService._test.buildDateKey("Fri, 31 Nov") === "");
+    const originalPeek = RehearsalService.peek, originalGetAll = RehearsalService.getAll;
+    try {
+      RehearsalService.peek = () => null;
+      RehearsalService.getAll = () => { throw new Error("Dashboard performed a cold Timeline load"); };
+      const fast = TimelineService.getDashboardSummaryFast();
+      assert("dashboard Timeline summary is cache-only", /Calendar/.test(fast.status) && fast.upcomingRehearsals.length === 0);
+    } finally {
+      RehearsalService.peek = originalPeek;
+      RehearsalService.getAll = originalGetAll;
+    }
   } finally {
     if (previousYear) properties.setProperty("SPEC_TIMELINE_YEAR", previousYear);
     else properties.deleteProperty("SPEC_TIMELINE_YEAR");

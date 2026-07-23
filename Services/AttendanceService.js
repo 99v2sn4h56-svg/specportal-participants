@@ -124,6 +124,73 @@ const AttendanceService = (() => {
     return result;
   }
 
+  /**
+   * Mints an opaque, expiring check-in token for a session, via the same
+   * secret-authenticated channel used by getParticipantHistory(). Used by
+   * the QR generation flow (portalIssueAttendanceCheckinToken in
+   * SpecPortal.js) instead of embedding the deterministic session hash
+   * directly in the check-in URL — see Attendance/Docs/StudentCheckinAudit.md,
+   * finding H1, and the Attendance-side PublicCheckinTokens.gs.
+   *
+   * Never cached: each call should mint (or the Attendance side should
+   * reuse an existing unexpired) token, not serve a stale one.
+   */
+  function issueCheckinToken(sessionId) {
+    const action = "issue-checkin-token";
+    const id = String(sessionId || "").trim();
+    if (!id) return failureResult_(action, "Session ID is required.");
+
+    const secret = PropertiesService.getScriptProperties()
+      .getProperty("SPEC_CENTRAL_ATTENDANCE_SECRET");
+    if (!secret || secret.length < 32) {
+      return unavailableResult_(action, "Secure Attendance integration is not configured.");
+    }
+
+    let result;
+    try {
+      const response = UrlFetchApp.fetch(getWebAppUrl(), {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ action, sessionId: id, secret }),
+        followRedirects: true,
+        muteHttpExceptions: true
+      });
+      const statusCode = response.getResponseCode();
+
+      if (statusCode < 200 || statusCode >= 300) {
+        return failureResult_(action, `Attendance API returned HTTP ${statusCode}.`, statusCode);
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(response.getContentText());
+      } catch (err) {
+        return failureResult_(action, "Attendance API returned invalid JSON.");
+      }
+
+      if (!parsed || parsed.ok !== true || parsed.action !== action || !parsed.data || !parsed.data.token) {
+        return failureResult_(action, parsed && parsed.error ? parsed.error : "Attendance API returned an invalid token response.");
+      }
+
+      result = {
+        ok: true,
+        action,
+        status: "Connected",
+        generatedAt: parsed.generatedAt || new Date().toISOString(),
+        token: parsed.data.token,
+        sessionId: parsed.data.sessionId || id,
+        expiresAt: parsed.data.expiresAt || 0
+      };
+    } catch (err) {
+      result = failureResult_(
+        action,
+        `Attendance API request failed: ${err && err.message ? err.message : String(err)}`
+      );
+    }
+
+    return result;
+  }
+
   function parseParticipantHistoryResponse_(responseText) {
     const action = "participant-history";
     let parsed;
@@ -412,6 +479,7 @@ const AttendanceService = (() => {
     getEvents,
     getEvent,
     getParticipantHistory,
+    issueCheckinToken,
     getHealth,
     getServiceHealth,
     invalidate

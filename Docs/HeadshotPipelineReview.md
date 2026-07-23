@@ -4,6 +4,16 @@
 **Scope:** Current SpecCentral full-page app, Participant Search spreadsheet tool, student headshots, Staff profile pictures, Drive matching, caching and browser delivery.  
 **Review type:** Read-only code investigation. No production data, Drive files or deployment settings were changed.
 
+## Implementation update — 15 July 2026
+
+The current local fix now treats Drive folder `1y9A0Nwh7icSssRzTDVaR3vamCn3oWWlB` as the canonical participant-headshot source. It remains active even if an older `HEADSHOT_PARTICIPANT_FOLDER_ID` Script Property is present; a configured folder is scanned as an additional source instead of replacing the canonical folder.
+
+The full-page participant list now requests a secure headshot for every visible participant with a stable ID. Initials remain visible while the request runs and remain as the fallback if no unique image is found. This removes the former dependency on `Photo ID` or `Photo URL` being populated before name-based matching could occur.
+
+The canonical index now scans image files in the folder and nested folders (to four levels), supports common image extensions including HEIC/HEIF and TIFF, and rejects ambiguous filename matches. Secure delivery prefers Google's converted Drive thumbnail where one is available, allowing large or phone-native originals to produce a browser-compatible JPEG without exposing the private Drive URL.
+
+Remaining operational requirements are that the web-app deployment identity can read the folder, and that filenames identify one participant unambiguously. The server diagnostics expose scanned file/folder counts, inaccessible folders, truncation and match totals to distinguish permissions from filename mismatches.
+
 ## Executive summary
 
 SpecCentral currently has three different image paths rather than one complete headshot pipeline:

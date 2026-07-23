@@ -8,6 +8,8 @@ function runHeadshotAssetServiceTests() {
     testHeadshotMissingFolderMetadata_,
     testHeadshotProjectionMetadata_,
     testHeadshotFastMetadataDoesNotBuildIndex_,
+    testHeadshotCanonicalFolderIsAlwaysIncluded_,
+    testHeadshotNestedFolderScan_,
     testHeadshotInvalidReference_,
     testHeadshotCacheInvalidation_
   ];
@@ -70,6 +72,29 @@ function testHeadshotFastMetadataDoesNotBuildIndex_() {
   } finally { PerformanceCacheService.peek = originalPeek; }
 }
 
+function testHeadshotCanonicalFolderIsAlwaysIncluded_() {
+  const original = PropertiesService.getScriptProperties;
+  try {
+    PropertiesService.getScriptProperties = () => ({ getProperty: () => "configured-folder" });
+    const folders = HeadshotAssetService._test.getFolderIds("participant");
+    assertHeadshot_(folders.includes("configured-folder") && folders.includes("1y9A0Nwh7icSssRzTDVaR3vamCn3oWWlB"), "A configured folder displaced the canonical participant folder.");
+  } finally { PropertiesService.getScriptProperties = original; }
+}
+
+function testHeadshotNestedFolderScan_() {
+  const original = DriveApp.getFolderById;
+  const iterator = values => { let index = 0; return { hasNext: () => index < values.length, next: () => values[index++] }; };
+  const file = { getId: () => "nested-photo", getName: () => "Smith, Alex - Headshot.HEIC", getMimeType: () => "image/heic", getLastUpdated: () => new Date("2026-07-15T00:00:00Z") };
+  const child = { getId: () => "child-folder", getFiles: () => iterator([file]), getFolders: () => iterator([]) };
+  const root = { getFiles: () => iterator([]), getFolders: () => iterator([child]) };
+  try {
+    DriveApp.getFolderById = id => id === "root-folder" ? root : child;
+    const index = HeadshotAssetService._test.scanFolders(["root-folder"]);
+    const match = HeadshotAssetService._test.matchRecord({ name: "Alex Smith" }, index);
+    assertHeadshot_(index.files.length === 1 && match.fileId === "nested-photo", "A nested HEIC headshot was not indexed by participant name.");
+  } finally { DriveApp.getFolderById = original; }
+}
+
 function testHeadshotInvalidReference_() {
   const asset = HeadshotAssetService._test.resolveRecordAsset("participant", { name: "Nobody", photoUrl: "not a valid reference" }, "student-1", headshotTestFileIndex_([]));
   assertHeadshot_(asset.matchStatus === "invalid-reference" && !asset.fileId, "Invalid reference status was not retained.");
@@ -110,6 +135,12 @@ function runSecureHeadshotProxyTests() {
       : headshotFakeResponse_(200, "", { getBytes: () => [1, 2, 3], getContentType: () => "image/jpeg" });
     const success = SecureImageService.resolveMany([{ entityType: "participant", entityId: "student-1", assetVersion: "success-case", size: "small" }])[0];
     results.push({ test: "secure proxy success", passed: !!(success.ok && /^data:image\/jpeg;base64,/.test(success.dataUrl)) });
+
+    UrlFetchApp.fetch = url => /fields=id/.test(url)
+      ? headshotFakeResponse_(200, JSON.stringify({ mimeType: "image/heic", size: 50000000, thumbnailLink: "https://example.test/photo=s120-c" }), null)
+      : headshotFakeResponse_(200, "", { getBytes: () => [1, 2, 3], getContentType: () => "image/jpeg" });
+    const converted = SecureImageService.resolveMany([{ entityType: "participant", entityId: "student-1", assetVersion: "heic-thumbnail-case", size: "small" }])[0];
+    results.push({ test: "secure proxy uses converted Drive thumbnail", passed: !!(converted.ok && converted.mimeType === "image/jpeg") });
 
     UrlFetchApp.fetch = () => headshotFakeResponse_(403, "", null);
     const failure = SecureImageService.resolveMany([{ entityType: "participant", entityId: "student-1", assetVersion: "failure-case", size: "small" }])[0];

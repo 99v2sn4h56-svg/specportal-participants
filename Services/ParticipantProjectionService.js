@@ -3,6 +3,7 @@ const ParticipantProjectionService = (() => {
   const LIST_FRESH_SECONDS = 5 * 60, LIST_RETAIN_SECONDS = 30 * 60;
   const PAGE_FRESH_SECONDS = 5 * 60, PAGE_RETAIN_SECONDS = 30 * 60;
   const FILTER_FRESH_SECONDS = 15 * 60, FILTER_RETAIN_SECONDS = 60 * 60;
+  const GROUP_FRESH_SECONDS = 15 * 60, GROUP_RETAIN_SECONDS = 60 * 60;
   const DASHBOARD_FRESH_SECONDS = 5 * 60, DASHBOARD_RETAIN_SECONDS = 30 * 60;
   const DEFAULT_PAGE_SIZE = 50;
   const DASHBOARD_SNAPSHOT_PROPERTY = "SC_DASHBOARD_PARTICIPANT_SUMMARY_V2";
@@ -10,7 +11,16 @@ const ParticipantProjectionService = (() => {
 
   function getList(user, options) {
     const actor = user || UserContextService.getCurrent(), key = ProjectionContractService.cacheKey("participantList", {}, actor), started = Date.now();
-    const cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(key, LIST_FRESH_SECONDS, LIST_RETAIN_SECONDS, () => buildList_(actor), cacheOptions_("participantList", options));
+    let cached;
+    try {
+      cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(key, LIST_FRESH_SECONDS, LIST_RETAIN_SECONDS, () => buildList_(actor), cacheOptions_("participantList", options));
+    } catch (error) {
+      // A projection publication collision must not make the highest-use data
+      // unavailable. The list transform is deliberately lightweight, so it is
+      // safe to return an uncached copy while the other request publishes.
+      if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
+      cached = { value: buildList_(actor), meta: { cache: "busy-direct-fallback", cacheStatus: "busy-direct-fallback", durationMs: Date.now() - started, isStale: false, generatedAt: new Date().toISOString(), expiresAt: "" } };
+    }
     PerformanceTelemetryService.record("participants.list.request", Date.now() - started, { cache: cached.meta.cache, records: cached.value && cached.value.participants ? cached.value.participants.length : 0, payloadBytes: estimateBytes_(cached.value), projection: "participant-list-v2", isStale: !!cached.meta.isStale });
     return withRequestMeta_(cached.value, cached.meta);
   }
@@ -41,6 +51,18 @@ const ParticipantProjectionService = (() => {
       return buildFilters_(visible.map(item => toListItem_(item, null)));
     }, cacheOptions_("participantFilters", options));
     PerformanceTelemetryService.record("participants.filters.request", Date.now() - started, { cache: cached.meta.cache, records: Object.keys(cached.value && cached.value.values || {}).reduce((sum, field) => sum + cached.value.values[field].length, 0), payloadBytes: estimateBytes_(cached.value), projection: "participant-filter-v1", isStale: !!cached.meta.isStale });
+    return withRequestMeta_(cached.value, cached.meta);
+  }
+
+  function getGroups(user, options) {
+    const actor = user || UserContextService.getCurrent(), key = ProjectionContractService.cacheKey("participantGroups", {}, actor), started = Date.now();
+    const cached = PerformanceCacheService.getOrLoadStaleWhileRevalidate(key, GROUP_FRESH_SECONDS, GROUP_RETAIN_SECONDS, () => {
+      const groups = filterGroupsForUser_(ParticipantService.getGroups(), actor).map(toGroupItem_);
+      const response = { groups, generatedAt: new Date().toISOString(), projection: ProjectionContractService.contract("participantGroups").version };
+      ProjectionContractService.validate("participantGroups", response);
+      return response;
+    }, cacheOptions_("participantGroups", options));
+    PerformanceTelemetryService.record("participants.groups.request", Date.now() - started, { cache: cached.meta.cache, records: (cached.value.groups || []).length, payloadBytes: estimateBytes_(cached.value), projection: "participant-groups-v1", isStale: !!cached.meta.isStale });
     return withRequestMeta_(cached.value, cached.meta);
   }
 
@@ -112,20 +134,22 @@ const ParticipantProjectionService = (() => {
       ProjectionContractService.cacheKey("dashboard", { component: "participants" }, null),
       ProjectionContractService.cacheKey("participantList", {}, user || {}),
       ProjectionContractService.cacheKey("participantFilters", {}, user || {}),
+      ProjectionContractService.cacheKey("participantGroups", {}, user || {}),
       ProjectionContractService.cacheKey("participantPage", normalisePageQuery_({ page: 1, pageSize: DEFAULT_PAGE_SIZE }), user || {})
     ].forEach(PerformanceCacheService.remove);
     PropertiesService.getScriptProperties().deleteProperty(DASHBOARD_SNAPSHOT_PROPERTY);
   }
 
   function buildList_(actor) {
-    const started = Date.now(), canonical = ParticipantService.getPortalData();
-    const visibleParticipants = filterParticipantsForUser_(canonical.participants || [], actor);
-    const headshots = HeadshotAssetService.getMetadataMany("participant", visibleParticipants);
+    const started = Date.now();
+    // Participant records are the priority. Do not make this route wait for
+    // school-group/master-school reads or a complete Drive headshot scan.
+    const visibleParticipants = filterParticipantsForUser_(ParticipantService.getAll(), actor);
+    const headshots = HeadshotAssetService.getMetadataManyFast("participant", visibleParticipants);
     const participants = visibleParticipants.map(item => toListItem_(item, headshots[String(item.studentKey || item.id || "")]));
-    const groups = filterGroupsForUser_(canonical.groups || [], actor).map(toGroupItem_);
-    const allowedSchools = new Set(participants.concat(groups).map(item => String(item.school || "").toLowerCase()).filter(Boolean));
-    const schools = (canonical.schools || []).filter(item => !allowedSchools.size || allowedSchools.has(String(item.schoolName || item.name || "").toLowerCase())).map(toSchoolItem_);
-    const response = { participants, groups, schools, photos: {}, generatedAt: new Date().toISOString(), sourceUpdatedAt: "", projection: ProjectionContractService.contract("participantList").version };
+    const schoolNames = Array.from(new Set(participants.map(item => String(item.school || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    const schools = schoolNames.map(name => ({ schoolName: name, name }));
+    const response = { participants, schools, photos: {}, generatedAt: new Date().toISOString(), sourceUpdatedAt: "", projection: ProjectionContractService.contract("participantList").version };
     ProjectionContractService.validate("participantList", response);
     PerformanceTelemetryService.record("participants.list.transform", Date.now() - started, { records: participants.length, payloadBytes: estimateBytes_(response), projection: "participant-list-v2" });
     return response;
@@ -225,5 +249,5 @@ const ParticipantProjectionService = (() => {
   function emptyDashboard_(status, cache) { return { categories: [], totalParticipants: 0, status, generatedAt: "", projection: ProjectionContractService.contract("dashboard").version, cache }; }
   function withRequestMeta_(value, meta) { const control = PlatformControlService.getConfig(); return Object.assign({}, value || {}, { requestMeta: { cache: meta.cache, cacheStatus: meta.cacheStatus || meta.cache, durationMs: meta.durationMs, payloadBytes: estimateBytes_(value), isStale: !!meta.isStale, schemaVersion: control.schemaVersion, cacheEpoch: control.cacheEpoch, generatedAt: meta.generatedAt || value && value.generatedAt || "", expiresAt: meta.expiresAt || "" } }); }
 
-  return { getList, getPage, getFilters, pageQueryKey, getDetail, getDashboardSnapshot, rebuildDashboardSnapshot, warm, warmShared, invalidate };
+  return { getList, getPage, getFilters, getGroups, pageQueryKey, getDetail, getDashboardSnapshot, rebuildDashboardSnapshot, warm, warmShared, invalidate };
 })();

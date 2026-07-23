@@ -9,6 +9,11 @@
 
 <aside id="notificationCentre" class="experienceDrawer" hidden aria-live="polite">
   <div class="commandHeader"><div><div class="scProfileKicker">Live platform feed</div><h3>Notifications</h3></div><button type="button" onclick="App.closeNotificationCentre()" aria-label="Close">×</button></div>
+  <section class="notificationTaskSection" aria-labelledby="notificationTasksTitle">
+    <div class="notificationSectionHeading"><div><span>Assigned to you</span><h4 id="notificationTasksTitle">My Tasks</h4></div><span id="notificationTaskCount" class="statusChip"></span></div>
+    <div id="notificationCentreTasks" class="dashboardTaskList"></div>
+  </section>
+  <div class="notificationSectionHeading notificationUpdatesHeading"><div><span>Platform feed</span><h4>Notifications</h4></div></div>
   <div class="notificationFilters"><button type="button" onclick="App.setNotificationFilter('all')">All</button><button type="button" onclick="App.setNotificationFilter('unread')">Unread</button><button type="button" onclick="App.setNotificationFilter('pinned')">Pinned</button></div>
   <div id="notificationCentreList"></div>
 </aside>

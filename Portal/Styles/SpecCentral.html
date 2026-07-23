@@ -1074,7 +1074,7 @@
     .participantProfileDrawer { width:min(620px,96vw); padding:0; overflow:auto; }
     .participantProfileDrawer .scProfileCard { min-height:100%; border:0; border-radius:0; box-shadow:none; }
     .participantProfileClose { position:fixed; z-index:4; right:18px; top:14px; width:36px; height:36px; border:1px solid rgba(255,255,255,.55); border-radius:12px; color:#fff; background:rgba(6,29,61,.7); font-size:22px; }
-    .productionOverviewPanel { margin-top:14px; }
+    .productionOverviewPanel { margin:0; }
     .productionOverviewGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:8px; }
     .productionTile { min-height:82px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid rgba(45,103,178,.12); border-radius:15px; color:var(--navy); text-align:left; box-shadow:0 7px 18px rgba(34,61,99,.08); transition:transform .16s ease,box-shadow .16s ease; }
     .productionTile:hover { transform:translateY(-2px); box-shadow:0 14px 28px rgba(6,29,61,.16); }
@@ -1317,6 +1317,14 @@
     .scAttendanceStatus.absent { background: #fee2e2; color: #991b1b; }
     .scAttendanceStatus.left-early { background: #ffedd5; color: #9a3412; }
     .scAttendanceStatus.waiting { background: #e2e8f0; color: #475569; }
+    .scAttendanceStatus.scheduled { background: #dbeafe; color: #1256cf; }
+
+    .scAttendanceHistoryDate {
+      font-weight: 700;
+      font-size: 14px;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }
 
     .scAttendanceHistoryMeta,
     .scAttendanceHistoryNote,
@@ -1649,6 +1657,13 @@
     .notificationCard.unread { border-left:4px solid var(--blue); background:#f7faff; }
     .notificationCard p { margin:7px 0; color:var(--muted); font-size:12px; }
     .notificationCard > div:last-child { display:flex; flex-direction:column; gap:5px; }
+    .notificationTaskSection { margin:18px 0 22px; padding:14px; border:1px solid #c9d9ef; border-radius:18px; background:linear-gradient(145deg,#f7faff,#eef4ff); }
+    .notificationSectionHeading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .notificationSectionHeading span:first-child { color:var(--blue); font-size:9px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+    .notificationSectionHeading h4 { margin:2px 0 0; color:var(--navy); font-size:17px; }
+    .notificationUpdatesHeading { margin:0 0 8px; }
+    .notificationTaskSection .statePanel { min-height:105px; padding:16px; }
+    .notificationTaskSection .dashboardTask { background:rgba(255,255,255,.9); }
     .statePanel { min-height:128px; display:grid; place-items:center; align-content:center; gap:5px; padding:24px; border:1px dashed #cbd6e7; border-radius:18px; color:var(--muted); background:linear-gradient(145deg,#fbfcff,#f5f8fd); text-align:center; }
     .statePanel strong { color:var(--navy); }
     .statePanel small { max-width:440px; }
@@ -1717,7 +1732,7 @@
     .briefingIdentityRow:last-child { border-bottom:0; }
     .briefingIdentityRow span { color:rgba(255,255,255,.7); font-size:10px; }
     .briefingIdentityRow strong { font-size:12px; text-align:right; }
-    .dashboardPrimaryGrid { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(320px,.75fr); gap:18px; }
+    .dashboardOverviewScheduleGrid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr); align-items:start; gap:18px; }
     .dashboardSecondaryGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
     .dashboardPanelHeading { display:flex; align-items:end; justify-content:space-between; gap:12px; margin-bottom:14px; }
     .dashboardPanelHeading span { color:var(--blue); font-size:9px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
@@ -2021,7 +2036,7 @@
     @media (max-width:1200px) { .operationsMetricGrid { grid-template-columns:repeat(3,minmax(150px,1fr)); } .operationsDashboardGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section:first-child { grid-column:1/-1; } .participantExplorerHeader { grid-template-columns:1fr; } .participantDropdownFilters { grid-template-columns:repeat(4,minmax(130px,1fr)); } }
     @media (max-width:1250px) { .workspaceTopRow { grid-template-columns:64px minmax(280px,1fr) auto; gap:14px; } .workspaceWelcome { display:none; } }
     @media (max-width:1060px) { .appShell, body.sidebarCollapsed .appShell { grid-template-columns:1fr; } .appSidebar, body.sidebarCollapsed .appSidebar { position:static; height:auto; padding:10px 14px; } .sidebarBrand { min-height:54px; margin-bottom:4px; } .sidebarLogo, body.sidebarCollapsed .sidebarLogo { width:92px; height:50px; } .sidebarNav { display:flex; gap:6px; overflow-x:auto; } .navSectionLabel, .navChildren { display:none!important; } .navItem, body.sidebarCollapsed .navItem { width:auto; flex:0 0 auto; justify-content:flex-start; padding:7px 10px; } .navItem span, body.sidebarCollapsed .navItem span { display:inline; } .navGroupToggle b { display:none; } .workspaceTopRow { grid-template-columns:auto minmax(240px,1fr) auto; } .viewAsControl { display:none!important; } }
-    @media (max-width:900px) { .dashboardBriefingHero, .dashboardPrimaryGrid, .dashboardSecondaryGrid, .timelineManagementGrid { grid-template-columns:1fr; } .participantExplorerBody { grid-template-columns:1fr; } .participantFilterPanel { position:static; max-height:none; } .participantDropdownFilters { grid-template-columns:repeat(3,minmax(130px,1fr)); } }
+    @media (max-width:900px) { .dashboardBriefingHero, .dashboardOverviewScheduleGrid, .dashboardSecondaryGrid, .timelineManagementGrid { grid-template-columns:1fr; } .participantExplorerBody { grid-template-columns:1fr; } .participantFilterPanel { position:static; max-height:none; } .participantDropdownFilters { grid-template-columns:repeat(3,minmax(130px,1fr)); } }
     @media (max-width:700px) { .operationsMetricGrid, .operationsEventGrid, .operationsDashboardGrid, .operationsFilterBar, .identitySummaryGrid { grid-template-columns:1fr 1fr; } .operationsDashboardGrid > section, .operationsWide { grid-column:1/-1; } .pageBreadcrumb, .topBarStatus { display:none; } .workspaceTopRow { grid-template-columns:auto 1fr auto; padding:9px 14px; } .workspaceSearch { font-size:0; min-width:0; } .workspaceSearch::before { content:"Search workspace"; font-size:11px; } .workspaceContextRow { padding:10px 16px 12px; } .briefingList, .dashboardProjectGrid { grid-template-columns:1fr; } .participantSearchRow { grid-template-columns:1fr; } .participantDropdownFilters { grid-template-columns:repeat(2,minmax(130px,1fr)); } .productionOverviewGrid { grid-template-columns:1fr 1fr; } }
     @media (max-width:480px) { .operationsMetricGrid, .operationsEventGrid, .operationsFilterBar, .timelineEditorForm { grid-template-columns:1fr; } .timelineEditorForm label.span2 { grid-column:auto; } .dashboardBriefingHero { padding:18px; } .briefingIdentityRow { grid-template-columns:1fr; gap:3px; } .briefingIdentityRow strong { text-align:left; } .scheduleRow { grid-template-columns:58px minmax(0,1fr); } .dashboardTask { grid-template-columns:1fr; } .participantDropdownFilters, .productionOverviewGrid { grid-template-columns:1fr; } }
 
@@ -2112,9 +2127,8 @@
       .dashboardCountdown strong { font-size:32px; }
       .dashboardPanelHeading { align-items:flex-start; gap:8px; }
       .dashboardPanelHeading .quickLink { flex:0 0 auto; }
-      .dashboardPrimaryGrid { display:flex; flex-direction:column; }
-      .dashboardSchedulePanel { order:1; }
-      .dashboardTasksPanel { order:2; }
+      .dashboardOverviewScheduleGrid { display:flex; flex-direction:column; }
+      .dashboardOverviewScheduleGrid > section { width:100%; }
       .dashboardSecondaryGrid { display:flex; flex-direction:column; }
       .productionOverviewGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .productionTile { min-width:0; min-height:76px; padding:10px; }

@@ -4,6 +4,9 @@
   <base target="_top">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Client-side QR rendering only (kazuhikoarase/qrcode-generator, MIT). No check-in URL or
+       token is ever sent to a third party to render this code — see App.openAttendanceQr(). -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Styles/SpecCentral').getContent(); ?>
 </head>
 <body>

@@ -21,7 +21,7 @@
         <div class="participantTableToolbar"><div id="participantStatus" class="status">Loading participant data…</div><div class="participantTableActions"><div id="participantActiveFilters" class="participantActiveFilters"></div></div></div>
         <div class="participantSearchRow">
           <input id="participantSearch" class="participantSearch participantTableSearch" type="search" placeholder="Search name, school, category, item or status…" autocomplete="off" oninput="App.queueParticipantExplorer()">
-          <div class="participantBulkActions"><button class="quickLink compact" type="button" onclick="App.exportParticipantExplorer()">Export safe list</button></div>
+          <div class="participantBulkActions"><button id="participantCopyEmails" class="quickLink compact" type="button" onclick="App.copyParticipantExplorerAllEmails()">Copy family emails</button><button class="quickLink compact" type="button" onclick="App.exportParticipantExplorer()">Export safe list</button></div>
         </div>
         <div id="participantResults" class="participantDatabase"></div>
         <div id="participantPagination" class="participantPagination"></div>
@@ -48,16 +48,12 @@
         root.classList.toggle("groupMode", groupMode);
         App.renderParticipantModeToggle();
         if (groupMode) {
-          if (!App.state.participantListComplete) {
+          if (!App.state.participantGroupsReady) {
             var groupResults = document.getElementById("participantResults");
-            if (App.state.participantGroupListLoading) return;
-            App.state.participantGroupListLoading = true;
             if (groupResults) groupResults.innerHTML = App.loadingState("Loading school groups");
-            App.loadPortalData(false).then(function () {
-              App.state.participantGroupListLoading = false;
-              if (App.state.participantListComplete) App.renderParticipantExplorer();
-              else if (groupResults) groupResults.innerHTML = App.emptyState("School groups are still warming", "Try again shortly; the Individuals list remains available.");
-            });
+            var groupStatus = document.getElementById("participantStatus");
+            if (groupStatus) groupStatus.textContent = "Loading school groups…";
+            if (!App.state.participantGroupListLoading) App.loadParticipantGroups(false).then(App.renderParticipantExplorer).catch(function (error) { if (groupResults) groupResults.innerHTML = App.emptyState("School groups could not be loaded", App.getErrorMessage(error)); });
             return;
           }
           var groups = App.getFilteredParticipantGroups();
@@ -113,12 +109,16 @@
         button.setAttribute("aria-selected", active ? "true" : "false");
         button.setAttribute("tabindex", active ? "0" : "-1");
       });
+      var copy = document.getElementById("participantCopyEmails");
+      if (copy) copy.textContent = mode === "groups" ? "Copy teacher emails" : "Copy family emails";
     },
 
     setParticipantExplorerMode: function (mode) {
       App.state.participantExplorerMode = mode === "groups" ? "groups" : "individuals";
       App.state.participantExplorerSearch = "";
       App.state.participantExplorerPage = 1;
+      App.state.participantExplorerCurrentRows = [];
+      App.state.participantExplorerCurrentGroups = [];
       localStorage.setItem("specParticipantExplorerMode", App.state.participantExplorerMode);
       App.renderParticipantExplorer();
     },
@@ -251,7 +251,7 @@
       if (status) status.textContent = total + " matching participants · page " + page + " of " + pages;
       el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable"><thead><tr>' + columns.map(function (column) { var sort = App.state.participantExplorerSort || {}; return '<th class="participantColumn participantColumn-' + column[0] + '"><button type="button" onclick="App.sortParticipantExplorer(\'' + column[0] + '\')">' + App.escapeHtml(column[1]) + (sort.key === column[0] ? (sort.direction === "asc" ? " ↑" : " ↓") : "") + '</button></th>'; }).join("") + '<th class="participantColumn participantColumn-open">Actions</th></tr></thead><tbody>' + rows.map(function (participant, index) {
         var values = App.getParticipantExplorerValues(participant), rowIndex = serverPage ? index : (page - 1) * size + index;
-        return '<tr>' + columns.map(function (column) { return '<td class="participantColumn participantColumn-' + column[0] + '" data-label="' + App.escapeHtml(column[1]) + '">' + App.renderParticipantCell(participant, values, column[0]) + '</td>'; }).join("") + '<td class="participantColumn participantColumn-open" data-label="Actions"><div class="participantRowActions"><button class="participantOpenButton" type="button" onclick="App.openExplorerParticipant(' + rowIndex + ')">Open profile →</button></div></td></tr>';
+        return '<tr>' + columns.map(function (column) { return '<td class="participantColumn participantColumn-' + column[0] + '" data-label="' + App.escapeHtml(column[1]) + '">' + App.renderParticipantCell(participant, values, column[0]) + '</td>'; }).join("") + '<td class="participantColumn participantColumn-open" data-label="Actions"><div class="participantRowActions"><button class="quickLink compact" type="button" onclick="App.copyExplorerParticipantFamilyEmails(' + rowIndex + ')">Copy emails</button><button class="participantOpenButton" type="button" onclick="App.openExplorerParticipant(' + rowIndex + ')">Open profile →</button></div></td></tr>';
       }).join("") + '</tbody></table></div>' : App.emptyState("No participants match these filters", "Clear or adjust the active filters.");
       if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>';
     },
@@ -263,12 +263,12 @@
       el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable participantGroupTable"><thead><tr><th>School</th><th>Group / Item</th><th>Category</th><th>Segment</th><th class="participantGroupColumn-students">Students</th><th>Teacher</th><th>Contact</th><th class="participantColumn-open">Actions</th></tr></thead><tbody>' + rows.map(function (group, index) {
         var values = App.getParticipantGroupValues(group), category = values.category ? '<span class="participantCategoryPills"><span class="categoryTone' + App.getParticipantCategoryTone(values.category) + '">' + App.escapeHtml(values.category) + '</span></span>' : '<span class="participantEmptyValue">—</span>';
         var rowIndex = (page - 1) * size + index;
-        return '<tr><td data-label="School"><strong>' + App.escapeHtml(values.school || "—") + '</strong></td><td data-label="Group / Item"><strong>' + App.escapeHtml(values.title) + '</strong>' + (values.item && values.item !== values.title ? '<small class="participantGroupItem">' + App.escapeHtml(values.item) + '</small>' : '') + '</td><td data-label="Category">' + category + '</td><td data-label="Segment">' + App.escapeHtml(values.segment || "—") + '</td><td class="participantGroupColumn-students" data-label="Students">' + App.escapeHtml(values.students) + '</td><td data-label="Teacher">' + App.escapeHtml(values.teachers || "—") + '</td><td data-label="Contact">Open the group profile</td><td class="participantColumn-open" data-label="Actions"><div class="participantRowActions"><button class="participantOpenButton" type="button" onclick="App.openExplorerGroup(' + rowIndex + ')">Open profile →</button></div></td></tr>';
+        return '<tr><td data-label="School"><strong>' + App.escapeHtml(values.school || "—") + '</strong></td><td data-label="Group / Item"><strong>' + App.escapeHtml(values.title) + '</strong>' + (values.item && values.item !== values.title ? '<small class="participantGroupItem">' + App.escapeHtml(values.item) + '</small>' : '') + '</td><td data-label="Category">' + category + '</td><td data-label="Segment">' + App.escapeHtml(values.segment || "—") + '</td><td class="participantGroupColumn-students" data-label="Students">' + App.escapeHtml(values.students) + '</td><td data-label="Teacher">' + App.escapeHtml(values.teachers || "—") + '</td><td data-label="Contact">Open the group profile</td><td class="participantColumn-open" data-label="Actions"><div class="participantRowActions"><button class="quickLink compact" type="button" onclick="App.copyExplorerGroupTeacherEmails(' + rowIndex + ')">Copy emails</button><button class="participantOpenButton" type="button" onclick="App.openExplorerGroup(' + rowIndex + ')">Open profile →</button></div></td></tr>';
       }).join("") + '</tbody></table></div>' : App.emptyState("No school groups match this search", "Clear or adjust the search text.");
       if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>';
     },
     renderParticipantCell: function (participant, values, key) { if (key === "rehearsal") { var rehearsal = App.getParticipantNextRehearsal(participant); return '<span class="' + (rehearsal === "Not scheduled" ? "participantEmptyValue" : "") + '">' + App.escapeHtml(rehearsal) + '</span>'; } if (key === "name") return '<span class="participantNameCell">' + App.renderParticipantRowAvatar(participant, values.name) + '<strong>' + App.escapeHtml(values.name) + '</strong></span>'; if (key === "category") return values.categories.length ? '<span class="participantCategoryPills">' + values.categories.map(function (category) { return '<button class="categoryTone' + App.getParticipantCategoryTone(category) + '" type="button" onclick="App.setParticipantExplorerFilter(\'category\',\'' + App.escapeJs(category) + '\')">' + App.escapeHtml(category) + '</button>'; }).join("") + '</span>' : '<span class="participantEmptyValue">—</span>'; if (key === "item") return values.items.length ? '<span class="participantItemPills">' + values.items.map(function (item) { return '<button class="participantItemChip" type="button" onclick="App.setParticipantExplorerFilter(\'item\',\'' + App.escapeJs(item) + '\')">' + App.escapeHtml(item) + '</button>'; }).join("") + '</span>' : '<span class="participantEmptyValue">—</span>'; if (key === "notes") return App.renderParticipantNoteChips(values.notes); var value = values[key] || ""; return '<span class="' + (!value ? "participantEmptyValue" : "") + '">' + App.escapeHtml(value || "—") + '</span>'; },
-    renderParticipantRowAvatar: function (participant, name) { var id = String(participant && (participant.studentKey || participant.id) || "").trim(); var content = participant && participant.hasPhoto && id ? App.secureAvatarHtml("participant", id, name, "card", participant.assetVersion) : '<span class="avatarFallbackInline" style="display:grid">' + App.escapeHtml(App.getInitials(name)) + '</span>'; return '<span class="participantRowAvatar" aria-hidden="true">' + content + '</span>'; },
+    renderParticipantRowAvatar: function (participant, name) { var id = String(participant && (participant.studentKey || participant.id) || "").trim(); var content = id ? App.secureAvatarHtml("participant", id, name, "card", participant.assetVersion) : '<span class="avatarFallbackInline" style="display:grid">' + App.escapeHtml(App.getInitials(name)) + '</span>'; return '<span class="participantRowAvatar" aria-hidden="true">' + content + '</span>'; },
     renderParticipantNoteChips: function (value) { var notes = App.participantArray(value); return notes.length ? '<span class="participantNotePills">' + notes.map(function (note) { var details = App.getParticipantNoteChipDetails(note); return details.filter ? '<button class="participantNoteChip ' + details.tone + '" type="button" onclick="App.setParticipantExplorerFilter(\'' + details.filter + '\',true)">' + App.escapeHtml(note) + '</button>' : '<span class="participantNoteChip ' + details.tone + '">' + App.escapeHtml(note) + '</span>'; }).join("") + '</span>' : '<span class="participantEmptyValue">—</span>'; },
     getParticipantNoteChipDetails: function (note) { var text = String(note || "").trim().toLowerCase(); if (/\b1st\b/.test(text)) return { tone: "noteFirst", filter: "firstTimeNote" }; if (/\blote\b/.test(text)) return { tone: "noteLanguage", filter: "loteNote" }; if (/\bsupport\s+needed\b/.test(text)) return { tone: "noteSupport", filter: "supportNeededNote" }; if (/\b(?:medical|med\s*plan)\b/.test(text)) return { tone: "noteMedical", filter: "medicalNote" }; if (/\b(?:aboriginal|torres\s+strait\s+islander|atsi|tsi)\b/.test(text)) return { tone: "noteCultural", filter: "culturalIdentity" }; if (/\bregional\b/.test(text)) return { tone: "noteRegional", filter: "" }; return { tone: "noteGeneral", filter: "" }; },
     getParticipantCategoryTone: function (category) { var hash = 0, text = String(category || "").toLowerCase(); for (var i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0; return Math.abs(hash) % 8; },

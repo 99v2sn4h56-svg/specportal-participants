@@ -13,22 +13,17 @@
       </div>
     </section>
 
-    <section class="panel productionOverviewPanel">
-      <div class="dashboardPanelHeading"><div><span>Live participants</span><h3>Production Overview</h3></div><button class="quickLink compact" type="button" onclick="App.navigate('participants')">Explore all participants →</button></div>
-      <div id="productionOverview" class="productionOverviewGrid" aria-live="polite"></div>
-    </section>
-
     <section id="unmatchedUserPanel" class="panel unmatchedUserPanel" hidden></section>
 
-    <div class="dashboardPrimaryGrid">
+    <div class="dashboardOverviewScheduleGrid">
       <section class="panel dashboardSchedulePanel">
         <div class="dashboardPanelHeading"><div><span>Today</span><h3>Today’s Schedule</h3></div></div>
         <div id="dashboardSchedule" class="dashboardSchedule" aria-live="polite"></div>
       </section>
 
-      <section class="panel dashboardTasksPanel">
-        <div class="dashboardPanelHeading"><div><span>Tasks</span><h3>My Tasks</h3></div></div>
-        <div id="dashboardTasks" class="dashboardTaskList" aria-live="polite"></div>
+      <section class="panel productionOverviewPanel">
+        <div class="dashboardPanelHeading"><div><span>Live participants</span><h3>Production Overview</h3></div><button class="quickLink compact" type="button" onclick="App.navigate('participants')">Explore all participants →</button></div>
+        <div id="productionOverview" class="productionOverviewGrid" aria-live="polite"></div>
       </section>
     </div>
 
@@ -37,16 +32,5 @@
       <div id="dashboardManagedEvents" class="dashboardManagedEvents" aria-live="polite"></div>
     </section>
 
-    <div class="dashboardSecondaryGrid">
-      <section class="panel">
-        <div class="dashboardPanelHeading"><div><span>Updates</span><h3>Notifications</h3></div></div>
-        <div id="dashboardNotifications" class="dashboardNotificationList" aria-live="polite"></div>
-      </section>
-
-      <section class="panel">
-        <div class="dashboardPanelHeading"><div><span>Active work</span><h3>My Projects</h3></div></div>
-        <div id="dashboardProjects" class="dashboardProjectGrid" aria-live="polite"></div>
-      </section>
-    </div>
   </div>
 </template>

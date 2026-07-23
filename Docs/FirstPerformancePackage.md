@@ -96,9 +96,9 @@ Thirty minutes is intentionally conservative. Rebuild frequency should be change
 
 ## Performance telemetry
 
-`PerformanceTelemetryService` emits `SC_PERF` structured log entries and keeps a bounded six-hour sample window for diagnostics. It records only approved dimensions such as cache status, record count, payload bytes, projection name and route. Cache labels remove permission-key identity components. Names, emails, image references and participant content are not recorded.
+`PerformanceTelemetryService` emits `SC_PERF_BATCH` structured log entries and keeps separate, size-bounded six-hour windows for canonical journeys and legacy operational diagnostics. Browser metric names and dimensions are exact server-side enums; arbitrary browser values are rejected. Names, emails, image references and participant content are not recorded.
 
-`portalGetPerformanceDiagnostics()` returns p50, p95, maximum and sample count by metric. Client timings are sent through `portalRecordClientPerformance()`.
+`portalGetPerformanceDiagnostics()` returns successful p50/p95, failure rate and degraded-storage counters by journey operation. Acknowledged client batches are sent through `portalRecordClientPerformanceBatch()`.
 
 Important metrics include:
 

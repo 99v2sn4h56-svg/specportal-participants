@@ -64,8 +64,10 @@ function portalListFormDefinitions() {
 }
 
 function portalGetFormsWorkspaceData(formId) {
-  requirePortalCapability_("Operations.View");
-  return FormResponseService.getWorkspaceData(String(formId || ""));
+  return PerformanceTelemetryService.measureJourney("forms-loading", () => {
+    requirePortalCapability_("Operations.View");
+    return FormResponseService.getWorkspaceData(String(formId || ""));
+  }, { route: "forms", phase: "workspace", projection: "forms-workspace" });
 }
 
 function portalSetFormStatus(formId, status) {
@@ -106,7 +108,7 @@ function portalGetProfileFormResponses(type, id, email) {
 }
 
 function portalGetCommunicationsWorkspace() {
-  return CommunicationService.getWorkspace();
+  return PerformanceTelemetryService.measureJourney("communications-loading", () => CommunicationService.getWorkspace(), { route: "communications", phase: "workspace", projection: "communications-workspace" });
 }
 
 function portalExecuteCommunicationCommand(commandName, input) {
@@ -137,7 +139,7 @@ function getCurrentStaffContext() {
 
 /** Lightweight authenticated shell bootstrap. Contract: spec-central-bootstrap-v2. */
 function portalBootstrap() {
-  return BootstrapService.getContext();
+  return PerformanceTelemetryService.measureJourney("dashboard-bootstrap", () => BootstrapService.getContext(), { route: "dashboard", phase: "bootstrap", projection: "bootstrap" });
 }
 
 function portalGetAuthorizationModel() {
@@ -221,26 +223,16 @@ function portalGetPerformanceDiagnostics() {
     cache: { client: "permission-scoped in-memory", server: "compressed script/user CacheService", participantSeconds: 600, timelineSeconds: 300, staffSeconds: 300, dashboardSeconds: 120, attendanceSummarySeconds: 120 },
     sync: DataSyncService.getArchitecture(),
     identity: UserContextService.getDiagnostics(),
-    samples: PerformanceTelemetryService.getSummary(),
+    telemetry: PerformanceTelemetryService.getDiagnostics(),
     control: PlatformControlService.getConfig(),
     headshots: HeadshotAssetService.getContract()
   };
 }
 
-function portalRecordClientPerformance(name, durationMs, detail) {
+function portalRecordClientPerformanceBatch(metrics, batchId) {
   const user = UserContextService.getCurrent();
   if (!user.email) throw new Error("Authentication is required.");
-  const metric = "client." + String(name || "unknown").toLowerCase().replace(/[^a-z0-9._-]/g, "-").slice(0, 70);
-  return PerformanceTelemetryService.record(metric, Math.min(10 * 60 * 1000, Math.max(0, Number(durationMs) || 0)), detail || {});
-}
-
-function portalRecordClientPerformanceBatch(metrics) {
-  const user = UserContextService.getCurrent();
-  if (!user.email) throw new Error("Authentication is required.");
-  return (Array.isArray(metrics) ? metrics : []).slice(0, 20).map(item => {
-    const metric = "client." + String(item && item.name || "unknown").toLowerCase().replace(/[^a-z0-9._-]/g, "-").slice(0, 70);
-    return PerformanceTelemetryService.record(metric, Math.min(10 * 60 * 1000, Math.max(0, Number(item && item.durationMs) || 0)), item && item.detail || {});
-  });
+  return PerformanceTelemetryService.recordClientBatch(metrics, batchId);
 }
 
 function portalGetUserContextDiagnostics() {
@@ -336,11 +328,13 @@ function portalApplyStableIdMigration(request) {
 }
 
 function portalPlatformSearch(query, options) {
-  const context = UserContextService.getCurrent();
-  if (!context.email) throw new Error("Authentication is required.");
-  const searchEpoch = CacheService.getScriptCache().get("SC_SEARCH_EPOCH") || "0";
-  const key = PerformanceCacheService.userProjectionKey(`search:${searchEpoch}:${String(query || "").toLowerCase()}:${Number(options && options.limit) || 50}`, context);
-  return PerformanceCacheService.getOrLoadUser(key, 60, () => PlatformSearchService.search(query, options));
+  return PerformanceTelemetryService.measureJourney("participant-search", () => {
+    const context = UserContextService.getCurrent();
+    if (!context.email) throw new Error("Authentication is required.");
+    const searchEpoch = CacheService.getScriptCache().get("SC_SEARCH_EPOCH") || "0";
+    const key = PerformanceCacheService.userProjectionKey(`search:${searchEpoch}:${String(query || "").toLowerCase()}:${Number(options && options.limit) || 50}`, context);
+    return PerformanceCacheService.getOrLoadUser(key, 60, () => PlatformSearchService.search(query, options));
+  }, { route: "search", phase: "platform-search", projection: "platform-search" });
 }
 
 function portalGetRelationship(request) {
@@ -368,14 +362,16 @@ function toSafeEventReference_(event) {
 }
 
 function portalGetSpecCentralConfig() {
-  const user = UserContextService.getCurrent();
-  const cached = PerformanceCacheService.getOrLoadUserDetailed(
-    PerformanceCacheService.userProjectionKey("dashboard", user),
-    60,
-    () => DashboardService.getProjection()
-  );
-  const control = PlatformControlService.getConfig();
-  return Object.assign({}, cached.value, { requestMeta: { cache: cached.meta.cache, cacheStatus: cached.meta.cache, durationMs: cached.meta.durationMs, isStale: false, schemaVersion: control.schemaVersion, cacheEpoch: control.cacheEpoch, payloadBytes: JSON.stringify(cached.value || {}).length } });
+  return PerformanceTelemetryService.measureJourney("dashboard-bootstrap", () => {
+    const user = UserContextService.getCurrent();
+    const cached = PerformanceCacheService.getOrLoadUserDetailed(
+      PerformanceCacheService.userProjectionKey("dashboard", user),
+      60,
+      () => DashboardService.getProjection()
+    );
+    const control = PlatformControlService.getConfig();
+    return Object.assign({}, cached.value, { requestMeta: { cache: cached.meta.cache, cacheStatus: cached.meta.cache, durationMs: cached.meta.durationMs, isStale: false, schemaVersion: control.schemaVersion, cacheEpoch: control.cacheEpoch, payloadBytes: JSON.stringify(cached.value || {}).length } });
+  }, { route: "dashboard", phase: "dashboard", projection: "dashboard" });
 }
 
 function portalGetDashboardProjection() {
@@ -484,6 +480,10 @@ function portalGetParticipantFilterProjection(options) {
   return ParticipantProjectionService.getFilters(requirePortalCapability_("Participants.View"), options || {});
 }
 
+function portalGetParticipantGroupsProjection(options) {
+  return ParticipantProjectionService.getGroups(requirePortalCapability_("Participants.View"), options || {});
+}
+
 function portalGetActiveAttendanceProjection(options) {
   requirePortalCapability_("Attendance.View");
   return AttendanceProjectionService.getActive(options || {});
@@ -495,7 +495,7 @@ function portalPeekActiveAttendanceProjection() {
 }
 
 function portalGetParticipantDetail(studentKey) {
-  return ParticipantProjectionService.getDetail(studentKey, requirePortalCapability_("Participants.View"));
+  return PerformanceTelemetryService.measureJourney("participant-passport", () => ParticipantProjectionService.getDetail(studentKey, requirePortalCapability_("Participants.View")), { route: "participants", phase: "detail", projection: "participant-detail", records: 1 });
 }
 
 function portalWarmStartupProjections() {
@@ -580,23 +580,25 @@ function portalRefreshRehearsals() {
 }
 
 function portalGetCalendarData() {
-  const user = requirePortalCapability_("Calendar.View");
-  return PerformanceCacheService.getOrLoadUser(
-    PerformanceCacheService.userProjectionKey("calendar", user),
-    3 * 60,
-    () => {
-      const data = TimelineService.getCalendarData();
-      return Object.assign({}, data, { events: filterEventsForUser_(data.events || [], user) });
-    }
-  );
+  return PerformanceTelemetryService.measureJourney("event-loading", () => {
+    const user = requirePortalCapability_("Calendar.View");
+    return PerformanceCacheService.getOrLoadUser(
+      PerformanceCacheService.userProjectionKey("calendar", user),
+      3 * 60,
+      () => {
+        const data = TimelineService.getCalendarData();
+        return Object.assign({}, data, { events: filterEventsForUser_(data.events || [], user) });
+      }
+    );
+  }, { route: "calendar", phase: "calendar", projection: "calendar" });
 }
 
 function portalGetEventManagerLanding() {
-  return EventManagerService.getLanding();
+  return PerformanceTelemetryService.measureJourney("event-loading", () => EventManagerService.getLanding(), { route: "operations", phase: "landing", projection: "event-manager" });
 }
 
 function portalGetEventWorkspace(eventId, section, options) {
-  return EventManagerService.getWorkspace(eventId, section, options || {});
+  return PerformanceTelemetryService.measureJourney("event-loading", () => EventManagerService.getWorkspace(eventId, section, options || {}), { route: "operations", phase: "workspace", projection: "event-workspace" });
 }
 
 function portalGetManagedEventWorkflow(eventId) {
@@ -647,6 +649,15 @@ function portalGetAttendanceEvent(identifier) {
 function portalGetAttendanceHealth() {
   requirePortalCapability_("Attendance.View");
   return AttendanceService.getHealth();
+}
+
+function portalIssueAttendanceCheckinToken(sessionId) {
+  requirePortalCapability_("Attendance.View");
+  const id = String(sessionId || "").trim();
+  if (!id) {
+    return { ok: false, action: "issue-checkin-token", error: "Session ID is required." };
+  }
+  return AttendanceService.issueCheckinToken(id);
 }
 
 function portalGetParticipantAttendanceHistory(studentKey) {

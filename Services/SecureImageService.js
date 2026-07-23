@@ -81,12 +81,16 @@ const SecureImageService = (() => {
     if (code === 401 || code === 403) throw coded_("FILE_ACCESS_DENIED");
     if (code < 200 || code >= 300) throw coded_("UNKNOWN_IMAGE_ERROR");
     const metadata = JSON.parse(metadataResponse.getContentText() || "{}");
-    validateMeta_(metadata.mimeType, Number(metadata.size) || 0);
     let response;
     if (metadata.thumbnailLink) {
+      // Drive can safely render thumbnails for HEIC/TIFF and large originals.
+      // Validate the returned thumbnail bytes below rather than rejecting the
+      // source format or full-resolution size before conversion.
+      if (!/^image\//i.test(String(metadata.mimeType || ""))) throw coded_("UNSUPPORTED_MIME_TYPE");
       const link = String(metadata.thumbnailLink).replace(/=s\d+(?:-c)?$/, "=s" + pixels + "-c");
       response = UrlFetchApp.fetch(link, options);
     } else {
+      validateMeta_(metadata.mimeType, Number(metadata.size) || 0);
       response = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media", options);
     }
     if (response.getResponseCode() === 401 || response.getResponseCode() === 403) throw coded_("FILE_ACCESS_DENIED");

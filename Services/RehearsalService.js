@@ -1,37 +1,33 @@
 const RehearsalService = (() => {
-  // V5 rebuilds rows after the yearless spreadsheet-date normalisation fix.
-  const CACHE_KEY = "SPEC_TIMELINE_EVENTS_V5";
-  const CACHE_SECONDS = 5 * 60;
-  const CACHE_MAX_CHARS = 80000;
+  // V6 uses the shared compressed/chunked cache. The Timeline projection now
+  // exceeds CacheService's single-value limit, so the former 80 KB guard made
+  // every dashboard request reread the complete spreadsheet.
+  const CACHE_KEY = "timeline:events:v6";
+  const CACHE_SECONDS = 30 * 60;
 
   function getAll() {
-    const cache = CacheService.getScriptCache();
-    const cached = cache.get(CACHE_KEY);
-
-    if (cached) {
-      try {
-        return JSON.parse(cached);
-      } catch (err) {
-        cache.remove(CACHE_KEY);
-      }
-    }
-
-    const rehearsals = loadTimeline_();
-    const json = JSON.stringify(rehearsals);
-    if (json.length <= CACHE_MAX_CHARS) {
-      try {
-        cache.put(CACHE_KEY, json, CACHE_SECONDS);
-      } catch (err) {
-        Logger.log("Timeline cache skipped: " + (err && err.message ? err.message : err));
-      }
-    }
-
-    return rehearsals;
+    return PerformanceCacheService.getOrLoad(CACHE_KEY, CACHE_SECONDS, loadTimeline_, { leaseSeconds: 90, lockWaitMs: 8000 });
   }
 
   function refresh() {
-    CacheService.getScriptCache().remove(CACHE_KEY);
+    invalidate();
     return getAll();
+  }
+
+  /** Cache-only first-paint path. Never reads the Timeline spreadsheet. */
+  function peek() {
+    const cached = PerformanceCacheService.peek(CACHE_KEY);
+    if (Array.isArray(cached)) return cached;
+    // One-release compatibility while V5 entries naturally expire.
+    try {
+      const legacy = CacheService.getScriptCache().get("SPEC_TIMELINE_EVENTS_V5");
+      return legacy ? JSON.parse(legacy) : null;
+    } catch (_) { return null; }
+  }
+
+  function invalidate() {
+    PerformanceCacheService.remove(CACHE_KEY);
+    CacheService.getScriptCache().removeAll(["SPEC_TIMELINE_EVENTS_V3", "SPEC_TIMELINE_EVENTS_V4", "SPEC_TIMELINE_EVENTS_V5"]);
   }
 
   function byDate(dateValue) {
@@ -428,6 +424,8 @@ const RehearsalService = (() => {
 
   return {
     getAll,
+    peek,
+    invalidate,
     refresh,
     byDate,
     byVenue,

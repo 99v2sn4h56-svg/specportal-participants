@@ -6,9 +6,11 @@
  * index is built, never during an individual browser image request.
  */
 const HeadshotAssetService = (() => {
-  const CONTRACT = "headshot-asset-v3";
+  const CONTRACT = "headshot-asset-v4";
   const CACHE_SECONDS = 6 * 60 * 60;
-  const LEGACY_PARTICIPANT_FOLDER_ID = "1y9A0Nwh7icSssRzTDVaR3vamCn3oWWlB";
+  const CANONICAL_PARTICIPANT_FOLDER_ID = "1y9A0Nwh7icSssRzTDVaR3vamCn3oWWlB";
+  const MAX_SCAN_FILES = 5000;
+  const MAX_SCAN_DEPTH = 4;
   const CONFIG = Object.freeze({
     participantFolderProperty: "HEADSHOT_PARTICIPANT_FOLDER_ID",
     staffFolderProperty: "HEADSHOT_STAFF_FOLDER_ID"
@@ -90,8 +92,8 @@ const HeadshotAssetService = (() => {
 
   function buildIndex_(entityType, records) {
     const sourceRecords = Array.isArray(records) ? records : entityType === "participant" ? ParticipantService.getAll() : StaffService.getAll();
-    const folderId = getFolderId_(entityType);
-    const fileIndex = folderId ? scanFolder_(folderId) : emptyFileIndex_();
+    const folderIds = getFolderIds_(entityType);
+    const fileIndex = folderIds.length ? scanFolders_(folderIds) : emptyFileIndex_();
     const assets = {};
     const counts = { explicit: 0, filename: 0, ambiguous: 0, unmatched: 0, invalidReference: 0 };
 
@@ -113,9 +115,12 @@ const HeadshotAssetService = (() => {
     return {
       contract: CONTRACT,
       entityType,
-      folderConfigured: !!folderId,
+      folderConfigured: !!folderIds.length,
+      folderCount: fileIndex.folderCount || folderIds.length,
       generatedAt: new Date().toISOString(),
       fileCount: fileIndex.files.length,
+      scanTruncated: !!fileIndex.truncated,
+      inaccessibleFolders: Number(fileIndex.inaccessibleFolders || 0),
       duplicateKeys: fileIndex.duplicateKeys,
       counts,
       assets
@@ -143,19 +148,48 @@ const HeadshotAssetService = (() => {
     return unresolved_(entityType, stableId, explicit && match.status === "unmatched" ? "invalid-reference" : match.status);
   }
 
-  function scanFolder_(folderId) {
-    const files = [], byKey = {};
-    const iterator = DriveApp.getFolderById(folderId).getFiles();
-    while (iterator.hasNext()) {
-      const file = iterator.next();
-      const entry = { fileId: file.getId(), name: file.getName(), updatedAt: safeDate_(file) };
-      files.push(entry);
-      filenameKeys_(entry.name).forEach(key => {
-        if (!byKey[key]) byKey[key] = [];
-        byKey[key].push(entry);
-      });
+  function scanFolders_(folderIds) {
+    const files = [], byKey = {}, seenFiles = new Set(), seenFolders = new Set();
+    const queue = unique_(folderIds).map(id => ({ id, depth: 0 }));
+    let inaccessibleFolders = 0, truncated = false;
+    while (queue.length && files.length < MAX_SCAN_FILES) {
+      const current = queue.shift();
+      if (!current.id || seenFolders.has(current.id)) continue;
+      seenFolders.add(current.id);
+      let folder;
+      try { folder = DriveApp.getFolderById(current.id); }
+      catch (_) { inaccessibleFolders++; continue; }
+      try {
+        const iterator = folder.getFiles();
+        while (iterator.hasNext() && files.length < MAX_SCAN_FILES) {
+          const file = iterator.next(), fileId = file.getId(), name = file.getName();
+          if (seenFiles.has(fileId) || !isImageFile_(file, name)) continue;
+          seenFiles.add(fileId);
+          const entry = { fileId, name, updatedAt: safeDate_(file) };
+          files.push(entry);
+          filenameKeys_(entry.name).forEach(key => {
+            if (!byKey[key]) byKey[key] = [];
+            byKey[key].push(entry);
+          });
+        }
+        if (files.length >= MAX_SCAN_FILES && iterator.hasNext()) truncated = true;
+      } catch (_) { inaccessibleFolders++; }
+      if (current.depth >= MAX_SCAN_DEPTH) continue;
+      try {
+        const folders = folder.getFolders();
+        while (folders.hasNext()) {
+          const child = folders.next();
+          queue.push({ id: child.getId(), depth: current.depth + 1 });
+        }
+      } catch (_) { inaccessibleFolders++; }
     }
-    return { files, byKey, duplicateKeys: Object.keys(byKey).filter(key => byKey[key].length > 1).length };
+    if (queue.length) truncated = true;
+    return { files, byKey, duplicateKeys: Object.keys(byKey).filter(key => byKey[key].length > 1).length, folderCount: seenFolders.size, inaccessibleFolders, truncated };
+  }
+
+  function isImageFile_(file, name) {
+    try { if (/^image\//i.test(String(file.getMimeType() || ""))) return true; } catch (_) {}
+    return /\.(?:jpe?g|png|webp|gif|heic|heif|tiff?|bmp)$/i.test(String(name || ""));
   }
 
   function matchRecord_(record, fileIndex) {
@@ -221,11 +255,14 @@ const HeadshotAssetService = (() => {
     return { valid: false, errorCategory: /drive|docs\.google/i.test(first) ? "FILE_ID_PARSE_FAILED" : "UNSUPPORTED_REFERENCE" };
   }
 
-  function getFolderId_(entityType) {
+  function getFolderIds_(entityType) {
     const properties = PropertiesService.getScriptProperties();
     const property = entityType === "participant" ? CONFIG.participantFolderProperty : CONFIG.staffFolderProperty;
     const configured = String(properties.getProperty(property) || "").trim();
-    return configured || (entityType === "participant" ? LEGACY_PARTICIPANT_FOLDER_ID : "");
+    // The supplied TAU headshot folder remains canonical even if an older
+    // Script Property points elsewhere. A configured folder is additive so a
+    // migration can be staged without making the canonical photos disappear.
+    return unique_([configured, entityType === "participant" ? CANONICAL_PARTICIPANT_FOLDER_ID : ""]);
   }
 
   function invalidate(entityType) {
@@ -250,7 +287,7 @@ const HeadshotAssetService = (() => {
   }
 
   function diagnostics_(index) {
-    return { entityType: index.entityType, contract: index.contract, folderConfigured: index.folderConfigured, generatedAt: index.generatedAt, fileCount: index.fileCount, duplicateKeys: index.duplicateKeys, counts: index.counts };
+    return { entityType: index.entityType, contract: index.contract, folderConfigured: index.folderConfigured, folderCount: index.folderCount || 0, generatedAt: index.generatedAt, fileCount: index.fileCount, duplicateKeys: index.duplicateKeys, scanTruncated: !!index.scanTruncated, inaccessibleFolders: Number(index.inaccessibleFolders || 0), counts: index.counts };
   }
 
   function publicMetadata_(asset) {
@@ -266,7 +303,7 @@ const HeadshotAssetService = (() => {
   function explicitReference_(entityType, record) { return entityType === "participant" ? record.photoId || record.photoUrl || "" : record.photoId || record.photoUrl || record.photo || ""; }
   function stableId_(entityType, record) { return String(entityType === "participant" ? record.studentKey || record.id : record.staffId || record.email || record.primaryEmail || record.id || "").trim(); }
   function normaliseEntityType_(value) { const type = String(value || "").toLowerCase(); if (!["participant", "staff"].includes(type)) throw new Error("Unsupported headshot owner type."); return type; }
-  function emptyFileIndex_() { return { files: [], byKey: {}, duplicateKeys: 0 }; }
+  function emptyFileIndex_() { return { files: [], byKey: {}, duplicateKeys: 0, folderCount: 0, inaccessibleFolders: 0, truncated: false }; }
   function safeDate_(file) { try { return file.getLastUpdated().toISOString(); } catch (_) { return ""; } }
   function unique_(values) { return Array.from(new Set((values || []).filter(Boolean))); }
   function digest_(value, length) { return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(value || ""))).replace(/=+$/, "").slice(0, length || 24); }
@@ -284,5 +321,5 @@ const HeadshotAssetService = (() => {
   }
   function getContract() { return { version: CONTRACT, ownerKey: "stableId", entityTypes: ["participant", "staff"], sizes: SIZES.slice(), currentStorage: "private Drive adapter behind authenticated proxy", futureStorage: "private Cloud Storage adapter", delivery: "permission-scoped ephemeral response", rawStorageReferencesExposed: false, configurationProperties: Object.assign({}, CONFIG) }; }
 
-  return { resolveMany, resolveTrustedMany, getMetadataMany, getMetadataManyFast, getAsset, parseReference, invalidate, refresh, diagnostics, testResolution, getContract, _test: { normaliseName: normaliseName_, filenameKeys: filenameKeys_, matchRecord: matchRecord_, resolveRecordAsset: resolveRecordAsset_, rejectSharedFilenameOwners: rejectSharedFilenameOwners_, buildIndex: buildIndex_, publicMetadata: publicMetadata_ } };
+  return { resolveMany, resolveTrustedMany, getMetadataMany, getMetadataManyFast, getAsset, parseReference, invalidate, refresh, diagnostics, testResolution, getContract, _test: { normaliseName: normaliseName_, filenameKeys: filenameKeys_, matchRecord: matchRecord_, resolveRecordAsset: resolveRecordAsset_, rejectSharedFilenameOwners: rejectSharedFilenameOwners_, buildIndex: buildIndex_, scanFolders: scanFolders_, getFolderIds: getFolderIds_, publicMetadata: publicMetadata_ } };
 })();

@@ -1,6 +1,7 @@
   <script>
     Object.assign(App, {
       runParticipantSearch: function () {
+        var started = performance.now();
         if (App.state.participantSearchTimer) {
           clearTimeout(App.state.participantSearchTimer);
           App.state.participantSearchTimer = null;
@@ -45,6 +46,7 @@
         resultsEl.innerHTML = App.state.latestResults.length
           ? App.state.latestResults.map(App.renderResultCard).join("")
           : '<div class="empty">No matches found.</div>';
+        App.recordClientPerformance("journey.participant-search", started, { route: "participants", phase: "legacy-local", status: "completed", records: App.state.latestResults.length, cache: "client-memory" });
       },
 
       queueParticipantSearch: function () {

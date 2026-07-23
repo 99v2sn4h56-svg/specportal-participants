@@ -4,6 +4,7 @@ const ProjectionContractService = (() => {
     dashboard: Object.freeze({ name: "dashboard", version: "dashboard-v2" }),
     participantList: Object.freeze({ name: "participants-list", version: "participant-list-v2" }),
     participantPage: Object.freeze({ name: "participants-page", version: "participant-list-page-v2" }),
+    participantGroups: Object.freeze({ name: "participant-groups", version: "participant-groups-v1" }),
     participantFilters: Object.freeze({ name: "participants-filters", version: "participant-filter-v2" }),
     participantDetail: Object.freeze({ name: "participant-detail", version: "participant-detail-v2" }),
     activeAttendance: Object.freeze({ name: "attendance-active", version: "attendance-active-v1" })
@@ -18,6 +19,7 @@ const ProjectionContractService = (() => {
     "schools", "years", "disciplines", "categories", "items", "regions", "directorates",
     "statuses", "participationTypes", "segments", "schoolGroups", "genders"
   ]);
+  const GROUP_FIELDS = Object.freeze(["id", "groupId", "school", "segment", "item", "category", "groupName", "acceptedCount", "allocatedCount", "count", "acceptanceStatus", "teacherName", "secondTeacherName", "classroom"]);
   const FORBIDDEN_LIST_FIELD = /(^|_)(email|phone|mobile|parent|teacher|medical|support|note|form|audit|photoid|photourl|drive|raw)(_|$)/i;
 
   function contract(name) {
@@ -54,6 +56,7 @@ const ProjectionContractService = (() => {
     if (projection && projection.projection !== definition.version) errors.push("Projection schema-version mismatch.");
     if (name === "dashboard") validateDashboard_(projection, errors);
     if (name === "participantList" || name === "participantPage") validateParticipantCollection_(projection, errors);
+    if (name === "participantGroups") validateParticipantGroups_(projection, errors);
     if (name === "participantFilters") validateFilters_(projection, errors);
     if (name === "participantDetail") validateDetail_(projection, errors);
     if (name === "activeAttendance") validateAttendance_(projection, errors);
@@ -89,6 +92,15 @@ const ProjectionContractService = (() => {
       if (participant && participant.assetKey && !/^participant:[^\s]+:headshot$/.test(String(participant.assetKey))) errors.push("Invalid participant asset key.");
     });
     if (value.generatedAt && !validDate_(value.generatedAt)) errors.push("Participant projection generatedAt is malformed.");
+  }
+
+  function validateParticipantGroups_(value, errors) {
+    const groups = value && value.groups;
+    if (!Array.isArray(groups)) return errors.push("Participant group projection requires a groups array.");
+    groups.forEach((group, index) => {
+      if (!String(group && (group.groupId || group.id) || "").trim()) errors.push("Participant group " + index + " is missing a stable ID.");
+      Object.keys(group || {}).forEach(field => { if (!GROUP_FIELDS.includes(field) || FORBIDDEN_LIST_FIELD.test(field)) errors.push("Unexpected participant-group field: " + field + "."); });
+    });
   }
 
   function validateFilters_(value, errors) {

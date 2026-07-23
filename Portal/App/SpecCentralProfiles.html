@@ -22,10 +22,11 @@
             var detail = response && response.participant;
             if (!detail) throw new Error("Participant detail was empty.");
             App.state.selectedParticipant = detail;
-            App.recordClientPerformance("participant-detail", started, { records: 1, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(response) : 0, projection: "participant-detail" });
+            App.recordClientPerformance("journey.participant-passport", started, { route: "participants", status: "completed", records: 1, payloadBytes: App.estimatePayloadSize ? App.estimatePayloadSize(response) : 0, projection: "participant-detail" });
             App.renderParticipantProfile(detail);
           })
           .catch(function (error) {
+            App.recordClientPerformance("journey.participant-passport", started, { route: "participants", status: "failed", reason: "request-failed", projection: "participant-detail" });
             App.notify("Participant details could not be loaded: " + App.getErrorMessage(error));
             if (App.state.selectedParticipant === participant) App.renderParticipantProfile(participant);
           });
@@ -96,6 +97,8 @@
         App.recordRecentlyViewed("participant", name, participant.id || participant.studentKey, school);
         if (App.state.currentPage !== "dashboard") App.setWorkspaceBreadcrumb(["Participants", name]);
 
+        App.state.participantAttendanceMerge = { history: null, historyError: null, rehearsals: null, rehearsalsError: null };
+
         panel.innerHTML =
           '<button class="participantProfileClose" type="button" onclick="App.closeParticipantProfile()" aria-label="Close Participant Passport">×</button>' +
           '<div class="scProfileCard">' +
@@ -108,27 +111,6 @@
               (categoryLine ? '<div class="pillRow" style="justify-content:center;"><span class="pill">' + App.escapeHtml(categoryLine) + '</span></div>' : '') +
             '</div>' +
             '<div class="scProfileBody">' +
-              '<div class="sectionTitle">Participation</div>' +
-              '<div class="scProfileSection">' +
-                App.profileLine("Item", App.getParticipantItem(participant)) +
-                App.profileLine("Category", categoryLine) +
-              '</div>' +
-              '<div class="sectionTitle">Attendance History</div>' +
-              '<div id="participantAttendanceHistory" class="scProfileSection scAttendanceHistory">' +
-                '<div class="empty">Loading attendance history...</div>' +
-              '</div>' +
-              '<div class="sectionTitle">Rehearsal Schedule</div>' +
-              '<div id="participantRehearsalSchedule" class="scProfileSection scAttendanceHistory">' +
-                '<div class="empty">Loading Timeline schedule...</div>' +
-              '</div>' +
-              '<div class="sectionTitle">Submitted Forms</div>' +
-              '<div id="participantFormResponses" class="scProfileSection scAttendanceHistory"><div class="empty">Loading submitted forms...</div></div>' +
-              '<div class="sectionTitle">School & Teacher</div>' +
-              '<div class="scProfileSection">' +
-                App.profileLine("School", school) +
-                App.profileLine("Year", App.getParticipantYear(participant) ? "Year " + App.getParticipantYear(participant) : "") +
-                App.profileLine("Teacher", [App.getParticipantTeacherName(participant), App.getParticipantTeacherEmail(participant)].filter(Boolean).join(" - ")) +
-              '</div>' +
               '<div class="sectionTitle">Student Details</div>' +
               '<div class="scProfileSection">' +
                 App.profileLine("Student email", App.getParticipantStudentEmail(participant)) +
@@ -140,6 +122,23 @@
               '<div class="scProfileSection">' +
                 App.profileLine("Parent / Carer 1", [App.getParticipantParentName(participant), App.getParticipantParentEmail(participant), App.getParticipantParentPhone(participant)].filter(Boolean).join(" - ")) +
                 App.profileLine("Parent / Carer 2", [App.getParticipantAdditionalParentName(participant), App.getParticipantAdditionalParentEmail(participant), App.getParticipantAdditionalParentPhone(participant)].filter(Boolean).join(" - ")) +
+              '</div>' +
+              '<div class="sectionTitle">School & Teacher</div>' +
+              '<div class="scProfileSection">' +
+                App.profileLine("School", school) +
+                App.profileLine("Year", App.getParticipantYear(participant) ? "Year " + App.getParticipantYear(participant) : "") +
+                App.profileLine("Teacher", [App.getParticipantTeacherName(participant), App.getParticipantTeacherEmail(participant)].filter(Boolean).join(" - ")) +
+              '</div>' +
+              '<div class="sectionTitle">Participation</div>' +
+              '<div class="scProfileSection">' +
+                App.profileLine("Item", App.getParticipantItem(participant)) +
+                App.profileLine("Category", categoryLine) +
+              '</div>' +
+              '<div class="sectionTitle">Submitted Forms</div>' +
+              '<div id="participantFormResponses" class="scProfileSection scAttendanceHistory"><div class="empty">Loading submitted forms...</div></div>' +
+              '<div class="sectionTitle">Attendance</div>' +
+              '<div id="participantAttendance" class="scProfileSection scAttendanceHistory">' +
+                '<div class="empty">Loading attendance...</div>' +
               '</div>' +
             '</div>' +
           '</div>';
@@ -171,43 +170,49 @@
       },
 
       loadParticipantRehearsalSchedule: function (participant) {
-        var container = document.getElementById("participantRehearsalSchedule");
+        var merge = App.state.participantAttendanceMerge;
         var studentKey = String(participant && participant.studentKey || "").trim();
-        if (!container || !studentKey) return;
+        if (!participant || !merge) return;
+        if (!studentKey) {
+          merge.rehearsals = [];
+          App.renderParticipantAttendance(participant);
+          return;
+        }
         google.script.run
           .withSuccessHandler(function (response) {
             if (App.state.selectedParticipant !== participant) return;
-            var events = response && response.ok && Array.isArray(response.data) ? response.data : [];
-            container.innerHTML = events.length ? events.sort(App.sortEvents).map(function (event) {
-              return '<article class="scAttendanceHistoryItem"><strong>' + App.escapeHtml(event.title || "Rehearsal") + '</strong>' +
-                '<div class="scAttendanceHistoryMeta">' + App.escapeHtml([event.date, event.start, event.venue].filter(Boolean).join(" · ")) + '</div>' +
-                (event.notes ? '<div class="scAttendanceHistoryNote">' + App.escapeHtml(event.notes) + '</div>' : '') + '</article>';
-            }).join("") : '<div class="empty">No assigned rehearsals found.</div>';
+            App.state.participantAttendanceMerge.rehearsalsError = null;
+            App.state.participantAttendanceMerge.rehearsals = response && response.ok && Array.isArray(response.data) ? response.data : [];
+            App.renderParticipantAttendance(participant);
           })
           .withFailureHandler(function () {
-            if (App.state.selectedParticipant === participant) container.innerHTML = '<div class="empty">Timeline schedule is unavailable.</div>';
+            if (App.state.selectedParticipant !== participant) return;
+            App.state.participantAttendanceMerge.rehearsalsError = "Timeline schedule is unavailable.";
+            App.state.participantAttendanceMerge.rehearsals = [];
+            App.renderParticipantAttendance(participant);
           })
           .portalGetParticipantSchedule(studentKey);
       },
 
       loadParticipantAttendanceHistory: function (participant, forceRefresh) {
-        var container = document.getElementById("participantAttendanceHistory");
-        if (!container || !participant) return;
+        var merge = App.state.participantAttendanceMerge;
+        if (!participant || !merge) return;
 
         var studentKey = String(participant.studentKey || "").trim();
         if (!studentKey) {
-          App.renderParticipantAttendanceError("Attendance identity is unavailable for this participant.", participant);
+          merge.historyError = "Attendance identity is unavailable for this participant.";
+          merge.history = [];
+          App.renderParticipantAttendance(participant);
           return;
         }
 
         App.state.participantAttendanceCache = App.state.participantAttendanceCache || {};
         var cached = App.state.participantAttendanceCache[studentKey];
         if (!forceRefresh && cached && Date.now() - cached.loadedAt < 120000) {
-          App.renderParticipantAttendanceHistory(cached.response, participant);
+          App.applyParticipantAttendanceHistoryResponse(cached.response, participant);
           return;
         }
 
-        container.innerHTML = '<div class="empty">Loading attendance history...</div>';
         google.script.run
           .withSuccessHandler(function (response) {
             if (App.state.selectedParticipant !== participant) return;
@@ -217,69 +222,107 @@
                 response: response
               };
             }
-            App.renderParticipantAttendanceHistory(response, participant);
+            App.applyParticipantAttendanceHistoryResponse(response, participant);
           })
           .withFailureHandler(function (error) {
             if (App.state.selectedParticipant !== participant) return;
-            App.renderParticipantAttendanceError(App.getErrorMessage(error), participant);
+            App.state.participantAttendanceMerge.historyError = App.getErrorMessage(error);
+            App.state.participantAttendanceMerge.history = [];
+            App.renderParticipantAttendance(participant);
           })
           .portalGetParticipantAttendanceHistory(studentKey);
       },
 
-      renderParticipantAttendanceHistory: function (response, participant) {
-        var container = document.getElementById("participantAttendanceHistory");
-        if (!container || App.state.selectedParticipant !== participant) return;
+      applyParticipantAttendanceHistoryResponse: function (response, participant) {
+        if (App.state.selectedParticipant !== participant) return;
+        var merge = App.state.participantAttendanceMerge;
+        if (!merge) return;
         if (!response || !response.ok) {
-          App.renderParticipantAttendanceError(response && response.error || "Attendance history is unavailable.", participant);
+          merge.historyError = (response && response.error) || "Attendance history is unavailable.";
+          merge.history = [];
+        } else {
+          merge.historyError = null;
+          merge.history = Array.isArray(response.data) ? response.data : [];
+        }
+        App.renderParticipantAttendance(participant);
+      },
+
+      participantAttendanceSortKey_: function (date, time) {
+        var key = App.toDateKey(date);
+        if (!key) return "9999-99-99 " + String(date || "");
+        return key + " " + String(time || "");
+      },
+
+      buildParticipantAttendanceItems: function (history, rehearsals) {
+        var items = (history || []).map(function (entry) {
+          return {
+            title: entry.eventName || "Attendance event",
+            dateLabel: entry.date || "",
+            time: entry.time || "",
+            location: entry.location || "",
+            status: entry.status || "Waiting",
+            note: entry.attendanceNotes || "",
+            marked: [entry.markedTime, entry.markedBy].filter(Boolean).join(" · "),
+            sortKey: App.participantAttendanceSortKey_(entry.date, entry.time)
+          };
+        }).concat((rehearsals || []).map(function (event) {
+          return {
+            title: event.title || "Rehearsal",
+            dateLabel: event.date || "",
+            time: event.start || "",
+            location: event.venue || "",
+            status: "Scheduled",
+            note: event.notes || "",
+            marked: "",
+            sortKey: App.participantAttendanceSortKey_(event.dateKey || event.date, event.start)
+          };
+        }));
+        return items.sort(function (a, b) { return a.sortKey.localeCompare(b.sortKey); });
+      },
+
+      renderParticipantAttendanceItem: function (item) {
+        var toneClass = String(item.status || "Waiting").toLowerCase().replace(/[^a-z]+/g, "-");
+        var dateLine = [item.dateLabel, item.time].filter(Boolean).join(" · ");
+        return '<article class="scAttendanceHistoryItem">' +
+          (dateLine ? '<div class="scAttendanceHistoryDate">' + App.escapeHtml(dateLine) + '</div>' : '') +
+          '<div class="scAttendanceHistoryHeading"><strong>' + App.escapeHtml(item.title) + '</strong>' +
+            '<span class="scAttendanceStatus ' + App.escapeHtml(toneClass) + '">' + App.escapeHtml(item.status) + '</span></div>' +
+          (item.location ? '<div class="scAttendanceHistoryMeta">' + App.escapeHtml(item.location) + '</div>' : '') +
+          (item.note ? '<div class="scAttendanceHistoryNote">' + App.escapeHtml(item.note) + '</div>' : '') +
+          (item.marked ? '<div class="scAttendanceHistoryMarked">Marked ' + App.escapeHtml(item.marked) + '</div>' : '') +
+        '</article>';
+      },
+
+      renderParticipantAttendance: function (participant) {
+        var container = document.getElementById("participantAttendance");
+        var merge = App.state.participantAttendanceMerge;
+        if (!container || !merge || App.state.selectedParticipant !== participant) return;
+        if (merge.history === null || merge.rehearsals === null) return;
+
+        var notices = [];
+        if (merge.historyError) notices.push('<div class="scAttendanceHistoryError"><div>' + App.escapeHtml(merge.historyError) + '</div><button type="button" class="secondaryButton" onclick="App.loadParticipantAttendanceHistory(App.state.selectedParticipant, true)">Retry attendance history</button></div>');
+        if (merge.rehearsalsError) notices.push('<div class="scAttendanceHistoryError"><div>' + App.escapeHtml(merge.rehearsalsError) + '</div><button type="button" class="secondaryButton" onclick="App.loadParticipantRehearsalSchedule(App.state.selectedParticipant)">Retry rehearsal schedule</button></div>');
+
+        var items = App.buildParticipantAttendanceItems(merge.history, merge.rehearsals);
+        if (!items.length) {
+          container.innerHTML = notices.join("") + '<div class="empty">No attendance or rehearsal records are available for this participant.</div>';
           return;
         }
 
-        var history = Array.isArray(response.data) ? response.data : [];
-        if (!history.length) {
-          container.innerHTML = '<div class="empty">No attendance history is available for this participant.</div>';
-          return;
-        }
-
-        var statuses = ["Present", "Late", "Absent", "Left Early", "Waiting"];
+        var statuses = ["Present", "Late", "Absent", "Left Early", "Waiting", "Scheduled"];
         var counts = statuses.reduce(function (output, status) {
-          output[status] = history.filter(function (entry) {
-            return String(entry.status || "Waiting") === status;
-          }).length;
+          output[status] = items.filter(function (item) { return item.status === status; }).length;
           return output;
         }, {});
 
-        container.innerHTML =
+        container.innerHTML = notices.join("") +
           '<div class="scAttendanceStats">' +
-            '<div><strong>' + history.length + '</strong><span>Total events</span></div>' +
-            statuses.map(function (status) {
+            '<div><strong>' + items.length + '</strong><span>Total events</span></div>' +
+            statuses.filter(function (status) { return counts[status] > 0; }).map(function (status) {
               return '<div><strong>' + counts[status] + '</strong><span>' + App.escapeHtml(status) + '</span></div>';
             }).join("") +
           '</div>' +
-          '<div class="scAttendanceHistoryList">' + history.map(function (entry) {
-            var status = entry.status || "Waiting";
-            var details = [entry.date, entry.time, entry.location].filter(Boolean).join(" · ");
-            var marked = [entry.markedTime, entry.markedBy].filter(Boolean).join(" · ");
-            return '<article class="scAttendanceHistoryItem">' +
-              '<div class="scAttendanceHistoryHeading"><strong>' + App.escapeHtml(entry.eventName || "Attendance event") + '</strong>' +
-                '<span class="scAttendanceStatus ' + App.escapeHtml(status.toLowerCase().replace(/[^a-z]+/g, "-")) + '">' + App.escapeHtml(status) + '</span></div>' +
-              (details ? '<div class="scAttendanceHistoryMeta">' + App.escapeHtml(details) + '</div>' : '') +
-              (entry.attendanceNotes ? '<div class="scAttendanceHistoryNote">' + App.escapeHtml(entry.attendanceNotes) + '</div>' : '') +
-              (marked ? '<div class="scAttendanceHistoryMarked">Marked ' + App.escapeHtml(marked) + '</div>' : '') +
-            '</article>';
-          }).join("") + '</div>';
-      },
-
-      renderParticipantAttendanceError: function (message, participant) {
-        var container = document.getElementById("participantAttendanceHistory");
-        if (!container || App.state.selectedParticipant !== participant) return;
-        container.innerHTML = '<div class="scAttendanceHistoryError">' +
-          '<div>' + App.escapeHtml(message || "Attendance history is unavailable.") + '</div>' +
-          '<button type="button" class="secondaryButton" id="participantAttendanceRetry">Retry</button>' +
-        '</div>';
-        var retry = document.getElementById("participantAttendanceRetry");
-        if (retry) retry.addEventListener("click", function () {
-          App.loadParticipantAttendanceHistory(participant, true);
-        });
+          '<div class="scAttendanceHistoryList">' + items.map(App.renderParticipantAttendanceItem).join("") + '</div>';
       },
 
       renderGenericProfile: function (title, lines, profileType) {

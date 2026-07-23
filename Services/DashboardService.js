@@ -5,7 +5,9 @@ const DashboardService = (() => {
     // The full directory is route-lazy through StaffDirectoryService. Keeping it
     // out of bootstrap avoids serialising hundreds of contacts on every visit.
     const staffTeam = [];
-    const timeline = UserContextService.hasCapability("Calendar.View") ? safeCall_("TimelineService.getDashboardSummary", () => TimelineService.getDashboardSummary(), {}) : {};
+    // Dashboard must never trigger a cold spreadsheet read. Calendar and
+    // Operations warm the compressed Timeline projection independently.
+    const timeline = UserContextService.hasCapability("Calendar.View") ? safeCall_("TimelineService.getDashboardSummaryFast", () => TimelineService.getDashboardSummaryFast(), {}) : {};
     const attendance = UserContextService.hasCapability("Attendance.View") ? {
       url: safeCall_("AttendanceService.getWebAppUrl", () => AttendanceService.getWebAppUrl(), ""),
       status: "Lazy loaded",
