@@ -75,7 +75,7 @@ const SecureImageService = (() => {
   function fetchDrive_(fileId, pixels) {
     const token = ScriptApp.getOAuthToken();
     const options = { headers: { Authorization: "Bearer " + token }, muteHttpExceptions: true, followRedirects: true };
-    const metadataResponse = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?fields=id,mimeType,size,thumbnailLink", options);
+    const metadataResponse = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?fields=id,mimeType,size,thumbnailLink&supportsAllDrives=true", options);
     const code = metadataResponse.getResponseCode();
     if (code === 404) throw coded_("FILE_NOT_FOUND");
     if (code === 401 || code === 403) throw coded_("FILE_ACCESS_DENIED");
@@ -91,7 +91,7 @@ const SecureImageService = (() => {
       response = UrlFetchApp.fetch(link, options);
     } else {
       validateMeta_(metadata.mimeType, Number(metadata.size) || 0);
-      response = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media", options);
+      response = UrlFetchApp.fetch("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId) + "?alt=media&supportsAllDrives=true", options);
     }
     if (response.getResponseCode() === 401 || response.getResponseCode() === 403) throw coded_("FILE_ACCESS_DENIED");
     if (response.getResponseCode() === 404) throw coded_("FILE_NOT_FOUND");
