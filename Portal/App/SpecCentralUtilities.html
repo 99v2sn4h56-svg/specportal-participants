@@ -324,7 +324,13 @@
         var key = type + "|" + id + "|" + assetSize + "|" + version;
         var cached = App.state.secureImages[key], valid = cached && (!cached.expiresAt || cached.expiresAt > Date.now());
         if (cached && !valid) delete App.state.secureImages[key];
-        return '<img class="secureAvatarImage" data-secure-image="1" data-secure-key="' + App.escapeHtml(key) + '" data-entity-type="' + App.escapeHtml(type) + '" data-entity-id="' + App.escapeHtml(id) + '" data-asset-version="' + App.escapeHtml(version) + '" data-image-size="' + App.escapeHtml(assetSize) + '" alt="Headshot of ' + App.escapeHtml(name || "profile") + '" loading="lazy" onerror="App.showAvatarFallback(this)"' + (valid ? ' src="' + App.escapeHtml(cached.dataUrl) + '"' : ' hidden') + '><span class="avatarFallbackInline"' + (valid ? ' hidden' : ' style="display:grid"') + '>' + App.escapeHtml(initials) + '</span>';
+        // Deliberately not the `hidden` attribute here: `hidden` maps to
+        // display:none, and a display:none element has no layout geometry,
+        // so IntersectionObserver can never report it as intersecting the
+        // viewport -- the lazy-load trigger silently never fires. visibility:
+        // hidden keeps the same box (the fixed-size avatar container already
+        // gives it real dimensions) so it stays observable while invisible.
+        return '<img class="secureAvatarImage" data-secure-image="1" data-secure-key="' + App.escapeHtml(key) + '" data-entity-type="' + App.escapeHtml(type) + '" data-entity-id="' + App.escapeHtml(id) + '" data-asset-version="' + App.escapeHtml(version) + '" data-image-size="' + App.escapeHtml(assetSize) + '" alt="Headshot of ' + App.escapeHtml(name || "profile") + '" loading="lazy" onerror="App.showAvatarFallback(this)"' + (valid ? ' src="' + App.escapeHtml(cached.dataUrl) + '"' : ' style="visibility:hidden"') + '><span class="avatarFallbackInline"' + (valid ? ' hidden' : ' style="display:grid"') + '>' + App.escapeHtml(initials) + '</span>';
       },
 
       initSecureImages: function () {
@@ -386,6 +392,7 @@
       applySecureImage: function (image, dataUrl) {
         image.src = dataUrl;
         image.hidden = false;
+        image.style.visibility = "visible";
         image.style.display = "block";
         if (image.nextElementSibling) { image.nextElementSibling.hidden = true; image.nextElementSibling.style.display = "none"; }
       },
