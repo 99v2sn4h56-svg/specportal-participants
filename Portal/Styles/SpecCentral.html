@@ -1034,7 +1034,7 @@
     .participantExplorerTable th button { border:0; color:inherit; background:transparent; font:inherit; font-weight:900; }
     .participantExplorerTable td { min-width:0; max-width:none; overflow:hidden; overflow-wrap:anywhere; padding:9px 7px; border-bottom:1px solid var(--border); vertical-align:middle; }
     .participantExplorerTable .participantColumn-year { width:54px; text-align:center; }
-    .participantExplorerTable .participantColumn-open { width:205px; }
+    .participantExplorerTable .participantColumn-open { width:78px; }
     .participantExplorerTable tbody tr:nth-child(even) { background:#f7f9fd; }
     .participantExplorerTable tbody tr:hover { background:#edf4ff; }
     .participantNameCell { display:flex; align-items:center; gap:8px; min-width:0; }
@@ -1062,8 +1062,11 @@
     .participantNoteChip.noteCultural { color:#653786; border-color:#cfb0df; background:#f2e6f8; }
     .participantNoteChip.noteRegional { color:#1d6b58; border-color:#abd8cc; background:#e4f5ef; }
     .participantNoteChip.noteGeneral { color:#4b5f78; border-color:#cdd9e8; background:#eef3f8; }
-    .participantOpenButton { max-width:100%; border:1px solid #bfd0ec; border-radius:8px; padding:6px 7px; color:var(--blue); background:#fff; font-size:12px; line-height:1.15; font-weight:900; white-space:normal; }
     .participantRowActions { display:flex; align-items:center; justify-content:flex-end; gap:5px; }
+    .participantIconButton { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; flex:0 0 28px; border:1px solid #bfd0ec; border-radius:8px; padding:0; color:var(--blue); background:#fff; cursor:pointer; }
+    .participantIconButton:hover { border-color:#2d67b2; background:#eaf3ff; }
+    .participantIconButtonPrimary { border-color:var(--blue); color:#fff; background:var(--blue); }
+    .participantIconButtonPrimary:hover { background:#154d8f; border-color:#154d8f; }
     .participantEmailButton { min-height:31px; border:1px solid #d0ddf0; border-radius:8px; padding:5px 7px; color:#245b9c; background:#edf4ff; font-size:11px; line-height:1.15; font-weight:900; }
     .participantEmailButton:disabled { color:#8b98aa; background:#f2f4f7; opacity:.7; cursor:not-allowed; }
     .participantGroupTable .participantGroupColumn-students { width:78px; text-align:center; }
@@ -2142,7 +2145,7 @@
       .participantDropdownFilters { width:100%; display:grid; grid-template-columns:1fr; }
       .participantQuickFilters::-webkit-scrollbar { display:none; }
       .filterChip { min-height:40px; flex:0 0 auto; padding:8px 12px; }
-      .participantFilterField, .participantActiveFilters button, .participantCategoryPills button, .participantOpenButton,
+      .participantFilterField, .participantActiveFilters button, .participantCategoryPills button,
       .productionTileCount small, .taskPriority, .operationsMetric small, .eventDateFilter, .eventFilterChips b,
       .eventWarningBadge, .workspaceMemoryCard span { font-size:10px; }
       .participantExplorerStats { grid-template-columns:repeat(3,minmax(0,1fr))!important; gap:5px; }
@@ -2163,7 +2166,8 @@
       .participantExplorerTable td:has(.participantEmptyValue) { display:none; }
       .participantExplorerTable td[data-label="Name"] { font-size:16px; }
       .participantExplorerTable td:last-child { border-bottom:0; }
-      .participantOpenButton { min-height:38px; width:auto; justify-self:end; padding:7px 11px; }
+      .participantExplorerTable .participantRowActions { justify-self:end; }
+      .participantIconButton { width:38px; height:38px; flex:0 0 38px; }
       .participantPagination { position:sticky; bottom:0; z-index:2; margin:0 -10px -10px; padding:10px; background:rgba(255,255,255,.94); backdrop-filter:blur(8px); }
       .participantPagination button { min-height:42px; }
       .scProfileHero { padding:20px 16px; }
