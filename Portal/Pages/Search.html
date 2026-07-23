@@ -166,14 +166,9 @@
           console.log("Spec Central: portal data received", data);
 
           data = data || {};
-          photoCache = data.photos || {};
           allParticipants = data.participants || [];
           allGroups = data.groups || [];
           allSchools = data.schools || [];
-
-          allParticipants.forEach(p => {
-            p.photoUrl = getParticipantPhotoUrl(p);
-          });
 
           buildPortalIndexes();
           portalReady = true;
@@ -182,8 +177,6 @@
           if (searchInput.value.trim()) {
             runSearch();
           }
-
-          loadPortalPhotos();
         })
         .withFailureHandler(error => {
           clearTimeout(loadingTimeout);
@@ -193,25 +186,6 @@
           statusEl.textContent = "Error loading participant data: " + message;
         })
         .portalGetPortalData();
-    }
-
-    function loadPortalPhotos() {
-      google.script.run
-        .withSuccessHandler(photos => {
-          photoCache = photos || {};
-
-          allParticipants.forEach(p => {
-            p.photoUrl = getParticipantPhotoUrl(p);
-          });
-
-          if (latestResults.length) {
-            renderSearchResults();
-          }
-        })
-        .withFailureHandler(error => {
-          console.warn("Spec Central: photos could not be loaded", error);
-        })
-        .portalGetStudentPhotos();
     }
 
     function runSearch() {
@@ -401,6 +375,7 @@
         .map((p, idx) => renderResultCard(p, idx))
         .join("");
       updateSelectedResult();
+      resolveParticipantPhotos_(latestResults, renderSearchResults);
     }
 
     function renderResultCard(p, idx) {

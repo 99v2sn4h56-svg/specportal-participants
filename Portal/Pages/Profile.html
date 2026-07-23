@@ -104,6 +104,9 @@
           </div>
         </div>
       `;
+      resolveParticipantPhotos_([p], () => {
+        if (profileView.style.display !== "none" && latestResults[index] === p) openProfile(index);
+      });
     }
 
     function showSearch() {
@@ -681,6 +684,9 @@
             </div>
           </div>
         </div>`;
+      resolveParticipantPhotos_(school.participants || [], () => {
+        if (profileView.style.display !== "none") showSchoolProfile(school);
+      });
     }
 
 
@@ -814,6 +820,9 @@
           </div>
         </div>
       `;
+      resolveParticipantPhotos_(window.currentGroupParticipants || [], () => {
+        if (profileView.style.display !== "none" && latestResults[index] === result) openGroupProfile(index);
+      });
     }
 
 
@@ -892,6 +901,9 @@
             </div>
           </div>
         </div>`;
+      resolveParticipantPhotos_(item.participants || [], () => {
+        if (profileView.style.display !== "none") showItemProfile(item);
+      });
     }
 
     function renderTeacherSchoolCard(school) {

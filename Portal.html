@@ -63,7 +63,7 @@ let groupsBySchool = new Map();
 let groupsByItem = new Map();
 let searchIndex = [];
 let itemSearchRecords = [];
-let photoCache = {};
+let resolvedPhotos = {};
 let portalReady = false;
 
     function getField(source, names) {
@@ -280,20 +280,43 @@ let portalReady = false;
       return getField(p, ["srn", "SRN"]);
     }
 
-    function getPhotoKey(participant) {
-      return getParticipantName(participant)
-        .replace(/\.[^.]+$/, "")
-        .replace(/\s*-\s*Headshot$/i, "")
-        .replace(/[\-_]+/g, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .toLowerCase();
+    function getParticipantStableId(participant) {
+      return String(participant && (participant.studentKey || participant.id) || "").trim();
     }
 
     function getParticipantPhotoUrl(participant) {
-      const photo = photoCache[getPhotoKey(participant)] || {};
-      if (typeof photo === "string") return photo;
-      return photo.url || photo.thumbnailUrl || "";
+      const id = getParticipantStableId(participant);
+      return id ? (resolvedPhotos[id] || "") : "";
+    }
+
+    /**
+     * Lazily resolves real photos for the participants currently on screen,
+     * through the same authenticated secure-image pipeline the full
+     * SpecCentral app uses (never a raw Drive URL). Deliberately not called
+     * eagerly for the whole roster on load — with 1000s of participants,
+     * batch-resolving every photo up front would be slow and could exceed
+     * response limits. HeadshotAssetService.resolveMany caps each call at 12
+     * requests, so this mirrors that cap.
+     */
+    function resolveParticipantPhotos_(participants, onUpdated) {
+      const pending = (participants || [])
+        .filter(p => p && (!p.resultType || p.resultType === "participant"))
+        .map(getParticipantStableId)
+        .filter(id => id && !(id in resolvedPhotos))
+        .slice(0, 12);
+      if (!pending.length) return;
+      pending.forEach(id => { resolvedPhotos[id] = ""; });
+      google.script.run
+        .withSuccessHandler(results => {
+          (results || []).forEach(result => {
+            if (result && result.stableId) resolvedPhotos[result.stableId] = (result.ok && result.dataUrl) || "";
+          });
+          if (onUpdated) onUpdated();
+        })
+        .withFailureHandler(error => {
+          console.warn("Spec Central: photo resolution failed", error);
+        })
+        .portalResolveSecureImages(pending.map(id => ({ entityType: "participant", stableId: id, size: "small" })));
     }
 
   </script>
