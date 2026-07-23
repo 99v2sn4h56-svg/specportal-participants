@@ -909,9 +909,11 @@
           photos: App.state.photos
         });
 
-        // First paint remains paged, but the complete safe list is always the
-        // next participant request because it feeds search, exports and profiles.
-        var completeInBackground = function () { setTimeout(function () { App.loadPortalData(false).catch(function () {}); }, 0); };
+        // First paint remains paged. Callers that only need the current browse
+        // page (firstPageOnly) stop there -- the complete unfiltered list is
+        // fetched lazily, only when something that actually needs it (global
+        // search, cross-entity navigation) asks without that flag.
+        var completeInBackground = function () { if (options.firstPageOnly) return; setTimeout(function () { App.loadPortalData(false).catch(function () {}); }, 0); };
         if (App.state.participantFirstPageReady || App.restorePriorityParticipantCache()) {
           completeInBackground();
           return Promise.resolve(App.state.participantFirstPageData || { participants: App.state.participants, groups: [], schools: App.state.schools, photos: {} });

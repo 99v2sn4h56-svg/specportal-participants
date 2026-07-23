@@ -281,19 +281,59 @@
     copyParticipantEmailList: function (emails, label) { if (!emails.length) { App.notify("No " + label + " email addresses are available."); return; } var text = emails.join("; "), copied = function () { App.notify(emails.length + " " + label + " email address" + (emails.length === 1 ? "" : "es") + " copied."); }; var fallback = function () { var input = document.createElement("textarea"); input.value = text; input.setAttribute("readonly", ""); input.style.position = "fixed"; input.style.opacity = "0"; document.body.appendChild(input); input.select(); document.execCommand("copy"); document.body.removeChild(input); copied(); }; if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(copied).catch(fallback); else fallback(); },
     copyExplorerParticipantFamilyEmails: function (index) { var participant = (App.state.participantExplorerCurrentRows || [])[index]; if (participant) App.copyParticipantEmailList(App.getParticipantFamilyEmails(participant), "family"); },
     copyExplorerGroupTeacherEmails: function (index) { var group = (App.state.participantExplorerCurrentGroups || [])[index]; if (group) App.copyParticipantEmailList(App.normaliseParticipantEmailList([group.teacherEmail, group.secondTeacherEmail]), "teacher"); },
-    copyParticipantExplorerAllEmails: function () { if (App.state.participantExplorerMode === "groups") { var teacherEmails = App.normaliseParticipantEmailList(App.getFilteredParticipantGroups().reduce(function (values, group) { return values.concat([group.teacherEmail, group.secondTeacherEmail]); }, [])); App.copyParticipantEmailList(teacherEmails, "teacher"); return; } var familyEmails = App.normaliseParticipantEmailList(App.getFilteredParticipants().reduce(function (values, participant) { return values.concat(App.getParticipantFamilyEmails(participant)); }, [])); App.copyParticipantEmailList(familyEmails, "family"); },
-    exportParticipantExplorer: function () {
-      var groupMode = App.state.participantExplorerMode === "groups", headers, rows;
-      if (groupMode) {
-        headers = ["School", "Group / Item", "Category", "Segment", "Students", "Teacher", "Contact"];
-        rows = App.getFilteredParticipantGroups().map(function (group) { var values = App.getParticipantGroupValues(group); return [values.school, values.title, values.category, values.segment, values.students, values.teachers, values.emails]; });
-      } else {
-        var columns = App.getParticipantColumns(); headers = columns.map(function (column) { return column[1]; });
-        rows = App.getFilteredParticipants().map(function (participant) { var values = App.getParticipantExplorerValues(participant); return columns.map(function (column) { return column[0] === "category" ? values.categories.join(", ") : values[column[0]] || ""; }); });
+    // Individuals are server-paginated, so participantExplorerPageData only ever
+    // holds the current ~50-100 row page. Actions that must cover every filtered
+    // participant (not just the visible page) fetch every page of the same
+    // filter/search/sort query at a larger page size and concatenate them.
+    fetchAllFilteredParticipants: function () {
+      var base = App.participantExplorerPageQuery(), pageSize = 100;
+      var requestPage = function (page) {
+        var params = Object.assign({}, base.params, { page: page, pageSize: pageSize }), signature = JSON.stringify(params);
+        return App.services.request("participantListPage:v3:" + encodeURIComponent(signature), "portalGetParticipantListPage", { args: [params, {}], cacheMs: 5 * 60 * 1000, timeoutMs: 45000 });
+      };
+      return requestPage(1).then(function (first) {
+        first = first || {};
+        var participants = Array.isArray(first.participants) ? first.participants.slice() : [];
+        var totalPages = Math.max(1, Number(first.pagination && first.pagination.totalPages) || 1);
+        if (totalPages <= 1) return participants;
+        var requests = [];
+        for (var page = 2; page <= totalPages; page++) requests.push(requestPage(page));
+        return Promise.all(requests).then(function (pages) {
+          pages.forEach(function (data) { if (data && Array.isArray(data.participants)) participants = participants.concat(data.participants); });
+          return participants;
+        });
+      });
+    },
+    copyParticipantExplorerAllEmails: function () {
+      if (App.state.participantExplorerMode === "groups") {
+        var teacherEmails = App.normaliseParticipantEmailList(App.getFilteredParticipantGroups().reduce(function (values, group) { return values.concat([group.teacherEmail, group.secondTeacherEmail]); }, []));
+        App.copyParticipantEmailList(teacherEmails, "teacher");
+        return;
       }
-      if (!rows.length) { App.notify("There are no filtered records to export."); return; }
-      App.downloadParticipantExcel(headers, rows, groupMode ? "School Groups" : "Individuals");
-      App.notify(rows.length + " filtered " + (groupMode ? "school group" : "participant") + (rows.length === 1 ? "" : "s") + " exported.");
+      App.notify("Gathering family emails across all matching pages…");
+      App.fetchAllFilteredParticipants().then(function (participants) {
+        var familyEmails = App.normaliseParticipantEmailList(participants.reduce(function (values, participant) { return values.concat(App.getParticipantFamilyEmails(participant)); }, []));
+        App.copyParticipantEmailList(familyEmails, "family");
+      }).catch(function (error) { App.notify("Could not gather family emails: " + App.getErrorMessage(error)); });
+    },
+    exportParticipantExplorer: function () {
+      var groupMode = App.state.participantExplorerMode === "groups";
+      if (groupMode) {
+        var headers = ["School", "Group / Item", "Category", "Segment", "Students", "Teacher", "Contact"];
+        var rows = App.getFilteredParticipantGroups().map(function (group) { var values = App.getParticipantGroupValues(group); return [values.school, values.title, values.category, values.segment, values.students, values.teachers, values.emails]; });
+        if (!rows.length) { App.notify("There are no filtered records to export."); return; }
+        App.downloadParticipantExcel(headers, rows, "School Groups");
+        App.notify(rows.length + " filtered school group" + (rows.length === 1 ? "" : "s") + " exported.");
+        return;
+      }
+      var columns = App.getParticipantColumns(), headers2 = columns.map(function (column) { return column[1]; });
+      App.notify("Gathering matching participants across all pages…");
+      App.fetchAllFilteredParticipants().then(function (participants) {
+        var rows = participants.map(function (participant) { var values = App.getParticipantExplorerValues(participant); return columns.map(function (column) { return column[0] === "category" ? values.categories.join(", ") : values[column[0]] || ""; }); });
+        if (!rows.length) { App.notify("There are no filtered records to export."); return; }
+        App.downloadParticipantExcel(headers2, rows, "Individuals");
+        App.notify(rows.length + " filtered participant" + (rows.length === 1 ? "" : "s") + " exported.");
+      }).catch(function (error) { App.notify("Could not export participants: " + App.getErrorMessage(error)); });
     },
     buildParticipantExcelWorkbook: function (headers, rows, sheetName) { var cell = function (value, style) { return '<Cell' + (style ? ' ss:StyleID="' + style + '"' : '') + '><Data ss:Type="String">' + App.escapeParticipantExcelXml(value) + '</Data></Cell>'; }; var table = '<Row>' + headers.map(function (header) { return cell(header, "Header"); }).join("") + '</Row>' + rows.map(function (row) { return '<Row>' + row.map(function (value) { return cell(value, "Body"); }).join("") + '</Row>'; }).join(""); return '<?xml version="1.0" encoding="UTF-8"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Font ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#1256CF" ss:Pattern="Solid"/></Style><Style ss:ID="Body"><Alignment ss:Vertical="Center" ss:WrapText="1"/></Style></Styles><Worksheet ss:Name="' + App.escapeParticipantExcelXml(sheetName) + '"><Table>' + table + '</Table></Worksheet></Workbook>'; },
     escapeParticipantExcelXml: function (value) { return String(value === null || value === undefined ? "" : value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); },
