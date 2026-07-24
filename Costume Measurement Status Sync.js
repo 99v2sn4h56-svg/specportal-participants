@@ -88,9 +88,12 @@ function syncCostumeMeasurementStatus() {
       continue;
     }
 
+    const tabUrl = `https://docs.google.com/spreadsheets/d/${workbook.getId()}/edit#gid=${sheet.getSheetId()}`;
+    const cell = sourceSheet.getRange(r + 1, gStatusCol + 1);
+
     const existingAllocated = findExistingAllocatedCount_(sheet);
     if (existingAllocated === null) {
-      sourceSheet.getRange(r + 1, gStatusCol + 1).setValue('Could not read sheet structure');
+      setCostumeStatusCell_(cell, 'Could not read sheet structure', tabUrl);
       notGeneratedCount++;
       continue;
     }
@@ -98,7 +101,7 @@ function syncCostumeMeasurementStatus() {
     const names = sheet.getRange(6, 1, existingAllocated, 1).getValues().flat();
     const filled = names.filter(v => String(v || '').trim()).length;
 
-    sourceSheet.getRange(r + 1, gStatusCol + 1).setValue(buildCostumeStatusLabel_(filled, existingAllocated));
+    setCostumeStatusCell_(cell, buildCostumeStatusLabel_(filled, existingAllocated), tabUrl);
     updatedCount++;
   }
 
@@ -118,4 +121,12 @@ function buildCostumeStatusLabel_(filled, allocated) {
   if (filled === 0) return `Not started (0/${allocated})`;
   if (filled < allocated) return `In progress (${filled}/${allocated})`;
   return `Complete (${filled}/${allocated})`;
+}
+
+function setCostumeStatusCell_(cell, label, url) {
+  if (url) {
+    cell.setFormula(`=HYPERLINK("${url}","${label.replace(/"/g, '""')}")`);
+  } else {
+    cell.setValue(label);
+  }
 }
