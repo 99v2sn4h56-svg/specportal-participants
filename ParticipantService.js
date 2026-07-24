@@ -342,22 +342,27 @@ ParticipantService.getGroups = function () {
   const categoryIndex = getIndex(["Category", "Category selection"]);
   const groupNameIndex = getIndex(["Dance group name (if group is made up of multiple schools)", "Group Name", "Dance group name"]);
   const groupIdIndex = getIndex(["Group ID", "Group Id"]);
-  const teacherEmailIndex = getIndex(["Teacher Email", "Contact teacher's email", "Teacher email (DoE)", "All Teacher Emails"]);
+  // Preferred names use the "(1)"/"(2)" scheme applied to GROUPS(YES) --
+  // older candidates are kept as fallbacks in case a sheet still has the
+  // pre-rename headers.
+  const teacherEmailIndex = getIndex(["Contact teacher email (1)", "Teacher Email", "Contact teacher's email", "Teacher email (DoE)", "All Teacher Emails"]);
   const classroomIndex = getIndex(["Google Classroom", "Classroom"]);
-  const teacherFirstIndex = getIndex(["Contact teacher's first name", "Teacher first name", "Teacher First Name"]);
-  const teacherLastIndex = getIndex(["Contact teacher's surname", "Teacher surname", "Teacher Last Name"]);
-  const teacherMobileIndex = getIndex(["Contact teacher's mobile number", "Teacher mobile", "Teacher Mobile", "Teacher phone"]);
-  const teacherRoleIndex = getIndex(["Contact teacher's role at the school", "Teacher role at school", "Teacher role", "Role at school"]);
-  const teacherAlumniIndex = getIndex(["Are you a Spec Alumni?", "Spec Alumni", "Alumni"]);
-  const teacherAlumniRoleIndex = getIndex(["If you selected \"yes\", can you please tell us when and what role? You can also share a memory if you like.", "Spec Alumni Role", "Spec Alumni Roles", "Alumni Role"]);
+  const teacherFirstIndex = getIndex(["Contact teacher first name (1)", "Contact teacher's first name", "Teacher first name", "Teacher First Name"]);
+  const teacherLastIndex = getIndex(["Contact teacher surname (1)", "Contact teacher's surname", "Teacher surname", "Teacher Last Name"]);
+  const teacherMobileIndex = getIndex(["Contact teacher mobile (1)", "Contact teacher's mobile number", "Teacher mobile", "Teacher Mobile", "Teacher phone"]);
+  const teacherRoleIndex = getIndex(["Contact teacher role (1)", "Contact teacher's role at the school", "Teacher role at school", "Teacher role", "Role at school"]);
+  const teacherAlumniIndex = getIndex(["Alumni (1)", "Are you a Spec Alumni?", "Spec Alumni", "Alumni"]);
+  const teacherAlumniRoleIndex = getIndex(["Alumni experience (1)", "If you selected \"yes\", can you please tell us when and what role? You can also share a memory if you like.", "Spec Alumni Role", "Spec Alumni Roles", "Alumni Role"]);
+  const teacherTaughtBeforeIndex = getIndex(["Teacher before (1)"]);
   const teacherFirstTimeIndex = getIndex(["1st Time", "First Time", "First time"]);
-  const secondTeacherFirstIndex = getIndex(["2nd teacher first name", "2nd Teacher First Name", "Second teacher first name"]);
-  const secondTeacherLastIndex = getIndex(["2nd teachers surname", "2nd Teacher Surname", "Second teacher surname"]);
-  const secondTeacherEmailIndex = getIndex(["2nd teacher email", "2nd Teacher Email", "Second teacher email"]);
-  const secondTeacherMobileIndex = getIndex(["2nd teacher mobile", "2nd Teacher Mobile", "Second teacher mobile"]);
-  const secondTeacherRoleIndex = getIndex(["2nd teacher role at school", "2nd Teacher Role at School", "Second teacher role at school"]);
-  const secondTeacherAlumniIndex = getIndex(["Are you a Spec Alumni? 2", "2nd teacher Spec Alumni", "Second teacher Spec Alumni"]);
-  const secondTeacherAlumniRoleIndex = getIndex(["2nd teacher Spec Alumni Role", "Second teacher Spec Alumni Role", "2nd teacher alumni role"]);
+  const secondTeacherFirstIndex = getIndex(["Contact teacher first name (2)", "2nd teacher first name", "2nd Teacher First Name", "Second teacher first name"]);
+  const secondTeacherLastIndex = getIndex(["Contact teacher surname (2)", "2nd teachers surname", "2nd Teacher Surname", "Second teacher surname"]);
+  const secondTeacherEmailIndex = getIndex(["Contact teacher email (2)", "2nd teacher email", "2nd Teacher Email", "Second teacher email"]);
+  const secondTeacherMobileIndex = getIndex(["Contact teacher mobile (2)", "2nd teacher mobile", "2nd Teacher Mobile", "Second teacher mobile"]);
+  const secondTeacherRoleIndex = getIndex(["Contact teacher role (2)", "2nd teacher role at school", "2nd Teacher Role at School", "Second teacher role at school"]);
+  const secondTeacherAlumniIndex = getIndex(["Alumni (2)", "Are you a Spec Alumni? 2", "2nd teacher Spec Alumni", "Second teacher Spec Alumni"]);
+  const secondTeacherAlumniRoleIndex = getIndex(["Alumni experience (2)", "2nd teacher Spec Alumni Role", "Second teacher Spec Alumni Role", "2nd teacher alumni role"]);
+  const secondTeacherTaughtBeforeIndex = getIndex(["Teacher before (2)"]);
 
   return values.slice(1)
     .filter(row => row.some(cell => cell !== "" && cell !== null))
@@ -380,6 +385,7 @@ ParticipantService.getGroups = function () {
       teacherContactType: "Primary contact",
       teacherIsSpecAlumni: row[teacherAlumniIndex] || "",
       teacherSpecRoles: row[teacherAlumniRoleIndex] || "",
+      teacherTaughtBefore: row[teacherTaughtBeforeIndex] || "",
       teacherFirstTime: row[teacherFirstTimeIndex] || "",
       secondTeacherName: [row[secondTeacherFirstIndex], row[secondTeacherLastIndex]].filter(Boolean).join(" "),
       secondTeacherEmail: row[secondTeacherEmailIndex] || "",
@@ -387,7 +393,8 @@ ParticipantService.getGroups = function () {
       secondTeacherRole: row[secondTeacherRoleIndex] || "",
       secondTeacherContactType: "Second contact",
       secondTeacherIsSpecAlumni: row[secondTeacherAlumniIndex] || "",
-      secondTeacherSpecRoles: row[secondTeacherAlumniRoleIndex] || ""
+      secondTeacherSpecRoles: row[secondTeacherAlumniRoleIndex] || "",
+      secondTeacherTaughtBefore: row[secondTeacherTaughtBeforeIndex] || ""
     }));
   };
   try {

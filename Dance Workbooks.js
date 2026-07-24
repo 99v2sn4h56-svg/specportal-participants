@@ -19,15 +19,15 @@ const OUTPUT_HEADERS = [
   "Region",
   "School email address",
   "School Phone",
-  "Contact teacher's first name",
-  "Contact teacher's surname",
-  "Contact teacher's email",
-  "Contact teacher's role at the school",
-  "Second contact teacher's first name",
-  "Second contact teacher's surname",
-  "Second contact teacher's email",
-  "Second contact teacher's role at the school",
-  "Second contact teacher's mobile number"
+  "Contact teacher first name (1)",
+  "Contact teacher surname (1)",
+  "Contact teacher email (1)",
+  "Contact teacher role (1)",
+  "Contact teacher first name (2)",
+  "Contact teacher surname (2)",
+  "Contact teacher email (2)",
+  "Contact teacher role (2)",
+  "Contact teacher mobile (2)"
 ];
 
 const SOURCE_COLS = [

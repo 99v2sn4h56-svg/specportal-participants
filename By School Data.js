@@ -44,6 +44,7 @@ function buildSchoolSummary() {
   ], 16); // Q
 
   const GROUP_TEACHER_EMAIL_COL = getColumnByHeader(groupHeaders, [
+    "Contact teacher email (1)",
     "Teacher Email",
     "Teacher email",
     "Teacher email (DoE)",
@@ -52,6 +53,7 @@ function buildSchoolSummary() {
   ], 17); // R
 
   const GROUP_TEACHER_FIRST_COL = getColumnByHeader(groupHeaders, [
+    "Contact teacher first name (1)",
     "Contact teacher's first name",
     "Contact Teacher First Name",
     "Teacher first name",
@@ -59,6 +61,7 @@ function buildSchoolSummary() {
   ], 34); // AI
 
   const GROUP_TEACHER_LAST_COL = getColumnByHeader(groupHeaders, [
+    "Contact teacher surname (1)",
     "Contact teacher's surname",
     "Contact Teacher Surname",
     "Teacher surname",

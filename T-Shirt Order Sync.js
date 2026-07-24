@@ -39,7 +39,7 @@ const TSHIRT_CONFIG = {
   groupsShirtCategoryCol: 'Shirt Category',
   groupsItemCol: 'Item',
   groupsCategoryCol: 'Category',
-  groupsTeacherEmailCol: "Contact teacher's email",
+  groupsTeacherEmailCol: "Contact teacher email (1)",
   // GROUPS(YES) has two columns literally named "Accepted?" -- the first
   // one (column A) is the numeric accepted-student headcount we want.
   // headers.indexOf() always resolves to that first occurrence.

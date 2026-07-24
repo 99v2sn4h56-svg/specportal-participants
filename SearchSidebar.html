@@ -159,6 +159,16 @@
     .selected-photo.visible { display:block; }
     .selected-photo img { display:block; width:100%; max-height:320px; object-fit:contain; border-radius:10px; }
     .selected-photo span { color:var(--muted); font-size:12px; font-style:italic; }
+
+    .teacher-card { display:none; margin:12px 0; padding:12px; border:1px solid var(--line); border-radius:14px; background:white; }
+    .teacher-card.visible { display:block; }
+    .teacher-card h4 { margin:0 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; color:var(--deep-blue); font-weight:800; }
+    .teacher-entry { padding:9px 0; border-top:1px solid var(--line); }
+    .teacher-entry:first-of-type { border-top:none; padding-top:0; }
+    .teacher-entry .teacher-name { font-weight:700; font-size:13px; color:var(--ink); }
+    .teacher-entry .teacher-role { font-size:10px; color:var(--deep-blue); font-weight:700; text-transform:uppercase; margin-left:6px; background:#eef5ff; padding:2px 7px; border-radius:999px; }
+    .teacher-entry .teacher-line { font-size:12px; color:#4b5568; margin-top:3px; }
+    .teacher-entry a { color:var(--blue); text-decoration:none; }
   </style>
 </head>
 
@@ -189,6 +199,7 @@
 
     <div id="status" class="status"></div>
     <div id="selectedPhoto" class="selected-photo" aria-live="polite"></div>
+    <div id="teacherCard" class="teacher-card" aria-live="polite"></div>
     <div id="results"></div>
   </div>
 
@@ -224,6 +235,8 @@
         lastQuery = "";
         document.getElementById("status").innerHTML = "";
         document.getElementById("results").innerHTML = "";
+        document.getElementById("teacherCard").className = "teacher-card";
+        document.getElementById("teacherCard").innerHTML = "";
         return;
       }
 
@@ -253,6 +266,9 @@
     function showTiles(results) {
       const status = document.getElementById("status");
       const container = document.getElementById("results");
+
+      document.getElementById("teacherCard").className = "teacher-card";
+      document.getElementById("teacherCard").innerHTML = "";
 
       if (!results || results.length === 0) {
         status.innerHTML = "";
@@ -286,8 +302,37 @@
       }).join("");
     }
 
+    function renderTeacherCard(record) {
+      const card = document.getElementById("teacherCard");
+      if (!card) return;
+
+      const teachers = record.teachers;
+      if (!teachers || !teachers.length) {
+        card.className = "teacher-card";
+        card.innerHTML = "";
+        return;
+      }
+
+      const roleLabels = ["Primary contact", "Second contact"];
+
+      card.className = "teacher-card visible";
+      card.innerHTML = `<h4>Teacher Contacts</h4>` + teachers.map(t => `
+        <div class="teacher-entry">
+          <span class="teacher-name">${escapeHtml(t.name || "(No name on file)")}</span>
+          <span class="teacher-role">${escapeHtml(roleLabels[t.ordinal - 1] || `Contact ${t.ordinal}`)}</span>
+          ${t.role ? `<div class="teacher-line">${escapeHtml(t.role)}</div>` : ""}
+          ${t.email ? `<div class="teacher-line">✉️ <a href="mailto:${escapeHtml(t.email)}">${escapeHtml(t.email)}</a></div>` : ""}
+          ${t.mobile ? `<div class="teacher-line">📱 ${escapeHtml(t.mobile)}</div>` : ""}
+          ${t.isAlumni ? `<div class="teacher-line">🎓 Alumni: ${escapeHtml(t.isAlumni)}${t.alumniExperience ? " -- " + escapeHtml(t.alumniExperience) : ""}</div>` : ""}
+          ${t.taughtBefore ? `<div class="teacher-line">Taught Schools Spectacular before: ${escapeHtml(t.taughtBefore)}</div>` : ""}
+        </div>
+      `).join("");
+    }
+
     function selectRecord(index) {
       const record = window.currentResults[index];
+
+      renderTeacherCard(record);
 
       document.getElementById("status").innerHTML =
         `Loading ${escapeHtml(record.title)}...`;

@@ -500,9 +500,21 @@ function addGroupRecords_(ss, records) {
   const schoolCol = findHeaderIndex_(headers, ["School", "Current School"]);
   const itemCol = findHeaderIndex_(headers, ["Item", "Group", "Items / Groups"]);
   const categoryCol = findHeaderIndex_(headers, ["Category", "Category selection"]);
-  const emailCol = findHeaderIndex_(headers, ["Teacher Email", "Teacher email (DoE)", "Teacher Email/s"]);
-  const phoneCol = findHeaderIndex_(headers, ["Teacher Mobile", "Teacher Phone", "Teacher Mobile/s"]);
+  const emailCol = findHeaderIndex_(headers, ["Contact teacher email (1)", "Teacher Email", "Teacher email (DoE)", "Teacher Email/s"]);
+  const phoneCol = findHeaderIndex_(headers, ["Contact teacher mobile (1)", "Teacher Mobile", "Teacher Phone", "Teacher Mobile/s"]);
   const statusCol = findHeaderIndex_(headers, ["Accepted?", "Status", "Count"]);
+
+  // Both contact teachers, read with the "(1)"/"(2)" naming scheme.
+  const teacherCols = [1, 2].map(n => ({
+    firstNameCol: findHeaderIndex_(headers, [`Contact teacher first name (${n})`]),
+    lastNameCol: findHeaderIndex_(headers, [`Contact teacher surname (${n})`]),
+    emailCol: findHeaderIndex_(headers, [`Contact teacher email (${n})`]),
+    mobileCol: findHeaderIndex_(headers, [`Contact teacher mobile (${n})`]),
+    roleCol: findHeaderIndex_(headers, [`Contact teacher role (${n})`]),
+    alumniCol: findHeaderIndex_(headers, [`Alumni (${n})`]),
+    alumniExperienceCol: findHeaderIndex_(headers, [`Alumni experience (${n})`]),
+    taughtBeforeCol: findHeaderIndex_(headers, [`Teacher before (${n})`])
+  }));
 
   for (let r = 1; r < data.length; r++) {
     const row = data[r];
@@ -513,6 +525,26 @@ function addGroupRecords_(ss, records) {
 
     if (!school && !category && !item) continue;
 
+    const teachers = teacherCols
+      .map((cols, i) => {
+        const firstName = getCell_(row, cols.firstNameCol, -1);
+        const lastName = getCell_(row, cols.lastNameCol, -1);
+        const email = getCell_(row, cols.emailCol, -1);
+        const mobile = getCell_(row, cols.mobileCol, -1);
+        if (!firstName && !lastName && !email && !mobile) return null;
+        return {
+          ordinal: i + 1,
+          name: [firstName, lastName].filter(Boolean).join(" "),
+          email,
+          mobile: formatPhone_(mobile),
+          role: getCell_(row, cols.roleCol, -1),
+          isAlumni: getCell_(row, cols.alumniCol, -1),
+          alumniExperience: getCell_(row, cols.alumniExperienceCol, -1),
+          taughtBefore: getCell_(row, cols.taughtBeforeCol, -1)
+        };
+      })
+      .filter(Boolean);
+
     records.push({
       action: "profile",
       type: "School Group",
@@ -521,10 +553,11 @@ function addGroupRecords_(ss, records) {
       school,
       category,
       item,
-      email: getCell_(row, emailCol, 17),
-      phone: formatPhone_(getCell_(row, phoneCol, 18)),
+      email: getCell_(row, emailCol, -1),
+      phone: formatPhone_(getCell_(row, phoneCol, -1)),
       status: getCell_(row, statusCol, 0) || getCell_(row, -1, 6),
       applicationLink: "",
+      teachers,
       sheetName: "GROUPS(YES)",
       rowNumber: r + 1
     });
