@@ -386,9 +386,17 @@ function adminTestHeadshotResolution(entityType, stableEntityId) {
   return HeadshotAssetService.testResolution(entityType, stableEntityId);
 }
 
+// Used only by the "Open Spec Portal" sidebar (Portal.html /
+// Portal/Pages/Search.html) -- a separate, simpler frontend from the main
+// SpecCentral web app. getList() alone never included groups in its
+// response shape, so this sidebar's "groups loaded" count has always read
+// 0 regardless of the underlying data -- bundling the groups projection in
+// alongside it here.
 function portalGetPortalData() {
   const user = requirePortalCapability_("Participants.View");
-  return ParticipantProjectionService.getList(user);
+  const list = ParticipantProjectionService.getList(user);
+  const groups = ParticipantProjectionService.getGroups(user);
+  return Object.assign({}, list, { groups: groups.groups || [] });
 }
 
 function portalGetParticipantListProjection() {
