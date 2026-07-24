@@ -14,6 +14,7 @@ const TSHIRT_CONFIG = {
   groupsSheetName: 'GROUPS(YES)',
   tshirtStatusCol: 'T-SHIRT',
   groupsSchoolCol: 'School name',
+  groupsShirtCategoryCol: 'Shirt Category',
   groupsItemCol: 'Item',
   groupsCategoryCol: 'Category',
   groupsTeacherEmailCol: "Contact teacher's email",
@@ -53,6 +54,7 @@ function syncTshirtOrderStatus() {
 
   const gTshirtCol = gCol(TSHIRT_CONFIG.tshirtStatusCol);
   const gSchoolCol = gCol(TSHIRT_CONFIG.groupsSchoolCol);
+  const gShirtCategoryCol = gCol(TSHIRT_CONFIG.groupsShirtCategoryCol);
   const gItemCol = gCol(TSHIRT_CONFIG.groupsItemCol);
   const gCategoryCol = gCol(TSHIRT_CONFIG.groupsCategoryCol);
   const gTeacherEmailCol = gCol(TSHIRT_CONFIG.groupsTeacherEmailCol);
@@ -75,6 +77,7 @@ function syncTshirtOrderStatus() {
     }
 
     const school = normaliseTshirtText_(row[gSchoolCol]);
+    const shirtCategory = normaliseTshirtText_(gShirtCategoryCol >= 0 ? row[gShirtCategoryCol] : '');
     const item = normaliseTshirtText_(gItemCol >= 0 ? row[gItemCol] : '');
     const category = normaliseTshirtText_(gCategoryCol >= 0 ? row[gCategoryCol] : '');
     const teacherEmail = String(gTeacherEmailCol >= 0 ? row[gTeacherEmailCol] : '').trim().toLowerCase();
@@ -84,6 +87,11 @@ function syncTshirtOrderStatus() {
     const matchIndex = submissions.findIndex((s, i) => {
       if (usedSubmissionIndexes.has(i)) return false;
       if (s.school !== school) return false;
+      // "Shirt Category" holds the same broad bucket text as the form's
+      // confirmed-category field (e.g. "Combined Dance"), unlike Item/
+      // Category which are far more specific ("3-6 Combined Dance") and
+      // essentially never match the form text verbatim.
+      if (s.confirmedCategory && shirtCategory && s.confirmedCategory === shirtCategory) return true;
       if (s.confirmedCategory && (s.confirmedCategory === item || s.confirmedCategory === category)) return true;
       // No usable category text on the submission -- fall back to teacher
       // email as the only other reliable signal available.
