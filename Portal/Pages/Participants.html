@@ -242,7 +242,7 @@
       var bySchool = {};
       var ensure = function (name) {
         var key = name.toLowerCase();
-        if (!bySchool[key]) bySchool[key] = { school: name, individualCategories: {}, groupCategories: {}, participantCount: 0, groupCount: 0 };
+        if (!bySchool[key]) bySchool[key] = { school: name, individualCategories: {}, groupCategories: {}, participantCount: 0, groupCount: 0, groupStudentCount: 0, groupStudentCountNote: "" };
         return bySchool[key];
       };
 
@@ -264,6 +264,10 @@
         if (!name) return;
         var record = ensure(name);
         record.groupCount++;
+        record.groupStudentCount += App.parseParticipantCount(App.getGroupStudentCount(group));
+        if (!String(group.acceptedCount || "").trim() && App.parseParticipantCount(group.allocatedCount || group.count) > 0) {
+          record.groupStudentCountNote = "Includes not accepted yet allocations";
+        }
         var category = String(group.category || "").trim();
         if (category) record.groupCategories[category] = true;
       });
@@ -275,7 +279,10 @@
           individualCategories: Object.keys(record.individualCategories).sort(),
           groupCategories: Object.keys(record.groupCategories).sort(),
           participantCount: record.participantCount,
-          groupCount: record.groupCount
+          groupCount: record.groupCount,
+          groupStudentCount: record.groupStudentCount,
+          groupStudentCountNote: record.groupStudentCountNote,
+          totalParticipantCount: record.participantCount + record.groupStudentCount
         };
       });
 
@@ -288,14 +295,14 @@
 
     renderSchoolExplorerStats: function (schools) {
       var el = document.getElementById("participantStats"); if (!el) return;
-      var categories = new Set(), totalParticipants = 0, totalGroups = 0;
+      var categories = new Set(), totalStudents = 0, totalGroups = 0;
       schools.forEach(function (school) {
         school.individualCategories.forEach(function (c) { categories.add(c); });
         school.groupCategories.forEach(function (c) { categories.add(c); });
-        totalParticipants += school.participantCount;
+        totalStudents += school.totalParticipantCount;
         totalGroups += school.groupCount;
       });
-      el.innerHTML = [[schools.length, "Schools"], [totalParticipants, "Individual participants"], [totalGroups, "School groups"], [categories.size, "Categories"]].map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
+      el.innerHTML = [[schools.length, "Schools"], [totalStudents, "Students (individual + group)"], [totalGroups, "School groups"], [categories.size, "Categories"]].map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
     },
 
     renderSchoolCategoryPills_: function (categories) {
@@ -311,9 +318,10 @@
       var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, pages = Math.max(1, Math.ceil(schools.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = schools.slice((page - 1) * size, page * size);
       App.state.participantExplorerPage = page; App.state.participantExplorerCurrentSchools = schools;
       if (status) status.textContent = schools.length + " schools · page " + page + " of " + pages;
-      el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable participantSchoolTable"><thead><tr><th>School</th><th>Individual Categories</th><th>Group Categories</th><th class="participantColumn-open">Actions</th></tr></thead><tbody>' + rows.map(function (school, index) {
+      el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable participantSchoolTable"><thead><tr><th>School</th><th class="participantGroupColumn-students">Students</th><th>Individual Categories</th><th>Group Categories</th><th class="participantColumn-open">Actions</th></tr></thead><tbody>' + rows.map(function (school, index) {
         var rowIndex = (page - 1) * size + index;
-        return '<tr><td data-label="School"><strong>' + App.escapeHtml(school.school) + '</strong></td><td data-label="Individual Categories">' + App.renderSchoolCategoryPills_(school.individualCategories) + '</td><td data-label="Group Categories">' + App.renderSchoolCategoryPills_(school.groupCategories) + '</td><td class="participantColumn-open" data-label="Actions"><button class="participantIconButton participantIconButtonPrimary" type="button" title="Open school profile" aria-label="Open school profile" onclick="App.openExplorerSchool(' + rowIndex + ')">' + App.participantOpenIcon_ + '</button></td></tr>';
+        var studentsLabel = String(school.totalParticipantCount) + (school.groupStudentCountNote ? " *" : "");
+        return '<tr><td data-label="School"><strong>' + App.escapeHtml(school.school) + '</strong></td><td class="participantGroupColumn-students" data-label="Students" title="' + App.escapeHtml(school.groupStudentCountNote || "") + '">' + App.escapeHtml(studentsLabel) + '</td><td data-label="Individual Categories">' + App.renderSchoolCategoryPills_(school.individualCategories) + '</td><td data-label="Group Categories">' + App.renderSchoolCategoryPills_(school.groupCategories) + '</td><td class="participantColumn-open" data-label="Actions"><button class="participantIconButton participantIconButtonPrimary" type="button" title="Open school profile" aria-label="Open school profile" onclick="App.openExplorerSchool(' + rowIndex + ')">' + App.participantOpenIcon_ + '</button></td></tr>';
       }).join("") + '</tbody></table></div>' : App.emptyState("No schools match this search", "Clear or adjust the search text.");
       if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>';
     },
