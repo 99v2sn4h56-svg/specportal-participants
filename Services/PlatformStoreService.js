@@ -3,7 +3,21 @@ const PlatformStoreService = (() => {
   const PREFIX = "SPEC_PLATFORM_V1_";
   const MAX_PROPERTY_CHARS = 8000;
 
+  // list()/listLarge() are read on every DashboardService.getContext() call
+  // (3+ collections each) with no caching at all, meaning every cache miss
+  // for the (separately cached) Dashboard projection paid for a fresh
+  // PropertiesService round trip per collection. Cached here, script-wide
+  // (this is shared workflow state, not per-user data -- callers like
+  // TaskService/NotificationService filter to the current user afterwards).
+  // put()/update() read the current list via the uncached loader_() inside
+  // their existing lock, never through this cache, so a write is always
+  // based on the true current state -- then explicitly invalidate the
+  // cache entry so the next read reflects the write immediately.
   function list(collection) {
+    return PerformanceCacheService.getOrLoad(cacheKey_(collection), 30, () => loadList_(collection));
+  }
+
+  function loadList_(collection) {
     const raw = PropertiesService.getScriptProperties().getProperty(key_(collection));
     if (!raw) return [];
     try { const value = JSON.parse(raw); return Array.isArray(value) ? value : []; }
@@ -15,7 +29,7 @@ const PlatformStoreService = (() => {
     lock.waitLock(10000);
     try {
       const safe = safeData(record);
-      let records = list(collection).filter(item => item.id !== safe.id);
+      let records = loadList_(collection).filter(item => item.id !== safe.id);
       records.unshift(safe);
       records = records.slice(0, maxRecords || 100);
       let json = JSON.stringify(records);
@@ -24,12 +38,17 @@ const PlatformStoreService = (() => {
         json = JSON.stringify(records);
       }
       PropertiesService.getScriptProperties().setProperty(key_(collection), json);
+      PerformanceCacheService.remove(cacheKey_(collection));
       return safe;
     } finally { lock.releaseLock(); }
   }
 
   function update(collection, id, changes, maxRecords) {
-    const current = list(collection).find(item => item.id === id);
+    // Reads via the uncached loader, not list() -- merging onto a cached
+    // (up to 30s stale) "current" here would silently drop any change
+    // written by someone else in between, since put() below replaces the
+    // whole record.
+    const current = loadList_(collection).find(item => item.id === id);
     if (!current) throw new Error(`${collection} record ${id} was not found.`);
     return put(collection, Object.assign({}, current, safeData(changes), { id }), maxRecords);
   }
@@ -38,6 +57,17 @@ const PlatformStoreService = (() => {
    * Chunked variant for bounded platform modules whose relationship records can
    * legitimately exceed one Script Property. It keeps the same lock, ID and
    * sanitisation contract as put(), while avoiding a second storage pattern.
+   *
+   * Deliberately NOT cached, unlike list() above: EventWorkflowService.js has
+   * ~11 call sites that read "current" via listLarge()/find_(), merge changes
+   * themselves, and call putLarge() directly -- bypassing updateLarge()'s
+   * fresh-read guarantee entirely. Caching listLarge() would turn a 30-second
+   * window into a real lost-update bug for concurrent event edits (e.g. one
+   * editor's risk-field update silently reverted by a second editor's
+   * communications-field update, if the second editor's "current" read was
+   * cached from before the first write). The original performance finding
+   * this was addressing (DashboardService calling PlatformStoreService 3+
+   * times per rebuild) only ever goes through list(), not listLarge().
    */
   function listLarge(collection) {
     const properties = PropertiesService.getScriptProperties();
@@ -110,5 +140,6 @@ const PlatformStoreService = (() => {
   function createId(prefix) { return `${prefix}-${Utilities.getUuid().replace(/-/g, "").slice(0, 20).toUpperCase()}`; }
   function key_(collection) { return PREFIX + String(collection || "records").toUpperCase(); }
   function largeKey_(collection) { return key_(collection) + "_CHUNKED"; }
+  function cacheKey_(collection) { return "platformStore:" + key_(collection); }
   return { list, put, update, listLarge, putLarge, updateLarge, removeLarge, safeData, createId };
 })();
