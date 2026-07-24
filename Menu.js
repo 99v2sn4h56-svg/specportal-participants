@@ -36,6 +36,9 @@ function onOpen() {
       .addItem("Sync fill status to GROUPS(YES)", "menuSyncCostumeMeasurementStatus"))
     .addSubMenu(ui.createMenu("👕 T-Shirt Orders")
       .addItem("Sync Order Status from Form", "menuSyncTshirtOrderStatus"))
+    .addSubMenu(ui.createMenu("🎬 Show Run")
+      .addItem("Sync Now", "menuSyncShowRunSnapshot")
+      .addItem("Enable Auto-Sync (every 15 min)", "menuInstallShowRunSyncTrigger"))
     .addSubMenu(ui.createMenu("🔑 Stable ID Migration")
       .addItem("Dry Run", "menuStableIdMigrationDryRun")
       .addItem("Apply", "menuStableIdMigrationApply"))
@@ -94,6 +97,10 @@ function menuSyncCostumeMeasurementStatus() { runSpecTool_("Sync Costume Measure
 
 // --- T-Shirt Orders ---
 function menuSyncTshirtOrderStatus() { runSpecTool_("Sync T-Shirt Order Status from Form", syncTshirtOrderStatus); }
+
+// --- Show Run ---
+function menuSyncShowRunSnapshot() { runSpecTool_("Sync Show Run Snapshot", syncShowRunSnapshot); }
+function menuInstallShowRunSyncTrigger() { runSpecTool_("Enable Show Run Auto-Sync", installShowRunSyncTrigger); }
 
 // --- Stable ID Migration ---
 function menuStableIdMigrationDryRun() { runSpecTool_("Stable ID Migration — Dry Run", showStableIdMigrationDryRun_); }
