@@ -94,7 +94,7 @@ ParticipantService.getAll = function () {
 
   const sheet = this.getIndividualsSheet();
 
-  const data = sheet.getDataRange().getDisplayValues();
+  const data = stringifyRows_(sheet.getDataRange().getValues());
 
   if (data.length < 2) return [];
 
@@ -332,7 +332,7 @@ ParticipantService.getGroups = function () {
   const sheet = this.getGroupsSheet();
   if (!sheet) return [];
 
-  const values = sheet.getDataRange().getDisplayValues();
+  const values = stringifyRows_(sheet.getDataRange().getValues());
   if (values.length < 2) return [];
   const headers = values[0].map(header => String(header || "").trim());
   const getIndex = names => {
@@ -432,7 +432,7 @@ ParticipantService.getSchoolsMasterData = function () {
     const sheet = this.getSchoolsMasterSheet();
     if (!sheet) return [];
 
-    const values = sheet.getDataRange().getDisplayValues();
+    const values = stringifyRows_(sheet.getDataRange().getValues());
     if (values.length < 2) return [];
 
     return values.slice(1)
@@ -453,6 +453,29 @@ ParticipantService.getSchoolsMasterData = function () {
     return loadFromSheet_();
   }
 };
+
+// getValues() (raw types) is much cheaper than getDisplayValues() (Sheets
+// has to compute rendered formatting per cell) but returns numbers/dates as
+// actual JS types instead of strings. Every field-extraction line in this
+// file already assumes string cells (String(value||"") coercions,
+// header.indexOf-style comparisons, strict === filter matching on the
+// client for fields like "year"), so normalising the whole raw grid to
+// strings once, right after the fast read, keeps every downstream line
+// unchanged while still getting the read-time win. Numbers stringify
+// identically to how a plain (unformatted) display value would read
+// (String(7) === "7"); only cells with meaningful custom number/date
+// formatting would look different, and none of the fields read via
+// getAll()/getGroups()/getSchoolsMasterData() are treated as
+// display-formatted numbers or dates by any downstream consumer.
+function stringifyCell_(value) {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+function stringifyRows_(rows) {
+  return rows.map(row => row.map(stringifyCell_));
+}
 
 function normaliseSchoolNameKey_(value) {
   return String(value || "")
