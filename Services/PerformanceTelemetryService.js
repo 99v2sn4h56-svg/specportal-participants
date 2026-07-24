@@ -264,7 +264,16 @@ const PerformanceTelemetryService = (() => {
     const cache = CacheService.getScriptCache();
     const journeyEnvelope = readEnvelope_(cache, JOURNEY_CACHE_KEY);
     const legacyEnvelope = readEnvelope_(cache, LEGACY_CACHE_KEY);
-    const summary = summarise_(journeyEnvelope.samples);
+    // record() (used by the participant page/groups/list-transform routes,
+    // among others) persists into the separate "legacy" envelope, not the
+    // "journey" one measureJourney() uses -- summarising only journeySamples
+    // silently excluded every record()-based route from .summary (and so
+    // from anything, like adminLogParticipantPerformanceSummary, that
+    // filters .summary) even though those routes were being recorded the
+    // whole time. coverage below still only matches real journeys, since
+    // legacy samples carry journey: "" and REQUIRED_JOURNEYS ids are never
+    // empty.
+    const summary = summarise_(journeyEnvelope.samples.concat(legacyEnvelope.samples));
     const degraded = degradedState_();
     const counters = mergeCounters_(journeyEnvelope.stats, legacyEnvelope.stats, degraded);
     const isDegraded = counters.lockDropCount > 0 || counters.writeFailureCount > 0 || counters.droppedSampleCount > 0;
