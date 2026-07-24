@@ -77,7 +77,8 @@ function syncTshirtOrderStatus() {
     }
 
     const school = normaliseTshirtText_(row[gSchoolCol]);
-    const shirtCategory = normaliseTshirtText_(gShirtCategoryCol >= 0 ? row[gShirtCategoryCol] : '');
+    const shirtCategoryRaw = normaliseTshirtText_(gShirtCategoryCol >= 0 ? row[gShirtCategoryCol] : '');
+    const shirtCategoryNoCount = stripTshirtStudentCount_(shirtCategoryRaw);
     const item = normaliseTshirtText_(gItemCol >= 0 ? row[gItemCol] : '');
     const category = normaliseTshirtText_(gCategoryCol >= 0 ? row[gCategoryCol] : '');
     const teacherEmail = String(gTeacherEmailCol >= 0 ? row[gTeacherEmailCol] : '').trim().toLowerCase();
@@ -87,11 +88,16 @@ function syncTshirtOrderStatus() {
     const matchIndex = submissions.findIndex((s, i) => {
       if (usedSubmissionIndexes.has(i)) return false;
       if (s.school !== school) return false;
-      // "Shirt Category" holds the same broad bucket text as the form's
-      // confirmed-category field (e.g. "Combined Dance"), unlike Item/
-      // Category which are far more specific ("3-6 Combined Dance") and
-      // essentially never match the form text verbatim.
-      if (s.confirmedCategory && shirtCategory && s.confirmedCategory === shirtCategory) return true;
+      // "Shirt Category" on GROUPS(YES) holds the exact same composite
+      // text as the form's raw "School/Category selection" dropdown value
+      // (e.g. "Cranebrook High School - Secondary Combined Dance (7
+      // students)"), not a simplified bucket -- so compare the raw
+      // selection first, verbatim.
+      if (shirtCategoryRaw && s.rawNormalised && s.rawNormalised === shirtCategoryRaw) return true;
+      // The allocated student count can drift after the form's dropdown
+      // options were created, so also try matching with the "(N students)"
+      // suffix stripped from both sides.
+      if (shirtCategoryNoCount && s.rawNoCount && s.rawNoCount === shirtCategoryNoCount) return true;
       if (s.confirmedCategory && (s.confirmedCategory === item || s.confirmedCategory === category)) return true;
       // No usable category text on the submission -- fall back to teacher
       // email as the only other reliable signal available.
@@ -136,9 +142,11 @@ function readTshirtSubmissions_(formSheet) {
     // "Northlakes High School - Aboriginal Dance Ensemble (8 students)"
     const raw = String((schoolCategoryCol >= 0 && row[schoolCategoryCol]) || '');
     const school = normaliseTshirtText_(raw.split(' - ')[0]);
+    const rawNormalised = normaliseTshirtText_(raw);
+    const rawNoCount = stripTshirtStudentCount_(rawNormalised);
     const confirmedCategory = normaliseTshirtText_(confirmedCategoryCol >= 0 ? row[confirmedCategoryCol] : '');
     const teacherEmail = String(teacherEmailCol >= 0 ? row[teacherEmailCol] : '').trim().toLowerCase();
-    return { school, confirmedCategory, teacherEmail, raw };
+    return { school, confirmedCategory, teacherEmail, raw, rawNormalised, rawNoCount };
   }).filter(s => s.school);
 }
 
@@ -164,4 +172,8 @@ function writeTshirtSyncReport_(spreadsheet, unmatched) {
 
 function normaliseTshirtText_(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function stripTshirtStudentCount_(normalisedValue) {
+  return String(normalisedValue || '').replace(/\(\s*\d+\s*students?\s*\)\s*$/i, '').trim();
 }
