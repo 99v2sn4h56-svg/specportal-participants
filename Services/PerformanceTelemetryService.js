@@ -320,8 +320,17 @@ const PerformanceTelemetryService = (() => {
         successfulDurations: [],
         failureCount: 0
       };
-      if (detail.outcome === "success") groups[key].successfulDurations.push(Number(sample.durationMs) || 0);
-      else groups[key].failureCount++;
+      // measureJourney() explicitly sets outcome to "success"/"failure".
+      // record() -- used by every non-journey server metric (cache ops,
+      // dashboard, staff lookup, bootstrap, attendance, etc.) -- never sets
+      // outcome at all, and every one of its ~20 call sites only ever fires
+      // on the success path (there's no catch-block record() call anywhere
+      // recording a failure). Treating "no outcome field" as a failure by
+      // default silently mislabeled every legacy sample as failed the
+      // moment they were included in this summary. Only an explicit
+      // "failure" counts as one now.
+      if (detail.outcome === "failure") groups[key].failureCount++;
+      else groups[key].successfulDurations.push(Number(sample.durationMs) || 0);
     });
     return Object.keys(groups).sort().map(key => {
       const group = groups[key], values = group.successfulDurations.sort((a, b) => a - b);
