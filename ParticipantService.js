@@ -249,7 +249,16 @@ ParticipantService.getAll = function () {
   // fixes all of them at once.
   let result;
   try {
-    result = PerformanceCacheService.getOrLoadDetailed("participants:all", 30 * 60, loadFromSheet_);
+    // Stale-while-revalidate, not a blocking rebuild: on a cold/expired
+    // cache with concurrent requests, the blocking form (getOrLoadDetailed)
+    // makes every "losing" request poll for up to ~10s waiting on the
+    // winner, then fall back to its OWN full uncached sheet read if the
+    // winner hasn't finished -- a thundering herd where several requests
+    // each independently pay this read's full cost, some after already
+    // burning ~10s polling first. This is the same fix already applied to
+    // getDetail()/getGroups() projections; getAll() -- the single most
+    // depended-on read in the whole app -- had never been migrated to it.
+    result = PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:all", 5 * 60, 30 * 60, loadFromSheet_);
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     result = { value: loadFromSheet_(), meta: { cache: "busy-direct-fallback" } };
@@ -407,7 +416,8 @@ ParticipantService.getGroups = function () {
     }));
   };
   try {
-    return PerformanceCacheService.getOrLoad("participants:groups", 30 * 60, loadFromSheet_);
+    // Same thundering-herd fix as getAll() above -- see that comment.
+    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:groups", 5 * 60, 30 * 60, loadFromSheet_).value;
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     return loadFromSheet_();
@@ -418,23 +428,30 @@ ParticipantService.getGroups = function () {
  * Returns the schools master data used by Spec Portal.
  */
 ParticipantService.getSchoolsMasterData = function () {
-  return PerformanceCacheService.getOrLoad("participants:schools", 30 * 60, () => {
-  const sheet = this.getSchoolsMasterSheet();
-  if (!sheet) return [];
+  const loadFromSheet_ = () => {
+    const sheet = this.getSchoolsMasterSheet();
+    if (!sheet) return [];
 
-  const values = sheet.getDataRange().getDisplayValues();
-  if (values.length < 2) return [];
+    const values = sheet.getDataRange().getDisplayValues();
+    if (values.length < 2) return [];
 
-  return values.slice(1)
-    .filter(row => row.some(cell => cell !== "" && cell !== null))
-    .map(row => EntityModelService.school({
-      code: row[0] || "",
-      schoolName: row[2] || "",
-      schoolEmail: row[7] || "",
-      directorate: row[31] || ""
-    }))
-    .filter(school => school.schoolName);
-  });
+    return values.slice(1)
+      .filter(row => row.some(cell => cell !== "" && cell !== null))
+      .map(row => EntityModelService.school({
+        code: row[0] || "",
+        schoolName: row[2] || "",
+        schoolEmail: row[7] || "",
+        directorate: row[31] || ""
+      }))
+      .filter(school => school.schoolName);
+  };
+  try {
+    // Same thundering-herd fix as getAll() above -- see that comment.
+    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:schools", 5 * 60, 30 * 60, loadFromSheet_).value;
+  } catch (error) {
+    if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
+    return loadFromSheet_();
+  }
 };
 
 function normaliseSchoolNameKey_(value) {
