@@ -388,15 +388,41 @@ function adminTestHeadshotResolution(entityType, stableEntityId) {
 
 // Used only by the "Open Spec Portal" sidebar (Portal.html /
 // Portal/Pages/Search.html) -- a separate, simpler frontend from the main
-// SpecCentral web app. getList() alone never included groups in its
-// response shape, so this sidebar's "groups loaded" count has always read
-// 0 regardless of the underlying data -- bundling the groups projection in
-// alongside it here.
+// SpecCentral web app, reachable only by someone who already has edit
+// access to this spreadsheet (unlike the broader-audience SpecCentral web
+// app, where ParticipantProjectionService.getGroups()'s LIST_FIELDS
+// privacy boundary matters). getList() alone never included groups, so
+// this sidebar's "groups loaded" count always read 0 -- bundling the
+// groups projection in alongside it here.
+//
+// Portal/Pages/Profile.html's teacher-passport view (getTeacherContactForGroup,
+// buildTeacherProfileLocally) was already built expecting teacher contact
+// fields (teacherEmail, teacherMobile, teacherRole, teacherIsSpecAlumni,
+// teacherSpecRoles, teacherFirstTime, teacherContactType, and the
+// second-teacher equivalents) directly on each group -- it just never
+// received them, since the privacy-safe group projection strips them by
+// design. Merges them in here, from ParticipantService.getGroups()'s raw
+// (unfiltered) output, keyed by id -- only onto groups that already
+// survived ParticipantProjectionService.getGroups()'s scope filtering, so
+// which groups are visible at all is still governed by the user's scope,
+// only the already-visible ones gain contact detail.
 function portalGetPortalData() {
   const user = requirePortalCapability_("Participants.View");
   const list = ParticipantProjectionService.getList(user);
-  const groups = ParticipantProjectionService.getGroups(user);
-  return Object.assign({}, list, { groups: groups.groups || [] });
+  const projectedGroups = ParticipantProjectionService.getGroups(user);
+  const rawGroupsById = {};
+  ParticipantService.getGroups().forEach(function (g) { rawGroupsById[g.id] = g; });
+  const teacherFields = [
+    "teacherEmail", "teacherMobile", "teacherRole", "teacherContactType", "teacherIsSpecAlumni", "teacherSpecRoles", "teacherTaughtBefore", "teacherFirstTime",
+    "secondTeacherEmail", "secondTeacherMobile", "secondTeacherRole", "secondTeacherContactType", "secondTeacherIsSpecAlumni", "secondTeacherSpecRoles", "secondTeacherTaughtBefore"
+  ];
+  const groups = (projectedGroups.groups || []).map(function (g) {
+    const raw = rawGroupsById[g.id] || {};
+    const enriched = Object.assign({}, g);
+    teacherFields.forEach(function (field) { enriched[field] = raw[field] || ""; });
+    return enriched;
+  });
+  return Object.assign({}, list, { groups: groups });
 }
 
 function portalGetParticipantListProjection() {
