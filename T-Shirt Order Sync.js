@@ -1,8 +1,14 @@
 /**
  * Pulls completion status from the separate T-shirt order Google Form into
  * the existing "T-SHIRT" column on GROUPS(YES), instead of building any new
- * tracking column. Never removes or overwrites a row already marked
- * ordered, and never touches any column except T-SHIRT.
+ * tracking column. Also checks the quantity of shirts ordered (summed
+ * across the form's per-size grid) against the group's accepted student
+ * count, and writes that check into the same T-SHIRT cell.
+ *
+ * Never writes anything but a sync-generated status into T-SHIRT, and never
+ * touches any other column. Any T-SHIRT cell that already holds a manual,
+ * non-sync note (i.e. doesn't start with "Order submitted" and isn't blank
+ * or "No order yet") is left completely alone.
  */
 const TSHIRT_CONFIG = {
   formSpreadsheetId: '1yAW21rWMu1nWRVuFjo3YFqNryjAYzjX8qmL1vIawXXM',
@@ -10,6 +16,22 @@ const TSHIRT_CONFIG = {
   formSchoolCategoryCol: 'School/Category selection',
   formConfirmedCategoryCol: 'Please confirm the category you are completing the order for',
   formTeacherEmailCol: 'Contact teacher email address',
+  // Per-size quantity grid -- Google Forms flattens a grid question into one
+  // column per size. "Teacher shirt #1/#2" are the teacher's own two shirts
+  // (a size, not a quantity) and are deliberately excluded from the sum.
+  formSizeQtyCols: [
+    'Youth 8',
+    'Youth 10',
+    'Youth 12 / XXS',
+    'Youth 14 / XS',
+    'Small',
+    'Medium',
+    'Large',
+    'X-Large',
+    'XX-Large',
+    'XXX-Large',
+    '5X-Large'
+  ],
 
   groupsSheetName: 'GROUPS(YES)',
   tshirtStatusCol: 'T-SHIRT',
@@ -18,6 +40,11 @@ const TSHIRT_CONFIG = {
   groupsItemCol: 'Item',
   groupsCategoryCol: 'Category',
   groupsTeacherEmailCol: "Contact teacher's email",
+  // GROUPS(YES) has two columns literally named "Accepted?" -- the first
+  // one (column A) is the numeric accepted-student headcount we want.
+  // headers.indexOf() always resolves to that first occurrence.
+  groupsAcceptedCol: 'Accepted?',
+  groupsAcceptedFallbackCol: '# Alloc',
 
   orderedLabel: 'Order submitted',
   notYetLabel: 'No order yet'
@@ -58,6 +85,8 @@ function syncTshirtOrderStatus() {
   const gItemCol = gCol(TSHIRT_CONFIG.groupsItemCol);
   const gCategoryCol = gCol(TSHIRT_CONFIG.groupsCategoryCol);
   const gTeacherEmailCol = gCol(TSHIRT_CONFIG.groupsTeacherEmailCol);
+  const gAcceptedCol = gCol(TSHIRT_CONFIG.groupsAcceptedCol);
+  const gAcceptedFallbackCol = gCol(TSHIRT_CONFIG.groupsAcceptedFallbackCol);
 
   if (gTshirtCol < 0 || gSchoolCol < 0) {
     ui.alert(`Could not find the expected "${TSHIRT_CONFIG.tshirtStatusCol}" or "${TSHIRT_CONFIG.groupsSchoolCol}" columns on ${TSHIRT_CONFIG.groupsSheetName}.`);
@@ -65,14 +94,20 @@ function syncTshirtOrderStatus() {
   }
 
   const usedSubmissionIndexes = new Set();
-  let matchedCount = 0, alreadyMarkedCount = 0;
+  let matchedCount = 0, qtyMismatchCount = 0, manualNoteSkippedCount = 0;
 
   for (let r = 1; r < groupsValues.length; r++) {
     const row = groupsValues[r];
     const currentStatus = String(row[gTshirtCol] || '').trim();
 
-    if (currentStatus === TSHIRT_CONFIG.orderedLabel) {
-      alreadyMarkedCount++;
+    const looksSyncManaged =
+      !currentStatus ||
+      currentStatus === TSHIRT_CONFIG.notYetLabel ||
+      /^order submitted/i.test(currentStatus);
+
+    if (!looksSyncManaged) {
+      // Staff left a manual note in this cell -- never overwrite it.
+      manualNoteSkippedCount++;
       continue;
     }
 
@@ -107,8 +142,13 @@ function syncTshirtOrderStatus() {
 
     if (matchIndex >= 0) {
       usedSubmissionIndexes.add(matchIndex);
-      groupsSheet.getRange(r + 1, gTshirtCol + 1).setValue(TSHIRT_CONFIG.orderedLabel);
+      const submission = submissions[matchIndex];
+      const accepted = readTshirtAcceptedCount_(row, gAcceptedCol, gAcceptedFallbackCol);
+      const label = buildTshirtStatusLabel_(submission.totalShirtsOrdered, accepted);
+
+      groupsSheet.getRange(r + 1, gTshirtCol + 1).setValue(label);
       matchedCount++;
+      if (accepted != null && submission.totalShirtsOrdered !== accepted) qtyMismatchCount++;
     }
   }
 
@@ -118,14 +158,32 @@ function syncTshirtOrderStatus() {
   ui.alert(
     'T-Shirt Order Sync complete',
     `Form submissions found: ${submissions.length}\n` +
-    `Newly marked "${TSHIRT_CONFIG.orderedLabel}": ${matchedCount}\n` +
-    `Already marked (unchanged): ${alreadyMarkedCount}\n` +
+    `Matched to a group and marked: ${matchedCount}\n` +
+    `  ...of which have a shirt qty vs accepted-count mismatch: ${qtyMismatchCount}\n` +
+    `Left untouched (manual note already in T-SHIRT): ${manualNoteSkippedCount}\n` +
     `Could not match to a group: ${unmatched.length}\n\n` +
     `Unmatched submissions were written to the "T-Shirt Order Sync Report" sheet for manual review.\n\n` +
-    `This only ever sets the T-SHIRT column to "${TSHIRT_CONFIG.orderedLabel}" for a matched row -- ` +
-    `it never clears an existing "${TSHIRT_CONFIG.orderedLabel}", and never touches any other column.`,
+    `This only ever writes a sync-generated status into the T-SHIRT column for a matched row -- ` +
+    `it never overwrites a manual note already left there, and never touches any other column.`,
     ui.ButtonSet.OK
   );
+}
+
+function buildTshirtStatusLabel_(totalOrdered, accepted) {
+  if (accepted == null) {
+    return `${TSHIRT_CONFIG.orderedLabel} (${totalOrdered} shirts ordered -- accepted count unknown)`;
+  }
+  if (totalOrdered === accepted) {
+    return `${TSHIRT_CONFIG.orderedLabel} (${totalOrdered}/${accepted} shirts)`;
+  }
+  return `${TSHIRT_CONFIG.orderedLabel} -- QTY MISMATCH (ordered ${totalOrdered}, accepted ${accepted})`;
+}
+
+function readTshirtAcceptedCount_(groupsRow, gAcceptedCol, gAcceptedFallbackCol) {
+  const primary = gAcceptedCol >= 0 ? Number(groupsRow[gAcceptedCol]) : NaN;
+  if (Number.isFinite(primary) && primary > 0) return primary;
+  const fallback = gAcceptedFallbackCol >= 0 ? Number(groupsRow[gAcceptedFallbackCol]) : NaN;
+  return (Number.isFinite(fallback) && fallback > 0) ? fallback : null;
 }
 
 function readTshirtSubmissions_(formSheet) {
@@ -136,6 +194,7 @@ function readTshirtSubmissions_(formSheet) {
   const schoolCategoryCol = col(TSHIRT_CONFIG.formSchoolCategoryCol);
   const confirmedCategoryCol = col(TSHIRT_CONFIG.formConfirmedCategoryCol);
   const teacherEmailCol = col(TSHIRT_CONFIG.formTeacherEmailCol);
+  const sizeQtyCols = TSHIRT_CONFIG.formSizeQtyCols.map(col).filter(i => i >= 0);
 
   return values.slice(1).map(row => {
     // "School/Category selection" looks like:
@@ -146,7 +205,11 @@ function readTshirtSubmissions_(formSheet) {
     const rawNoCount = stripTshirtStudentCount_(rawNormalised);
     const confirmedCategory = normaliseTshirtText_(confirmedCategoryCol >= 0 ? row[confirmedCategoryCol] : '');
     const teacherEmail = String(teacherEmailCol >= 0 ? row[teacherEmailCol] : '').trim().toLowerCase();
-    return { school, confirmedCategory, teacherEmail, raw, rawNormalised, rawNoCount };
+    const totalShirtsOrdered = sizeQtyCols.reduce((sum, i) => {
+      const n = Number(row[i]);
+      return sum + (Number.isFinite(n) ? n : 0);
+    }, 0);
+    return { school, confirmedCategory, teacherEmail, raw, rawNormalised, rawNoCount, totalShirtsOrdered };
   }).filter(s => s.school);
 }
 
@@ -155,9 +218,9 @@ function writeTshirtSyncReport_(spreadsheet, unmatched) {
   if (!sheet) sheet = spreadsheet.insertSheet('T-Shirt Order Sync Report');
   sheet.clear();
 
-  const rows = [['Submitted School', 'Confirmed Category', 'Teacher Email', 'Raw Form Selection', 'Issue']];
+  const rows = [['Submitted School', 'Confirmed Category', 'Teacher Email', 'Shirts Ordered', 'Raw Form Selection', 'Issue']];
   unmatched.forEach(s => rows.push([
-    s.school, s.confirmedCategory, s.teacherEmail, s.raw,
+    s.school, s.confirmedCategory, s.teacherEmail, s.totalShirtsOrdered, s.raw,
     'No matching GROUPS(YES) row found for this school + category/item combination'
   ]));
 
