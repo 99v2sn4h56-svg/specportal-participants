@@ -197,11 +197,16 @@
         if (App.state.preloadInFlight[module]) return App.state.preloadInFlight[module];
         var started = performance.now(), request;
         if (module === "participants") {
+          // Only warms the cheap, paginated first page here -- the complete
+          // unfiltered participant list is deliberately NOT preloaded on
+          // every session. ensurePortalDataLoaded() already fetches it
+          // lazily, in the background, the moment something that actually
+          // needs the full roster (search, cross-entity navigation) asks
+          // for it. Eagerly loading it here for every dashboard visit --
+          // including staff who never open Participants -- cost a ~250KB+
+          // background request nobody asked for.
           if (App.state.participantFirstPageReady || App.restorePriorityParticipantCache()) request = App.state.participantFirstPageData && App.state.participantFirstPageData.requestMeta && App.state.participantFirstPageData.requestMeta.isStale ? App.loadParticipantFirstPage(true, "preload-" + trigger, true) : Promise.resolve(App.state.participantFirstPageData);
           else request = App.loadParticipantFirstPage(false, "preload-" + trigger, false);
-          request = Promise.resolve(request).then(function (firstPage) {
-            return App.loadPortalData(false).then(function () { return firstPage; });
-          });
         } else if (module === "attendance") {
           request = App.services.request("attendanceSummaryPreload", "portalPeekAttendanceSummary", { cacheMs: 60000, timeoutMs: 15000 }).then(function (result) { if (result && result.ok) App.setClientCacheEntry("attendanceSummary", result, 60000, "cache-only-preload"); return result; });
         } else request = Promise.resolve(null);

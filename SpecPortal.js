@@ -517,7 +517,14 @@ function portalGetCalendarData() {
 }
 
 function portalGetEventManagerLanding() {
-  return PerformanceTelemetryService.measureJourney("event-loading", () => EventManagerService.getLanding(), { route: "operations", phase: "landing", projection: "event-manager" });
+  return PerformanceTelemetryService.measureJourney("event-loading", () => {
+    const user = UserContextService.getCurrent();
+    return PerformanceCacheService.getOrLoadUser(
+      PerformanceCacheService.userProjectionKey("eventManagerLanding", user),
+      120,
+      () => EventManagerService.getLanding()
+    );
+  }, { route: "operations", phase: "landing", projection: "event-manager" });
 }
 
 function portalGetEventWorkspace(eventId, section, options) {
@@ -607,11 +614,21 @@ function portalGetParticipantSchedule(studentKey) {
 }
 
 function portalGetOperationsData() {
-  return ProjectManagementService.getDashboardData();
+  const user = UserContextService.getCurrent();
+  return PerformanceCacheService.getOrLoadUser(
+    PerformanceCacheService.userProjectionKey("operations", user),
+    90,
+    () => ProjectManagementService.getDashboardData()
+  );
 }
 
 function portalGetMediaTimelineData() {
-  return MediaTimelineService.getDashboardData();
+  const user = UserContextService.getCurrent();
+  return PerformanceCacheService.getOrLoadUser(
+    PerformanceCacheService.userProjectionKey("mediaTimeline", user),
+    90,
+    () => MediaTimelineService.getDashboardData()
+  );
 }
 
 function createSpecPortalOpenTrigger() {
