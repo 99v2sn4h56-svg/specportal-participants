@@ -353,6 +353,23 @@ function adminRunHeadshotDiagnostics() {
   return result;
 }
 
+/**
+ * Clears every layer of participant/group/school cache -- both
+ * ParticipantService's own base-layer caches (participants:all,
+ * participants:groups, participants:schools, each cached independently
+ * for 30 minutes) and ParticipantProjectionService's higher-level
+ * projection caches. Run this after editing GROUPS(YES),
+ * INDIVIDUALS(YES), or "Schools Master Dataset" directly or via any
+ * Spec Tools menu action, so the portal reflects the change immediately
+ * instead of waiting out the cache TTL.
+ */
+function adminRefreshParticipantData() {
+  requirePortalCapability_("Administration.View");
+  ["participants:all", "participants:groups", "participants:schools"].forEach(PerformanceCacheService.remove);
+  ParticipantProjectionService.invalidate(UserContextService.getCurrent());
+  return { refreshedAt: new Date().toISOString() };
+}
+
 function adminRefreshHeadshotAssets() {
   requirePortalCapability_("Administration.View");
   const refreshed = HeadshotAssetService.refresh();
