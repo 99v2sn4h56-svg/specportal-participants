@@ -258,7 +258,7 @@ ParticipantService.getAll = function () {
     // burning ~10s polling first. This is the same fix already applied to
     // getDetail()/getGroups() projections; getAll() -- the single most
     // depended-on read in the whole app -- had never been migrated to it.
-    result = PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:all", 5 * 60, 30 * 60, loadFromSheet_);
+    result = PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:all", 5 * 60, 30 * 60, () => loadWithEmptyGuard_("participants:all", loadFromSheet_));
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     result = { value: loadFromSheet_(), meta: { cache: "busy-direct-fallback" } };
@@ -417,7 +417,7 @@ ParticipantService.getGroups = function () {
   };
   try {
     // Same thundering-herd fix as getAll() above -- see that comment.
-    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:groups", 5 * 60, 30 * 60, loadFromSheet_).value;
+    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:groups", 5 * 60, 30 * 60, () => loadWithEmptyGuard_("participants:groups", loadFromSheet_)).value;
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     return loadFromSheet_();
@@ -447,7 +447,7 @@ ParticipantService.getSchoolsMasterData = function () {
   };
   try {
     // Same thundering-herd fix as getAll() above -- see that comment.
-    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:schools", 5 * 60, 30 * 60, loadFromSheet_).value;
+    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:schools", 5 * 60, 30 * 60, () => loadWithEmptyGuard_("participants:schools", loadFromSheet_)).value;
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     return loadFromSheet_();
@@ -475,6 +475,30 @@ function stringifyCell_(value) {
 
 function stringifyRows_(rows) {
   return rows.map(row => row.map(stringifyCell_));
+}
+
+// A fresh sheet read coming back with 0 rows while a cached non-empty
+// result already exists is almost always a transient failure (a Sheets API
+// hiccup under contention, a race during a concurrent rebuild), not a
+// genuine "everyone was just deleted" event -- but stale-while-revalidate
+// has no concept of "this result looks wrong, don't publish it": whatever
+// a build returns gets cached and served until something explicitly
+// invalidates it. This is what let a single bad empty read get stuck
+// serving "0 School Groups" indefinitely until adminRefreshParticipantData()
+// cleared it by hand. Guards the three base reads by checking the existing
+// cached value (via peek(), which never triggers a rebuild) before trusting
+// a fresh empty one -- explicit cache clears (which remove the entry
+// outright, so peek() finds nothing) still take effect immediately.
+function loadWithEmptyGuard_(cacheKey, loadFn) {
+  const loaded = loadFn();
+  if (!Array.isArray(loaded) || loaded.length > 0) return loaded;
+  const previous = PerformanceCacheService.peek(cacheKey);
+  const previousValue = previous && previous.__projectionCache ? previous.value : previous;
+  if (Array.isArray(previousValue) && previousValue.length > 0) {
+    Logger.log(`ParticipantService: fresh read for "${cacheKey}" returned 0 rows while a cached result with ${previousValue.length} already exists -- serving the cached data instead of overwriting it with what's likely a transient read failure.`);
+    return previousValue;
+  }
+  return loaded;
 }
 
 function normaliseSchoolNameKey_(value) {
