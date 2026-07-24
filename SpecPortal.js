@@ -425,6 +425,24 @@ function portalGetPortalData() {
   return Object.assign({}, list, { groups: groups });
 }
 
+// On-demand, single-school detail for SpecCentral's "By School" tab --
+// includes teacher/family emails and principal contact, so this is never
+// bulk-loaded for every school at once, only fetched when a user opens one
+// school's profile. School name is the identifier (schools have no other
+// stable ID in this data set).
+function portalGetSchoolProfile(schoolName) {
+  requirePortalCapability_("Participants.View");
+  return ParticipantService.getSchoolProfile(String(schoolName || "").trim());
+}
+
+// Crest images are public school logos, not PII -- still gated behind the
+// same view capability as everything else here, but with no per-school
+// access-scope check beyond that.
+function portalGetSchoolCrest(schoolName) {
+  requirePortalCapability_("Participants.View");
+  return SchoolCrestService.resolveDataUrl(String(schoolName || "").trim());
+}
+
 function portalGetParticipantListProjection() {
   return ParticipantProjectionService.getList(requirePortalCapability_("Participants.View"));
 }
@@ -470,6 +488,24 @@ function warmSpecCentralSharedProjections() {
 
 function warmSpecCentralActiveAttendanceProjection() {
   return AttendanceProjectionService.warm();
+}
+
+/**
+ * TEMPORARY diagnostic -- lists every file name in the school crest folder,
+ * so the name-matching logic for the new "By School" hero image feature can
+ * be designed against real file names instead of guessed. Remove once the
+ * crest-matching logic is built and confirmed working.
+ */
+function adminListSchoolCrestFiles() {
+  const folder = DriveApp.getFolderById("1xb4ySnWNhMpOn-9s7VhQVPVIklomHaZA");
+  const files = folder.getFiles();
+  const names = [];
+  while (files.hasNext()) {
+    const file = files.next();
+    names.push({ name: file.getName(), mimeType: file.getMimeType() });
+  }
+  Logger.log(JSON.stringify(names.sort((a, b) => a.name.localeCompare(b.name)), null, 2));
+  return names;
 }
 
 function portalGetStaffProductionTeam() {

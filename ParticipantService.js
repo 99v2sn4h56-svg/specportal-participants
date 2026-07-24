@@ -363,6 +363,11 @@ ParticipantService.getGroups = function () {
   const secondTeacherAlumniIndex = getIndex(["Alumni (2)", "Are you a Spec Alumni? 2", "2nd teacher Spec Alumni", "Second teacher Spec Alumni"]);
   const secondTeacherAlumniRoleIndex = getIndex(["Alumni experience (2)", "2nd teacher Spec Alumni Role", "Second teacher Spec Alumni Role", "2nd teacher alumni role"]);
   const secondTeacherTaughtBeforeIndex = getIndex(["Teacher before (2)"]);
+  const schoolEmailIndex = getIndex(["School email address", "School Email"]);
+  const schoolPhoneIndex = getIndex(["School phone", "School Phone"]);
+  const principalFirstIndex = getIndex(["Principal's first name", "Principal first name"]);
+  const principalLastIndex = getIndex(["Principal's surname", "Principal surname"]);
+  const principalEmailIndex = getIndex(["Principal's email", "Principal email"]);
 
   return values.slice(1)
     .filter(row => row.some(cell => cell !== "" && cell !== null))
@@ -394,7 +399,11 @@ ParticipantService.getGroups = function () {
       secondTeacherContactType: "Second contact",
       secondTeacherIsSpecAlumni: row[secondTeacherAlumniIndex] || "",
       secondTeacherSpecRoles: row[secondTeacherAlumniRoleIndex] || "",
-      secondTeacherTaughtBefore: row[secondTeacherTaughtBeforeIndex] || ""
+      secondTeacherTaughtBefore: row[secondTeacherTaughtBeforeIndex] || "",
+      schoolEmail: row[schoolEmailIndex] || "",
+      schoolPhone: row[schoolPhoneIndex] || "",
+      principalName: [row[principalFirstIndex], row[principalLastIndex]].filter(Boolean).join(" "),
+      principalEmail: row[principalEmailIndex] || ""
     }));
   };
   try {
@@ -557,11 +566,30 @@ ParticipantService.getSchoolProfile = function (schoolName) {
     }
   });
 
+  // Principal/school contact details live per-group-application on
+  // GROUPS(YES) (a school can have several group entries) -- take the
+  // first non-blank value found across this school's groups.
+  const firstNonBlank_ = field => { const hit = groups.find(g => String(g[field] || "").trim()); return hit ? hit[field] : ""; };
+  const groupCategoryMap = new Map();
+  groups.forEach(g => {
+    const category = String(g.category || "").trim();
+    if (!category) return;
+    if (!groupCategoryMap.has(category)) groupCategoryMap.set(category, { name: category, count: 0, items: new Set() });
+    const record = groupCategoryMap.get(category);
+    record.count++;
+    if (g.item) record.items.add(g.item);
+  });
+
   return {
     schoolName: target,
     master,
+    principalName: firstNonBlank_("principalName"),
+    principalEmail: firstNonBlank_("principalEmail"),
+    schoolEmail: firstNonBlank_("schoolEmail") || (master && master.schoolEmail) || "",
+    schoolPhone: firstNonBlank_("schoolPhone"),
     groups,
     groupCount: groups.length,
+    groupCategories: Array.from(groupCategoryMap.values()).map(c => ({ name: c.name, count: c.count, items: Array.from(c.items).sort() })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
     participantCount: participants.length + groups.reduce((total, group) => total + getGroupStudentCount_(group), 0),
     participantCountNote: groups.some(hasNotAcceptedAllocationCount_) ? "Includes not accepted yet allocations" : "",
     teacherCount: teacherMap.size,

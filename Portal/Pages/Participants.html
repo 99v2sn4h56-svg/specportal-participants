@@ -5,6 +5,7 @@
         <div class="participantModeToggle" role="tablist" aria-label="Participant data type">
           <button id="participantModeIndividuals" type="button" role="tab" onclick="App.setParticipantExplorerMode('individuals')">Individuals</button>
           <button id="participantModeGroups" type="button" role="tab" onclick="App.setParticipantExplorerMode('groups')">School Groups</button>
+          <button id="participantModeSchools" type="button" role="tab" onclick="App.setParticipantExplorerMode('schools')">By School</button>
         </div>
         <button id="participantMobileFilterToggle" class="quickLink compact participantMobileFilterToggle" type="button" aria-expanded="false" onclick="App.toggleParticipantMobileFilters()">Filters</button>
       </div>
@@ -45,7 +46,9 @@
       try {
         App.initialiseParticipantExplorer();
         var groupMode = App.state.participantExplorerMode === "groups";
+        var schoolMode = App.state.participantExplorerMode === "schools";
         root.classList.toggle("groupMode", groupMode);
+        root.classList.toggle("schoolMode", schoolMode);
         App.renderParticipantModeToggle();
         if (groupMode) {
           if (!App.state.participantGroupsReady) {
@@ -64,6 +67,29 @@
           var groups = App.getFilteredParticipantGroups();
           App.renderParticipantGroupStats(groups);
           App.renderParticipantGroupTable(groups);
+          return;
+        }
+        if (schoolMode) {
+          // Needs the complete participant list (not just the paginated
+          // first page) plus the full groups list, since a school's category
+          // summary has to reflect every one of its participants/groups, not
+          // just whichever page happened to load first.
+          if (!App.state.participantListComplete || !App.state.participantGroupsReady) {
+            var schoolResults = document.getElementById("participantResults");
+            if (schoolResults) schoolResults.innerHTML = App.loadingState("Loading schools");
+            var schoolStatus = document.getElementById("participantStatus");
+            if (schoolStatus) schoolStatus.textContent = "Loading schools…";
+            var loaders = [];
+            if (!App.state.participantListComplete) loaders.push(App.ensurePortalDataLoaded({}));
+            if (!App.state.participantGroupsReady && !App.state.participantGroupListLoading) loaders.push(App.loadParticipantGroups(false));
+            Promise.all(loaders).then(App.renderParticipantExplorer).catch(function (error) {
+              if (schoolResults && App.state.participantExplorerMode === "schools") schoolResults.innerHTML = App.emptyState("Schools could not be loaded", App.getErrorMessage(error));
+            });
+            return;
+          }
+          var schools = App.getFilteredSchools();
+          App.renderSchoolExplorerStats(schools);
+          App.renderSchoolExplorerTable(schools);
           return;
         }
         var pageQuery = App.participantExplorerPageQuery();
@@ -107,7 +133,7 @@
 
     renderParticipantModeToggle: function () {
       var mode = App.state.participantExplorerMode || "individuals";
-      [["participantModeIndividuals", "individuals"], ["participantModeGroups", "groups"]].forEach(function (entry) {
+      [["participantModeIndividuals", "individuals"], ["participantModeGroups", "groups"], ["participantModeSchools", "schools"]].forEach(function (entry) {
         var button = document.getElementById(entry[0]), active = mode === entry[1];
         if (!button) return;
         button.classList.toggle("active", active);
@@ -115,15 +141,17 @@
         button.setAttribute("tabindex", active ? "0" : "-1");
       });
       var copy = document.getElementById("participantCopyEmails");
-      if (copy) copy.textContent = mode === "groups" ? "Copy teacher emails" : "Copy family emails";
+      if (copy) copy.textContent = mode === "groups" ? "Copy teacher emails" : mode === "schools" ? "" : "Copy family emails";
+      if (copy) copy.hidden = mode === "schools";
     },
 
     setParticipantExplorerMode: function (mode) {
-      App.state.participantExplorerMode = mode === "groups" ? "groups" : "individuals";
+      App.state.participantExplorerMode = mode === "groups" ? "groups" : mode === "schools" ? "schools" : "individuals";
       App.state.participantExplorerSearch = "";
       App.state.participantExplorerPage = 1;
       App.state.participantExplorerCurrentRows = [];
       App.state.participantExplorerCurrentGroups = [];
+      App.state.participantExplorerCurrentSchools = [];
       localStorage.setItem("specParticipantExplorerMode", App.state.participantExplorerMode);
       App.renderParticipantExplorer();
     },
@@ -194,6 +222,99 @@
       var count = App.getGroupStudentCount(group) || "0";
       var values = [group.school, title, item, group.category, group.segment, teachers, emails];
       return { title: title, item: item, school: String(group.school || ""), category: String(group.category || ""), segment: String(group.segment || ""), students: String(count), teachers: teachers, emails: emails, hasData: values.some(Boolean), search: values.filter(Boolean).join(" ").toLowerCase() };
+    },
+
+    // One row per school, with the distinct set of individual-participant
+    // categories and the distinct set of group categories at that school.
+    // Computed client-side from the already-loaded participants/groups --
+    // no separate bulk "schools with categories" server endpoint needed.
+    getFilteredSchools: function () {
+      var query = String(App.state.participantExplorerSearch || "").trim().toLowerCase();
+      var bySchool = {};
+      var ensure = function (name) {
+        var key = name.toLowerCase();
+        if (!bySchool[key]) bySchool[key] = { school: name, individualCategories: {}, groupCategories: {}, participantCount: 0, groupCount: 0 };
+        return bySchool[key];
+      };
+
+      (App.state.schools || []).forEach(function (school) {
+        var name = String(App.getSchoolName(school) || "").trim();
+        if (name) ensure(name);
+      });
+
+      (App.state.participants || []).forEach(function (participant) {
+        var name = String(App.getParticipantSchool(participant) || "").trim();
+        if (!name) return;
+        var record = ensure(name);
+        record.participantCount++;
+        App.getParticipantCategories(participant).forEach(function (category) { record.individualCategories[category] = true; });
+      });
+
+      (App.state.groups || []).forEach(function (group) {
+        var name = String(group.school || "").trim();
+        if (!name) return;
+        var record = ensure(name);
+        record.groupCount++;
+        var category = String(group.category || "").trim();
+        if (category) record.groupCategories[category] = true;
+      });
+
+      var list = Object.keys(bySchool).map(function (key) {
+        var record = bySchool[key];
+        return {
+          school: record.school,
+          individualCategories: Object.keys(record.individualCategories).sort(),
+          groupCategories: Object.keys(record.groupCategories).sort(),
+          participantCount: record.participantCount,
+          groupCount: record.groupCount
+        };
+      });
+
+      var filtered = query ? list.filter(function (row) {
+        return [row.school].concat(row.individualCategories, row.groupCategories).join(" ").toLowerCase().indexOf(query) >= 0;
+      }) : list;
+
+      return filtered.sort(function (a, b) { return a.school.localeCompare(b.school); });
+    },
+
+    renderSchoolExplorerStats: function (schools) {
+      var el = document.getElementById("participantStats"); if (!el) return;
+      var categories = new Set(), totalParticipants = 0, totalGroups = 0;
+      schools.forEach(function (school) {
+        school.individualCategories.forEach(function (c) { categories.add(c); });
+        school.groupCategories.forEach(function (c) { categories.add(c); });
+        totalParticipants += school.participantCount;
+        totalGroups += school.groupCount;
+      });
+      el.innerHTML = [[schools.length, "Schools"], [totalParticipants, "Individual participants"], [totalGroups, "School groups"], [categories.size, "Categories"]].map(function (item) { return '<article><strong>' + item[0] + '</strong><span>' + App.escapeHtml(item[1]) + '</span></article>'; }).join("");
+    },
+
+    renderSchoolCategoryPills_: function (categories) {
+      if (!categories.length) return '<span class="participantEmptyValue">—</span>';
+      var shown = categories.slice(0, 4), extra = categories.length - shown.length;
+      return '<span class="participantCategoryPills">' + shown.map(function (category) {
+        return '<span class="categoryTone' + App.getParticipantCategoryTone(category) + '">' + App.escapeHtml(category) + '</span>';
+      }).join("") + (extra > 0 ? '<span class="participantItemChip">+' + extra + ' more</span>' : '') + '</span>';
+    },
+
+    renderSchoolExplorerTable: function (schools) {
+      var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return;
+      var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, pages = Math.max(1, Math.ceil(schools.length / size)), page = Math.min(App.state.participantExplorerPage || 1, pages), rows = schools.slice((page - 1) * size, page * size);
+      App.state.participantExplorerPage = page; App.state.participantExplorerCurrentSchools = schools;
+      if (status) status.textContent = schools.length + " schools · page " + page + " of " + pages;
+      el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable participantSchoolTable"><thead><tr><th>School</th><th>Individual Categories</th><th>Group Categories</th><th class="participantColumn-open">Actions</th></tr></thead><tbody>' + rows.map(function (school, index) {
+        var rowIndex = (page - 1) * size + index;
+        return '<tr><td data-label="School"><strong>' + App.escapeHtml(school.school) + '</strong></td><td data-label="Individual Categories">' + App.renderSchoolCategoryPills_(school.individualCategories) + '</td><td data-label="Group Categories">' + App.renderSchoolCategoryPills_(school.groupCategories) + '</td><td class="participantColumn-open" data-label="Actions"><button class="participantIconButton participantIconButtonPrimary" type="button" title="Open school profile" aria-label="Open school profile" onclick="App.openExplorerSchool(' + rowIndex + ')">' + App.participantOpenIcon_ + '</button></td></tr>';
+      }).join("") + '</tbody></table></div>' : App.emptyState("No schools match this search", "Clear or adjust the search text.");
+      if (pagination) pagination.innerHTML = '<button type="button"' + (page <= 1 ? ' disabled' : '') + ' onclick="App.changeParticipantPage(-1)">Previous</button><span>' + page + ' / ' + pages + '</span><button type="button"' + (page >= pages ? ' disabled' : '') + ' onclick="App.changeParticipantPage(1)">Next</button>';
+    },
+
+    openExplorerSchool: function (index) {
+      var school = (App.state.participantExplorerCurrentSchools || [])[index];
+      if (!school) return;
+      App.openSchool(school.school);
+      var panel = document.getElementById("participantProfilePanel");
+      if (panel) panel.hidden = false;
     },
 
     getParticipantExplorerValues: function (participant) {

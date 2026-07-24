@@ -34,9 +34,37 @@
 
       openSchool: function (school) {
         App.navigate("participants");
-        App.state.selectedSchool = school;
-        App.events.emit("school:selected", school);
-        App.renderSchoolProfile(App.buildSchoolProfile(typeof school === "string" ? school : App.getSchoolName(school)));
+        var schoolName = typeof school === "string" ? school : App.getSchoolName(school);
+        var profile = App.buildSchoolProfile(schoolName);
+        App.state.selectedSchool = profile;
+        App.events.emit("school:selected", profile);
+        App.renderSchoolProfile(profile);
+        App.loadSchoolContactDetails(schoolName);
+      },
+
+      // Principal/school contact info and the crest image are PII-adjacent /
+      // not part of the bulk school list, so they're fetched separately, on
+      // demand, only for the one school actually opened -- never bundled
+      // into every school row.
+      loadSchoolContactDetails: function (schoolName) {
+        Promise.all([
+          App.services.request("schoolProfile:" + schoolName, "portalGetSchoolProfile", { args: [schoolName], cacheMs: 5 * 60 * 1000, timeoutMs: 30000 }).catch(function () { return null; }),
+          App.services.request("schoolCrest:" + schoolName, "portalGetSchoolCrest", { args: [schoolName], cacheMs: 60 * 60 * 1000, timeoutMs: 30000 }).catch(function () { return null; })
+        ]).then(function (results) {
+          var current = App.state.selectedSchool;
+          if (!current || current.schoolName !== schoolName) return;
+          var detail = results[0], crest = results[1];
+          current.contactDetailsLoaded = true;
+          if (detail) {
+            current.principalName = detail.principalName || "";
+            current.principalEmail = detail.principalEmail || "";
+            current.schoolEmail = detail.schoolEmail || current.schoolEmail;
+            current.schoolPhone = detail.schoolPhone || "";
+            if (detail.groupCategories && detail.groupCategories.length) current.groupCategories = detail.groupCategories;
+          }
+          if (crest && crest.ok && crest.dataUrl) current.crestDataUrl = crest.dataUrl;
+          if (App.state.selectedSchool === current) App.renderSchoolProfile(current);
+        });
       },
 
       openGroup: function (group) {
@@ -393,11 +421,18 @@
           if (item) categories[category].items[item] = true;
         });
 
+        var groupCategories = {};
         groups.forEach(function (group) {
           var teacherKey = String(group.teacherEmail || group.teacherName || "").trim().toLowerCase();
           if (teacherKey) {
             teachers[teacherKey] = teachers[teacherKey] || { name: group.teacherName, email: group.teacherEmail };
           }
+
+          var groupCategory = String(group.category || "").trim();
+          if (!groupCategory) return;
+          groupCategories[groupCategory] = groupCategories[groupCategory] || { name: groupCategory, count: 0, items: {} };
+          groupCategories[groupCategory].count++;
+          if (group.item) groupCategories[groupCategory].items[group.item] = true;
         });
 
         var groupParticipantCount = groups.reduce(function (total, group) {
@@ -412,6 +447,12 @@
         return {
           schoolName: target,
           master: master,
+          principalName: "",
+          principalEmail: "",
+          schoolEmail: (master && master.schoolEmail) || "",
+          schoolPhone: "",
+          crestDataUrl: "",
+          contactDetailsLoaded: false,
           participants: participants.sort(App.sortByParticipantName),
           groups: groups,
           participantCount: participants.length + groupParticipantCount,
@@ -419,6 +460,10 @@
           teachers: App.objectValues(teachers).sort(App.sortByName),
           items: App.objectValues(items).sort(App.sortByName),
           categories: App.objectValues(categories).map(function (category) {
+            category.items = Object.keys(category.items).sort();
+            return category;
+          }).sort(App.sortByName),
+          groupCategories: App.objectValues(groupCategories).map(function (category) {
             category.items = Object.keys(category.items).sort();
             return category;
           }).sort(App.sortByName)
@@ -435,6 +480,7 @@
         panel.innerHTML =
           '<div class="scProfileCard">' +
             '<div class="scProfileHero school">' +
+              (school.crestDataUrl ? '<img class="scProfileCrest" src="' + App.escapeHtml(school.crestDataUrl) + '" alt="' + App.escapeHtml(name) + ' crest">' : '') +
               '<div class="scProfileKicker">School Passport</div>' +
               App.favouriteButton("school", school.id || name, name, master.directorate || "School") +
               '<h2>' + App.escapeHtml(name) + '</h2>' +
@@ -446,18 +492,21 @@
               ]) +
               (school.participantCountNote ? '<div class="scProfileHeroNote">' + App.escapeHtml(school.participantCountNote) + '</div>' : '') +
               '<div class="scProfileSubtitle">' +
-                [master.code ? "Code: " + master.code : "", master.directorate ? "Directorate: " + master.directorate : "", master.schoolEmail ? "Email: " + master.schoolEmail : ""].filter(Boolean).map(App.escapeHtml).join("<br>") +
+                [master.code ? "Code: " + master.code : "", master.directorate ? "Directorate: " + master.directorate : ""].filter(Boolean).map(App.escapeHtml).join("<br>") +
               '</div>' +
             '</div>' +
             '<div class="scProfileBody">' +
-              App.renderProfileSection("Details", [
+              App.renderProfileSection("Contact Details", school.contactDetailsLoaded ? [
+                App.profileLine("Principal", [school.principalName, school.principalEmail].filter(Boolean).join(" - ")),
+                App.profileLine("School email", school.schoolEmail || master.schoolEmail),
+                App.profileLine("School phone", App.formatPhoneNumber(school.schoolPhone)),
                 App.profileLine("School code", master.code),
-                App.profileLine("Directorate", master.directorate),
-                App.profileLine("School email", master.schoolEmail)
-              ]) +
+                App.profileLine("Directorate", master.directorate)
+              ] : ['<div class="empty">Loading contact details...</div>']) +
               App.renderProfileSection("Groups", school.groups.map(App.renderGroupListItem)) +
               App.renderProfileSection("Teachers", school.teachers.map(App.renderTeacherListItem)) +
-              App.renderProfileSection("Categories", school.categories.map(App.renderCategoryListItem)) +
+              App.renderProfileSection("Individual Categories", school.categories.map(App.renderCategoryListItem)) +
+              App.renderProfileSection("Group Categories", (school.groupCategories || []).map(App.renderCategoryListItem)) +
               App.renderProfileSection("Items", school.items.map(App.renderItemListItem)) +
               App.renderProfileSection("Participants", school.participants.map(App.renderParticipantListItem)) +
             '</div>' +
