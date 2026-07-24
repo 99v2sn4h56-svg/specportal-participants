@@ -1,15 +1,24 @@
 /**
- * Syncs each school's costume-measurement fill status (has the school
- * actually written their students' names/measurements into their tab?)
- * into the existing "Costume Measurements" column on GROUPS(YES).
+ * Syncs each school's costume-measurement fill status into the existing
+ * "Costume Measurements" column on GROUPS(YES). Distinguishes a row with
+ * just a student name typed in from one with every measurement field
+ * actually filled in -- a full row of names alone is NOT "Complete".
  *
  * Read-only against the costume workbooks -- this never writes to a
- * school's measurement tab, it only reads how many name rows are filled
- * in and writes a status label back into GROUPS(YES). Reuses the same
- * COSTUME_CONFIG / tab-naming / row-structure logic as
- * "Update Measurement Sheets.js", so a row here matches the exact same
- * workbook + tab that tool would generate or update for it.
+ * school's measurement tab, it only reads fill state and writes a status
+ * label back into GROUPS(YES). Reuses the same COSTUME_CONFIG /
+ * tab-naming / row-structure logic as "Update Measurement Sheets.js", so
+ * a row here matches the exact same workbook + tab that tool would
+ * generate or update for it.
  */
+// Table layout on every school tab -- must match formatSchoolSheet /
+// growMeasurementTable_ in "Update Measurement Sheets.js": column A is the
+// student name, B is Gender, and C through O are the actual measurement
+// fields (girth, bust, waist, sizes, etc.).
+const MEASUREMENT_NAME_COL = 1;
+const MEASUREMENT_FIRST_DATA_COL = 3;
+const MEASUREMENT_LAST_COL = 15;
+
 function syncCostumeMeasurementStatus() {
   const ui = SpreadsheetApp.getUi();
   const sourceSS = SpreadsheetApp.getActiveSpreadsheet();
@@ -42,7 +51,7 @@ function syncCostumeMeasurementStatus() {
     const currentStatus = String(row[gStatusCol] || '').trim();
     const looksSyncManaged =
       !currentStatus ||
-      /^(not started|in progress|complete)\b/i.test(currentStatus) ||
+      /^(not started|names entered|in progress|complete)\b/i.test(currentStatus) ||
       /^sheet not generated/i.test(currentStatus) ||
       /^could not read/i.test(currentStatus);
 
@@ -98,10 +107,21 @@ function syncCostumeMeasurementStatus() {
       continue;
     }
 
-    const names = sheet.getRange(6, 1, existingAllocated, 1).getValues().flat();
-    const filled = names.filter(v => String(v || '').trim()).length;
+    const tableRows = sheet.getRange(6, 1, existingAllocated, MEASUREMENT_LAST_COL).getValues();
+    let namesFilled = 0;
+    let fullyMeasuredCount = 0;
 
-    setCostumeStatusCell_(cell, buildCostumeStatusLabel_(filled, existingAllocated), tabUrl);
+    tableRows.forEach(rowValues => {
+      const name = String(rowValues[MEASUREMENT_NAME_COL - 1] || '').trim();
+      if (!name) return;
+      namesFilled++;
+
+      const measurementCells = rowValues.slice(MEASUREMENT_FIRST_DATA_COL - 1, MEASUREMENT_LAST_COL);
+      const allMeasured = measurementCells.every(v => String(v || '').trim() !== '');
+      if (allMeasured) fullyMeasuredCount++;
+    });
+
+    setCostumeStatusCell_(cell, buildCostumeStatusLabel_(namesFilled, fullyMeasuredCount, existingAllocated), tabUrl);
     updatedCount++;
   }
 
@@ -117,10 +137,11 @@ function syncCostumeMeasurementStatus() {
   );
 }
 
-function buildCostumeStatusLabel_(filled, allocated) {
-  if (filled === 0) return `Not started (0/${allocated})`;
-  if (filled < allocated) return `In progress (${filled}/${allocated})`;
-  return `Complete (${filled}/${allocated})`;
+function buildCostumeStatusLabel_(namesFilled, fullyMeasuredCount, allocated) {
+  if (namesFilled === 0) return `Not started (0/${allocated})`;
+  if (fullyMeasuredCount === 0) return `Names entered, no measurements (${namesFilled}/${allocated})`;
+  if (fullyMeasuredCount < allocated) return `In progress (${fullyMeasuredCount}/${allocated} fully measured)`;
+  return `Complete (${allocated}/${allocated})`;
 }
 
 function setCostumeStatusCell_(cell, label, url) {
