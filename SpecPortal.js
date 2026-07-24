@@ -478,6 +478,8 @@ function adminRefreshHeadshotAssets() {
   return { refreshedAt: new Date().toISOString(), assets: refreshed };
 }
 
+// TEMPORARY -- inspecting the T-shirt order form's response sheet structure
+// before building a completion-status integration. Remove once resolved.
 function adminTestHeadshotResolution(entityType, stableEntityId) {
   requirePortalCapability_("Administration.View");
   return HeadshotAssetService.testResolution(entityType, stableEntityId);

@@ -33,6 +33,8 @@ function onOpen() {
       .addItem("1. Generate NEW sheets (first-time only — creates fresh, empty sheets)", "menuGenerateCostumeSheets")
       .addItem("2. Update existing sheets (safe — never erases entered measurements)", "menuUpdateExistingCostumeSheets")
       .addItem("Audit: check which sheets have data", "menuAuditCostumeMeasurementSheets"))
+    .addSubMenu(ui.createMenu("👕 T-Shirt Orders")
+      .addItem("Sync Order Status from Form", "menuSyncTshirtOrderStatus"))
     .addSubMenu(ui.createMenu("🔑 Stable ID Migration")
       .addItem("Dry Run", "menuStableIdMigrationDryRun")
       .addItem("Apply", "menuStableIdMigrationApply"))
@@ -87,6 +89,9 @@ function menuSyncExistingDanceWorkbooks() { runSpecTool_("Sync Existing Dance Wo
 function menuGenerateCostumeSheets() { runSpecTool_("Generate Costume Sheets", generateCostumeSheets); }
 function menuUpdateExistingCostumeSheets() { runSpecTool_("Update Existing Costume Sheets", updateExistingCostumeSheets); }
 function menuAuditCostumeMeasurementSheets() { runSpecTool_("Audit Costume Measurement Sheets", auditCostumeMeasurementSheets); }
+
+// --- T-Shirt Orders ---
+function menuSyncTshirtOrderStatus() { runSpecTool_("Sync T-Shirt Order Status from Form", syncTshirtOrderStatus); }
 
 // --- Stable ID Migration ---
 function menuStableIdMigrationDryRun() { runSpecTool_("Stable ID Migration — Dry Run", showStableIdMigrationDryRun_); }
