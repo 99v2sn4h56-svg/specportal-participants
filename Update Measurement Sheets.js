@@ -267,3 +267,74 @@ function safeSheetName(value) {
     .replace(/[\\/?*[\]:]/g, '')
     .substring(0, 99);
 }
+
+/**
+ * Reports the current fill-state of every school's costume measurement tab
+ * across every costume workbook in the output folder. This can only report
+ * CURRENT state -- there is no access to prior spreadsheet revisions from
+ * here, so it cannot itself prove a tab was erased versus never filled in.
+ * Cross-check any tab reported EMPTY against schools you already know had
+ * submitted measurements before today.
+ */
+function auditCostumeMeasurementSheets() {
+  const ui = SpreadsheetApp.getUi();
+  const folder = DriveApp.getFolderById(COSTUME_CONFIG.outputFolderId);
+  const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
+
+  const rows = [["Workbook", "School Tab", "Allocated", "Rows With a Name Entered", "Status"]];
+  let emptyCount = 0, partialCount = 0, fullCount = 0, uncertainCount = 0, workbookCount = 0;
+
+  while (files.hasNext()) {
+    const file = files.next();
+    workbookCount++;
+    const ss = SpreadsheetApp.openById(file.getId());
+
+    ss.getSheets().forEach(sheet => {
+      const name = sheet.getName();
+      if (name === 'Participating Schools' || name === 'All Student Measurements') return;
+
+      const allocated = findExistingAllocatedCount_(sheet);
+      if (allocated === null) {
+        rows.push([file.getName(), name, "?", "?", "COULD NOT READ"]);
+        uncertainCount++;
+        return;
+      }
+
+      const names = sheet.getRange(6, 1, allocated, 1).getValues().flat();
+      const filled = names.filter(v => String(v || '').trim()).length;
+
+      let status;
+      if (filled === 0) { status = "EMPTY"; emptyCount++; }
+      else if (filled < allocated) { status = "PARTIAL"; partialCount++; }
+      else { status = "FULL"; fullCount++; }
+
+      rows.push([file.getName(), name, allocated, filled, status]);
+    });
+  }
+
+  const reportSS = SpreadsheetApp.getActiveSpreadsheet();
+  let reportSheet = reportSS.getSheetByName('Costume Measurement Audit');
+  if (!reportSheet) {
+    reportSheet = reportSS.insertSheet('Costume Measurement Audit');
+  }
+  reportSheet.clear();
+  reportSheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+  reportSheet.getRange(1, 1, 1, rows[0].length)
+    .setFontWeight('bold')
+    .setBackground('#1256cf')
+    .setFontColor('#ffffff');
+  reportSheet.setFrozenRows(1);
+  reportSheet.autoResizeColumns(1, rows[0].length);
+
+  ui.alert(
+    'Costume Measurement Audit complete',
+    `Checked ${workbookCount} costume workbook(s).\n\n` +
+    `Fully filled: ${fullCount}\n` +
+    `Partially filled: ${partialCount}\n` +
+    `Completely empty: ${emptyCount}\n` +
+    `Could not read (unexpected sheet structure): ${uncertainCount}\n\n` +
+    `Full details written to the "Costume Measurement Audit" sheet.\n\n` +
+    `Note: this only shows current state. It can't tell "never submitted yet" apart from "erased by the old bug" -- check the EMPTY rows against schools you already know had submitted.`,
+    ui.ButtonSet.OK
+  );
+}

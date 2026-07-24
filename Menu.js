@@ -26,11 +26,13 @@ function onOpen() {
       .addItem("Sync Individual Acceptance Forms", "menuSyncIndividualAcceptances")
       .addItem("Sync Group Acceptance Forms", "menuSyncGroupAcceptances")
       .addItem("Upload Acceptances / New Participant", "menuUploadAcceptances"))
-    .addSubMenu(ui.createMenu("💃 Dance Workbooks & Costumes")
+    .addSubMenu(ui.createMenu("💃 Dance Workbooks (school/teacher roster)")
       .addItem("Create / Update Dance Workbooks", "menuCreateOrUpdateDanceWorkbooks")
-      .addItem("Sync Existing Dance Workbooks Only", "menuSyncExistingDanceWorkbooks")
-      .addItem("Generate Costume Sheets", "menuGenerateCostumeSheets")
-      .addItem("Update Existing Costume Sheets", "menuUpdateExistingCostumeSheets"))
+      .addItem("Sync Existing Dance Workbooks Only", "menuSyncExistingDanceWorkbooks"))
+    .addSubMenu(ui.createMenu("📏 Costume Measurement Sheets")
+      .addItem("1. Generate NEW sheets (first-time only — creates fresh, empty sheets)", "menuGenerateCostumeSheets")
+      .addItem("2. Update existing sheets (safe — never erases entered measurements)", "menuUpdateExistingCostumeSheets")
+      .addItem("Audit: check which sheets have data", "menuAuditCostumeMeasurementSheets"))
     .addSubMenu(ui.createMenu("🔑 Stable ID Migration")
       .addItem("Dry Run", "menuStableIdMigrationDryRun")
       .addItem("Apply", "menuStableIdMigrationApply"))
@@ -77,11 +79,14 @@ function menuSyncIndividualAcceptances() { runSpecTool_("Sync Individual Accepta
 function menuSyncGroupAcceptances() { runSpecTool_("Sync Group Acceptance Forms", ssSyncGroupAcceptances); }
 function menuUploadAcceptances() { runSpecTool_("Upload Acceptances / New Participant", openAcceptanceImportCentre); }
 
-// --- Dance Workbooks & Costumes ---
+// --- Dance Workbooks (roster) ---
 function menuCreateOrUpdateDanceWorkbooks() { runSpecTool_("Create / Update Dance Workbooks", createOrUpdateDanceWorkbooks); }
 function menuSyncExistingDanceWorkbooks() { runSpecTool_("Sync Existing Dance Workbooks Only", syncExistingDanceWorkbooksOnly); }
+
+// --- Costume Measurement Sheets ---
 function menuGenerateCostumeSheets() { runSpecTool_("Generate Costume Sheets", generateCostumeSheets); }
 function menuUpdateExistingCostumeSheets() { runSpecTool_("Update Existing Costume Sheets", updateExistingCostumeSheets); }
+function menuAuditCostumeMeasurementSheets() { runSpecTool_("Audit Costume Measurement Sheets", auditCostumeMeasurementSheets); }
 
 // --- Stable ID Migration ---
 function menuStableIdMigrationDryRun() { runSpecTool_("Stable ID Migration — Dry Run", showStableIdMigrationDryRun_); }
