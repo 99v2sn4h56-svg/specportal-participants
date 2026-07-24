@@ -79,8 +79,17 @@
             if (schoolResults) schoolResults.innerHTML = App.loadingState("Loading schools");
             var schoolStatus = document.getElementById("participantStatus");
             if (schoolStatus) schoolStatus.textContent = "Loading schools…";
+            // Deliberately App.loadPortalData(), not ensurePortalDataLoaded():
+            // that helper has a fast path that resolves immediately with
+            // just the first page while completing the real fetch in the
+            // background via setTimeout(...,0) -- since that resolution is a
+            // microtask and setTimeout is a macrotask, awaiting it here and
+            // looping back into this same "not complete yet" branch created
+            // an infinite microtask loop that never let the real background
+            // fetch run, freezing the tab. loadPortalData's own promise only
+            // resolves once participantListComplete is genuinely true.
             var loaders = [];
-            if (!App.state.participantListComplete) loaders.push(App.ensurePortalDataLoaded({}));
+            if (!App.state.participantListComplete) loaders.push(App.loadPortalData(false));
             if (!App.state.participantGroupsReady && !App.state.participantGroupListLoading) loaders.push(App.loadParticipantGroups(false));
             Promise.all(loaders).then(App.renderParticipantExplorer).catch(function (error) {
               if (schoolResults && App.state.participantExplorerMode === "schools") schoolResults.innerHTML = App.emptyState("Schools could not be loaded", App.getErrorMessage(error));
