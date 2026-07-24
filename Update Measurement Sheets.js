@@ -115,16 +115,26 @@ function updateWorkbookForItem(itemName, schools) {
     let sheet = ss.getSheetByName(sheetName);
 
     if (!sheet) {
+      // Brand new tab, guaranteed empty -- safe to build from scratch.
       sheet = ss.insertSheet(sheetName);
+      formatSchoolSheet(
+        sheet,
+        schoolObj.school,
+        schoolObj.groupName,
+        itemName,
+        schoolObj.allocated
+      );
+    } else {
+      // Existing tab -- teachers may already have measurements recorded
+      // here. Never clear/rebuild it; only ever grow the table.
+      updateExistingSchoolSheet_(
+        sheet,
+        schoolObj.school,
+        schoolObj.groupName,
+        itemName,
+        schoolObj.allocated
+      );
     }
-
-    formatSchoolSheet(
-      sheet,
-      schoolObj.school,
-      schoolObj.groupName,
-      itemName,
-      schoolObj.allocated
-    );
   });
 
   updateRemovedSchoolTabs(ss, schools);
@@ -142,6 +152,70 @@ function updateWorkbookForItem(itemName, schools) {
   formatSummarySheet(summary, schools);
 
   ss.setActiveSheet(home);
+}
+
+/**
+ * Updates an existing school costume-measurement tab without ever clearing
+ * or rebuilding it -- teachers may already have measurements recorded in
+ * the data rows. Only the title/instructions (static prose, never teacher
+ * data) get rewritten in place, and the measurement table only ever grows
+ * (never shrinks) if the allocated student count increased. If the current
+ * allocated count can't be confidently read back from the sheet's own
+ * structure, the table is left untouched entirely rather than risk
+ * guessing at which rows are safe to change.
+ */
+function updateExistingSchoolSheet_(sheet, schoolName, groupName, itemName, allocated) {
+  const c = CONFIG.colours;
+  const title = groupName
+    ? `${schoolName} (${groupName}) - ${itemName}`
+    : `${schoolName} - ${itemName}`;
+
+  sheet.getRange('A1:O1').merge().setValue(title);
+  sheet.getRange('A2:O2').merge().setFormula(
+    `=HYPERLINK("${CONFIG.guideUrl}","To assist with measuring your students, please use the linked Costume Measurement Guide for reference.")`
+  );
+  sheet.getRange('A4:O4').merge().setValue(
+    'Please ensure the measurements recorded below are in centimetres. For clothing sizes, be specific with your entry, e.g. Ladies 12 Pants, Mens 28-Inch Pants, Girls 8 Pants, Boys 10 Pants etc...'
+  );
+
+  const currentAllocated = findExistingAllocatedCount_(sheet);
+  if (currentAllocated === null) {
+    Logger.log(`Could not determine the existing row count for "${sheet.getName()}" -- leaving its measurement table untouched.`);
+    return;
+  }
+
+  if (allocated > currentAllocated) {
+    growMeasurementTable_(sheet, currentAllocated, allocated, c);
+  }
+  // allocated <= currentAllocated: never remove rows, leave the table as-is.
+}
+
+function findExistingAllocatedCount_(sheet) {
+  const finder = sheet.createTextFinder('This costume measurement sheet has now been locked').matchEntireCell(false);
+  const match = finder.findNext();
+  if (!match) return null;
+  const lockRow = match.getRow();
+  const allocated = lockRow - 8; // formatSchoolSheet sets lockRow = 6 + allocated + 2
+  return allocated > 0 ? allocated : null;
+}
+
+function growMeasurementTable_(sheet, currentAllocated, newAllocated, c) {
+  const extraRows = newAllocated - currentAllocated;
+  const insertBeforeRow = 6 + currentAllocated; // first row of the gap, right after the last data row
+  const headerCount = 15;
+
+  sheet.insertRowsBefore(insertBeforeRow, extraRows);
+
+  sheet.getRange(insertBeforeRow, 1, extraRows, headerCount)
+    .setBackground(c.lightBlue)
+    .setBorder(true, true, true, true, true, true)
+    .setVerticalAlignment('middle');
+
+  const genderRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Female', 'Male', 'Non-binary / self-described'], true)
+    .build();
+
+  sheet.getRange(insertBeforeRow, 2, extraRows, 1).setDataValidation(genderRule);
 }
 
 function updateRemovedSchoolTabs(ss, currentSchools) {
