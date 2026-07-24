@@ -2,11 +2,15 @@ const COSTUME_CONFIG = {
   sourceSheetName: 'GROUPS(YES)',
   outputFolderId: '1zV4bTV5k_-_n6Ingq1GByJbxh-IBdgFR',
 
-  schoolCol: 8,              // Column H
-  itemCol: 15,               // Column O
-  groupNameCol: 16,          // Column P
-  allocatedPrimaryCol: 1,    // Column A
-  allocatedFallbackCol: 7,   // Column G
+  // Looked up by header text (not position) each run, so these columns can
+  // be freely reordered on GROUPS(YES) without breaking anything. Note:
+  // "School name" appears twice on GROUPS(YES) -- headers.indexOf() always
+  // resolves to the first occurrence, which is the intended one.
+  schoolColHeader: 'School name',
+  itemColHeader: 'Item',
+  groupNameColHeader: 'Category',
+  allocatedPrimaryColHeader: 'Accepted?',
+  allocatedFallbackColHeader: '# Alloc',
 
   allowedItems: [
     'Alive',
@@ -43,15 +47,30 @@ function updateExistingCostumeSheets() {
     return;
   }
 
-  const data = sourceSheet.getDataRange().getValues().slice(1);
+  const allValues = sourceSheet.getDataRange().getValues();
+  const headers = allValues[0];
+  const gCol = name => headers.indexOf(name);
+
+  const schoolCol = gCol(COSTUME_CONFIG.schoolColHeader);
+  const itemCol = gCol(COSTUME_CONFIG.itemColHeader);
+  const groupNameCol = gCol(COSTUME_CONFIG.groupNameColHeader);
+  const allocatedPrimaryCol = gCol(COSTUME_CONFIG.allocatedPrimaryColHeader);
+  const allocatedFallbackCol = gCol(COSTUME_CONFIG.allocatedFallbackColHeader);
+
+  if (schoolCol < 0 || itemCol < 0) {
+    ui.alert(`Could not find the expected "${COSTUME_CONFIG.schoolColHeader}" or "${COSTUME_CONFIG.itemColHeader}" columns on ${COSTUME_CONFIG.sourceSheetName}.`);
+    return;
+  }
+
+  const data = allValues.slice(1);
   const grouped = {};
   const skippedItems = new Set();
 
   const allowedItemsNormalised = COSTUME_CONFIG.allowedItems.map(normaliseText);
 
   data.forEach(row => {
-    const allocatedPrimary = row[COSTUME_CONFIG.allocatedPrimaryCol - 1];
-    const allocatedFallback = row[COSTUME_CONFIG.allocatedFallbackCol - 1];
+    const allocatedPrimary = allocatedPrimaryCol >= 0 ? row[allocatedPrimaryCol] : '';
+    const allocatedFallback = allocatedFallbackCol >= 0 ? row[allocatedFallbackCol] : '';
 
     const allocated = Number(
       allocatedPrimary !== '' && allocatedPrimary !== null
@@ -59,9 +78,9 @@ function updateExistingCostumeSheets() {
         : allocatedFallback
     );
 
-    const school = String(row[COSTUME_CONFIG.schoolCol - 1] || '').trim();
-    const item = String(row[COSTUME_CONFIG.itemCol - 1] || '').trim();
-    const groupName = String(row[COSTUME_CONFIG.groupNameCol - 1] || '').trim();
+    const school = String(row[schoolCol] || '').trim();
+    const item = String(row[itemCol] || '').trim();
+    const groupName = groupNameCol >= 0 ? String(row[groupNameCol] || '').trim() : '';
 
     if (!item) return;
 

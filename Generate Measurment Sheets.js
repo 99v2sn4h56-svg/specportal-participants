@@ -2,10 +2,12 @@ const CONFIG = {
   sourceSheetName: 'GROUPS(YES)',
   outputFolderId: '1zV4bTV5k_-_n6Ingq1GByJbxh-IBdgFR',
 
-  allocatedCol: 7,   // G
-  schoolCol: 8,      // H
-  itemCol: 14,       // N
-  groupNameCol: 16,  // P
+  // Looked up by header text (not position) each run, so these columns can
+  // be freely reordered on GROUPS(YES) without breaking anything.
+  allocatedColHeader: '# Alloc',
+  schoolColHeader: 'School name',
+  itemColHeader: 'Item',
+  groupNameColHeader: 'Category',
 
   guideUrl: 'https://drive.google.com/file/d/1BWR7BFqc8IgIi9otWAP5Sf9Yu50eN26l/view?usp=sharing',
 
@@ -47,14 +49,28 @@ function generateCostumeSheets() {
     return;
   }
 
-  const data = sourceSheet.getDataRange().getValues().slice(1);
+  const allValues = sourceSheet.getDataRange().getValues();
+  const headers = allValues[0];
+  const gCol = name => headers.indexOf(name);
+
+  const allocatedCol = gCol(CONFIG.allocatedColHeader);
+  const schoolCol = gCol(CONFIG.schoolColHeader);
+  const itemCol = gCol(CONFIG.itemColHeader);
+  const groupNameCol = gCol(CONFIG.groupNameColHeader);
+
+  if (schoolCol < 0 || itemCol < 0) {
+    ui.alert(`Could not find the expected "${CONFIG.schoolColHeader}" or "${CONFIG.itemColHeader}" columns on ${CONFIG.sourceSheetName}.`);
+    return;
+  }
+
+  const data = allValues.slice(1);
   const grouped = {};
 
   data.forEach(row => {
-    const allocated = Number(row[CONFIG.allocatedCol - 1]);
-    const school = String(row[CONFIG.schoolCol - 1] || '').trim();
-    const item = String(row[CONFIG.itemCol - 1] || '').trim();
-    const groupName = String(row[CONFIG.groupNameCol - 1] || '').trim();
+    const allocated = allocatedCol >= 0 ? Number(row[allocatedCol]) : NaN;
+    const school = String(row[schoolCol] || '').trim();
+    const item = String(row[itemCol] || '').trim();
+    const groupName = groupNameCol >= 0 ? String(row[groupNameCol] || '').trim() : '';
 
     if (!CONFIG.allowedItems.includes(item)) return;
     if (!allocated || !school || !item) return;

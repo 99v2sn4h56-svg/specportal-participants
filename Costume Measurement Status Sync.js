@@ -10,15 +10,11 @@
  * tab-naming / row-structure logic as "Update Measurement Sheets.js", so
  * a row here matches the exact same workbook + tab that tool would
  * generate or update for it.
+ *
+ * All column lookups (on GROUPS(YES) and on each school's own tab) are by
+ * header text, not position -- columns can be freely reordered on either
+ * sheet without breaking this.
  */
-// Table layout on every school tab -- must match formatSchoolSheet /
-// growMeasurementTable_ in "Update Measurement Sheets.js": column A is the
-// student name, B is Gender, and C through O are the actual measurement
-// fields (girth, bust, waist, sizes, etc.).
-const MEASUREMENT_NAME_COL = 1;
-const MEASUREMENT_FIRST_DATA_COL = 3;
-const MEASUREMENT_LAST_COL = 15;
-
 function syncCostumeMeasurementStatus() {
   const ui = SpreadsheetApp.getUi();
   const sourceSS = SpreadsheetApp.getActiveSpreadsheet();
@@ -32,10 +28,20 @@ function syncCostumeMeasurementStatus() {
   const values = sourceSheet.getDataRange().getValues();
   const headers = values[0];
   const gCol = name => headers.indexOf(name);
+
   const gStatusCol = gCol('Costume Measurements');
+  const gSchoolCol = gCol(COSTUME_CONFIG.schoolColHeader);
+  const gItemCol = gCol(COSTUME_CONFIG.itemColHeader);
+  const gGroupNameCol = gCol(COSTUME_CONFIG.groupNameColHeader);
+  const gAllocatedPrimaryCol = gCol(COSTUME_CONFIG.allocatedPrimaryColHeader);
+  const gAllocatedFallbackCol = gCol(COSTUME_CONFIG.allocatedFallbackColHeader);
 
   if (gStatusCol < 0) {
     ui.alert('Could not find the expected "Costume Measurements" column on GROUPS(YES).');
+    return;
+  }
+  if (gSchoolCol < 0 || gItemCol < 0) {
+    ui.alert(`Could not find the expected "${COSTUME_CONFIG.schoolColHeader}" or "${COSTUME_CONFIG.itemColHeader}" columns on ${COSTUME_CONFIG.sourceSheetName}.`);
     return;
   }
 
@@ -61,15 +67,15 @@ function syncCostumeMeasurementStatus() {
       continue;
     }
 
-    const allocatedPrimary = row[COSTUME_CONFIG.allocatedPrimaryCol - 1];
-    const allocatedFallback = row[COSTUME_CONFIG.allocatedFallbackCol - 1];
+    const allocatedPrimary = gAllocatedPrimaryCol >= 0 ? row[gAllocatedPrimaryCol] : '';
+    const allocatedFallback = gAllocatedFallbackCol >= 0 ? row[gAllocatedFallbackCol] : '';
     const allocated = Number(
       allocatedPrimary !== '' && allocatedPrimary !== null ? allocatedPrimary : allocatedFallback
     );
 
-    const school = String(row[COSTUME_CONFIG.schoolCol - 1] || '').trim();
-    const item = String(row[COSTUME_CONFIG.itemCol - 1] || '').trim();
-    const groupName = String(row[COSTUME_CONFIG.groupNameCol - 1] || '').trim();
+    const school = String(row[gSchoolCol] || '').trim();
+    const item = String(row[gItemCol] || '').trim();
+    const groupName = gGroupNameCol >= 0 ? String(row[gGroupNameCol] || '').trim() : '';
 
     if (!item || !school || !allocated) { skippedRowCount++; continue; }
     if (!allowedItemsNormalised.includes(normaliseText(item))) { skippedRowCount++; continue; }
@@ -100,6 +106,26 @@ function syncCostumeMeasurementStatus() {
     const tabUrl = `https://docs.google.com/spreadsheets/d/${workbook.getId()}/edit#gid=${sheet.getSheetId()}`;
     const cell = sourceSheet.getRange(r + 1, gStatusCol + 1);
 
+    // Header row on every school tab is row 5 (see formatSchoolSheet in
+    // "Generate Measurment Sheets.js") -- read it fresh each time so
+    // reordered/added/removed measurement columns are picked up correctly.
+    const lastCol = sheet.getLastColumn();
+    const tabHeaders = lastCol > 0 ? sheet.getRange(5, 1, 1, lastCol).getValues()[0] : [];
+    const nameCol = tabHeaders.indexOf('Student Full Name');
+    const genderCol = tabHeaders.indexOf('Gender');
+
+    if (nameCol < 0) {
+      setCostumeStatusCell_(cell, 'Could not read sheet structure', tabUrl);
+      notGeneratedCount++;
+      continue;
+    }
+
+    // Everything on the tab except the name and gender columns counts as
+    // an actual measurement field.
+    const measurementCols = tabHeaders
+      .map((h, i) => i)
+      .filter(i => i !== nameCol && i !== genderCol);
+
     const existingAllocated = findExistingAllocatedCount_(sheet);
     if (existingAllocated === null) {
       setCostumeStatusCell_(cell, 'Could not read sheet structure', tabUrl);
@@ -107,17 +133,16 @@ function syncCostumeMeasurementStatus() {
       continue;
     }
 
-    const tableRows = sheet.getRange(6, 1, existingAllocated, MEASUREMENT_LAST_COL).getValues();
+    const tableRows = sheet.getRange(6, 1, existingAllocated, lastCol).getValues();
     let namesFilled = 0;
     let fullyMeasuredCount = 0;
 
     tableRows.forEach(rowValues => {
-      const name = String(rowValues[MEASUREMENT_NAME_COL - 1] || '').trim();
+      const name = String(rowValues[nameCol] || '').trim();
       if (!name) return;
       namesFilled++;
 
-      const measurementCells = rowValues.slice(MEASUREMENT_FIRST_DATA_COL - 1, MEASUREMENT_LAST_COL);
-      const allMeasured = measurementCells.every(v => String(v || '').trim() !== '');
+      const allMeasured = measurementCols.every(i => String(rowValues[i] || '').trim() !== '');
       if (allMeasured) fullyMeasuredCount++;
     });
 
