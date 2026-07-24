@@ -32,7 +32,8 @@ function onOpen() {
     .addSubMenu(ui.createMenu("📏 Costume Measurement Sheets")
       .addItem("1. Generate NEW sheets (first-time only — creates fresh, empty sheets)", "menuGenerateCostumeSheets")
       .addItem("2. Update existing sheets (safe — never erases entered measurements)", "menuUpdateExistingCostumeSheets")
-      .addItem("Audit: check which sheets have data", "menuAuditCostumeMeasurementSheets"))
+      .addItem("Audit: check which sheets have data", "menuAuditCostumeMeasurementSheets")
+      .addItem("Sync fill status to GROUPS(YES)", "menuSyncCostumeMeasurementStatus"))
     .addSubMenu(ui.createMenu("👕 T-Shirt Orders")
       .addItem("Sync Order Status from Form", "menuSyncTshirtOrderStatus"))
     .addSubMenu(ui.createMenu("🔑 Stable ID Migration")
@@ -89,6 +90,7 @@ function menuSyncExistingDanceWorkbooks() { runSpecTool_("Sync Existing Dance Wo
 function menuGenerateCostumeSheets() { runSpecTool_("Generate Costume Sheets", generateCostumeSheets); }
 function menuUpdateExistingCostumeSheets() { runSpecTool_("Update Existing Costume Sheets", updateExistingCostumeSheets); }
 function menuAuditCostumeMeasurementSheets() { runSpecTool_("Audit Costume Measurement Sheets", auditCostumeMeasurementSheets); }
+function menuSyncCostumeMeasurementStatus() { runSpecTool_("Sync Costume Measurement Status to GROUPS(YES)", syncCostumeMeasurementStatus); }
 
 // --- T-Shirt Orders ---
 function menuSyncTshirtOrderStatus() { runSpecTool_("Sync T-Shirt Order Status from Form", syncTshirtOrderStatus); }
