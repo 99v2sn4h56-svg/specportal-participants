@@ -180,8 +180,9 @@ function portalGetPerformanceDiagnostics() {
   };
 }
 
-// TEMPORARY -- checking real recorded latency for the Participants page
-// specifically. Remove once resolved.
+// Ongoing monitoring tool -- logs recorded latency/telemetry for the
+// Participants page (journey + legacy samples, degraded-state counters).
+// Safe to re-run any time.
 function adminLogParticipantPerformanceSummary() {
   requirePortalCapability_("Administration.View");
   var diagnostics = PerformanceTelemetryService.getDiagnostics();
@@ -371,13 +372,13 @@ function adminRefreshParticipantData() {
 }
 
 /**
- * TEMPORARY diagnostic -- School Groups showed 0 results in SpecCentral.
- * Traces both the base ParticipantService.getGroups() (raw, cache-wrapped)
- * and the projection-layer ParticipantProjectionService.getGroups() (what
- * SpecCentral actually calls) to find exactly where in the pipeline the
- * count drops to zero. Run adminRefreshParticipantData() first to rule out
- * a stuck bad cache entry, then run this either way to confirm. Remove
- * once resolved.
+ * Ongoing diagnostic -- if School Groups ever shows 0 results in
+ * SpecCentral again, traces both the base ParticipantService.getGroups()
+ * (raw, cache-wrapped) and the projection-layer
+ * ParticipantProjectionService.getGroups() (what SpecCentral actually
+ * calls) to find exactly where in the pipeline the count drops to zero.
+ * Run adminRefreshParticipantData() first to rule out a stuck bad cache
+ * entry, then run this either way to confirm.
  */
 function adminDiagnoseEmptyGroups() {
   requirePortalCapability_("Administration.View");
@@ -415,22 +416,14 @@ function adminRefreshHeadshotAssets() {
   return { refreshedAt: new Date().toISOString(), assets: refreshed };
 }
 
-// TEMPORARY -- verifying headshot resolution for a single entity while
-// diagnosing photo-loading issues. Remove once resolved.
-function adminTestHeadshotResolution(entityType, stableEntityId) {
-  requirePortalCapability_("Administration.View");
-  return HeadshotAssetService.testResolution(entityType, stableEntityId);
-}
-
 /**
- * TEMPORARY diagnostic -- inspects the actual sheet structure behind the
- * ~8-12s baseline read cost for getAll()/getGroups()/getSchoolsMasterData():
+ * Ongoing diagnostic -- inspects the actual sheet structure behind
+ * getAll()/getGroups()/getSchoolsMasterData()'s baseline read cost:
  * used-range size for each of the three source sheets (a used range far
  * bigger than the real data table means Sheets is reading/scanning much
  * more than intended), plus a scan of every sheet in the spreadsheet for
  * volatile formulas (NOW/TODAY/RAND/INDIRECT/IMPORT*), which force a full
  * recalculation on every read regardless of which range is being fetched.
- * Remove once resolved.
  */
 function adminInspectSheetPerformanceStructure() {
   requirePortalCapability_("Administration.View");
