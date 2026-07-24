@@ -36,6 +36,9 @@ function onOpen() {
       .addItem("Sync fill status to GROUPS(YES)", "menuSyncCostumeMeasurementStatus"))
     .addSubMenu(ui.createMenu("👕 T-Shirt Orders")
       .addItem("Sync Order Status from Form", "menuSyncTshirtOrderStatus"))
+    .addSubMenu(ui.createMenu("🧮 Group Computed Columns")
+      .addItem("Sync Now", "menuSyncGroupComputedColumns")
+      .addItem("Enable Auto-Sync (every 5 min)", "menuInstallGroupComputedColumnsSyncTrigger"))
     .addSubMenu(ui.createMenu("🎬 Show Run")
       .addItem("Sync Now", "menuSyncShowRunSnapshot")
       .addItem("Enable Auto-Sync (every 15 min)", "menuInstallShowRunSyncTrigger"))
@@ -97,6 +100,10 @@ function menuSyncCostumeMeasurementStatus() { runSpecTool_("Sync Costume Measure
 
 // --- T-Shirt Orders ---
 function menuSyncTshirtOrderStatus() { runSpecTool_("Sync T-Shirt Order Status from Form", syncTshirtOrderStatus); }
+
+// --- Group Computed Columns ---
+function menuSyncGroupComputedColumns() { runSpecTool_("Sync Group Computed Columns", syncGroupComputedColumns); }
+function menuInstallGroupComputedColumnsSyncTrigger() { runSpecTool_("Enable Group Computed Columns Auto-Sync", installGroupComputedColumnsSyncTrigger); }
 
 // --- Show Run ---
 function menuSyncShowRunSnapshot() { runSpecTool_("Sync Show Run Snapshot", syncShowRunSnapshot); }

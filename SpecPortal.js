@@ -370,6 +370,42 @@ function adminRefreshParticipantData() {
   return { refreshedAt: new Date().toISOString() };
 }
 
+/**
+ * TEMPORARY diagnostic -- School Groups showed 0 results in SpecCentral.
+ * Traces both the base ParticipantService.getGroups() (raw, cache-wrapped)
+ * and the projection-layer ParticipantProjectionService.getGroups() (what
+ * SpecCentral actually calls) to find exactly where in the pipeline the
+ * count drops to zero. Run adminRefreshParticipantData() first to rule out
+ * a stuck bad cache entry, then run this either way to confirm. Remove
+ * once resolved.
+ */
+function adminDiagnoseEmptyGroups() {
+  requirePortalCapability_("Administration.View");
+  const result = { generatedAt: new Date().toISOString() };
+
+  try {
+    const rawGroups = ParticipantService.getGroups();
+    result.rawGroupsCount = rawGroups.length;
+    result.rawGroupsSample = rawGroups.slice(0, 2);
+  } catch (error) {
+    result.rawGroupsError = String(error && error.stack || error);
+  }
+
+  try {
+    const user = UserContextService.getCurrent();
+    result.user = { email: user.email, isAdmin: user.isAdmin, scope: user.scope };
+    const projected = ParticipantProjectionService.getGroups(user);
+    result.projectedGroupsCount = (projected && projected.groups || []).length;
+    result.projectedGroupsSample = (projected && projected.groups || []).slice(0, 2);
+    result.projectedRequestMeta = projected && projected.requestMeta;
+  } catch (error) {
+    result.projectedGroupsError = String(error && error.stack || error);
+  }
+
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
 function adminRefreshHeadshotAssets() {
   requirePortalCapability_("Administration.View");
   const refreshed = HeadshotAssetService.refresh();
@@ -384,6 +420,88 @@ function adminRefreshHeadshotAssets() {
 function adminTestHeadshotResolution(entityType, stableEntityId) {
   requirePortalCapability_("Administration.View");
   return HeadshotAssetService.testResolution(entityType, stableEntityId);
+}
+
+/**
+ * TEMPORARY diagnostic -- inspects the actual sheet structure behind the
+ * ~8-12s baseline read cost for getAll()/getGroups()/getSchoolsMasterData():
+ * used-range size for each of the three source sheets (a used range far
+ * bigger than the real data table means Sheets is reading/scanning much
+ * more than intended), plus a scan of every sheet in the spreadsheet for
+ * volatile formulas (NOW/TODAY/RAND/INDIRECT/IMPORT*), which force a full
+ * recalculation on every read regardless of which range is being fetched.
+ * Remove once resolved.
+ */
+function adminInspectSheetPerformanceStructure() {
+  requirePortalCapability_("Administration.View");
+  const started = Date.now();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const allSheets = ss.getSheets();
+
+  const sourceSheets = ["INDIVIDUALS(YES)", "GROUPS(YES)", "Schools Master Dataset"];
+  const usedRanges = sourceSheets.map(name => {
+    const sheet = ss.getSheetByName(name);
+    if (!sheet) return { name, found: false };
+    return {
+      name,
+      found: true,
+      lastRow: sheet.getLastRow(),
+      lastColumn: sheet.getLastColumn(),
+      frozenRows: sheet.getFrozenRows(),
+      frozenColumns: sheet.getFrozenColumns()
+    };
+  });
+
+  const volatilePattern = /\b(NOW|TODAY|RAND|RANDBETWEEN|RANDARRAY|INDIRECT|IMPORTRANGE|IMPORTXML|IMPORTDATA|IMPORTHTML|IMPORTFEED|GOOGLEFINANCE)\s*\(/i;
+  const volatileFindings = [];
+  let totalFormulaCells = 0;
+
+  allSheets.forEach(sheet => {
+    const name = sheet.getName();
+    const lastRow = sheet.getLastRow(), lastColumn = sheet.getLastColumn();
+    if (lastRow < 1 || lastColumn < 1) return;
+    let formulas;
+    try {
+      formulas = sheet.getRange(1, 1, lastRow, lastColumn).getFormulas();
+    } catch (err) {
+      volatileFindings.push({ sheet: name, error: String(err && err.message || err) });
+      return;
+    }
+    let sheetFormulaCount = 0;
+    const sheetVolatileCells = [];
+    formulas.forEach((row, rowIndex) => {
+      row.forEach((formula, colIndex) => {
+        if (!formula) return;
+        sheetFormulaCount++;
+        if (volatilePattern.test(formula) && sheetVolatileCells.length < 5) {
+          sheetVolatileCells.push({ cell: sheet.getRange(rowIndex + 1, colIndex + 1).getA1Notation(), formula: formula.slice(0, 120) });
+        }
+      });
+    });
+    totalFormulaCells += sheetFormulaCount;
+    if (sheetFormulaCount > 0 || sheetVolatileCells.length > 0) {
+      volatileFindings.push({
+        sheet: name,
+        lastRow,
+        lastColumn,
+        formulaCellCount: sheetFormulaCount,
+        volatileSample: sheetVolatileCells
+      });
+    }
+  });
+
+  const result = {
+    generatedAt: new Date().toISOString(),
+    diagnosticDurationMs: Date.now() - started,
+    totalSheetCount: allSheets.length,
+    sheetNames: allSheets.map(s => s.getName()),
+    sourceSheetUsedRanges: usedRanges,
+    totalFormulaCellsAcrossWorkbook: totalFormulaCells,
+    sheetsWithFormulasOrVolatiles: volatileFindings
+  };
+
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
 }
 
 // Used only by the "Open Spec Portal" sidebar (Portal.html /
