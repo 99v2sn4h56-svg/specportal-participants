@@ -21,15 +21,31 @@ function ssSyncGroupAcceptances() {
     return;
   }
 
+  const groupsHeaders = groupsData[0];
+  const gCol = name => groupsHeaders.indexOf(name);
+
+  // "School name" appears twice on GROUPS(YES) -- indexOf() resolves to the
+  // first occurrence, which is the one this sync has always used.
+  const gSchoolCol = gCol("School name");
+  const gCategoryCol = gCol("Category");
+  const gSchoolCodeCol = gCol("School code");
+  const gAboriginalCol = gCol("Aboriginal students");
+  const gAdjustmentsCol = gCol("Adjustments");
+
+  if (gSchoolCol < 0 || gCategoryCol < 0) {
+    SpreadsheetApp.getUi().alert('Could not find the expected "School name" or "Category" columns on GROUPS(YES).');
+    return;
+  }
+
   const statusCols = grpEnsureStatusColumns_(responseSheet);
   const groupIndex = {};
 
   for (let r = 1; r < groupsData.length; r++) {
     const row = groupsData[r];
 
-    const schoolName = grpClean_(row[7]);        // H
-    const category = grpCleanCategory_(row[15]); // P
-    const schoolCode = String(row[26] || "").replace(/\.0$/, "").trim(); // AA
+    const schoolName = grpClean_(row[gSchoolCol]);
+    const category = grpCleanCategory_(row[gCategoryCol]);
+    const schoolCode = gSchoolCodeCol >= 0 ? String(row[gSchoolCodeCol] || "").replace(/\.0$/, "").trim() : "";
 
     if (schoolCode) grpAddIndex_(groupIndex, `${schoolCode}|${category}`, r + 1);
     if (schoolName) grpAddIndex_(groupIndex, `${schoolName}|${category}`, r + 1);
@@ -40,6 +56,8 @@ function ssSyncGroupAcceptances() {
   let matched = 0;
   let notMatched = 0;
   let duplicates = 0;
+  let aboriginalSkipped = 0;
+  let adjustmentsSkipped = 0;
 
   for (let r = 1; r < responseData.length; r++) {
     const row = responseData[r];
@@ -95,11 +113,29 @@ function ssSyncGroupAcceptances() {
     }
 
     const targetRow = matches[0];
+    const targetRowValues = groupsData[targetRow - 1];
 
     groupsSheet.getRange(targetRow, 1).setValue(totalStudents); // A
     groupsSheet.getRange(targetRow, 2).setValue(boys);          // B
-    groupsSheet.getRange(targetRow, grpColumn_("CI")).setValue(aboriginal);
-    groupsSheet.getRange(targetRow, grpColumn_("CJ")).setValue(adjustments);
+
+    // "Aboriginal students" / "Adjustments" are staff-curated free-text
+    // columns (e.g. "Zero", "nil.", "na") -- only fill them in if currently
+    // blank, so a re-sync never overwrites a value staff already reviewed.
+    if (gAboriginalCol >= 0) {
+      if (!String(targetRowValues[gAboriginalCol] || "").trim()) {
+        groupsSheet.getRange(targetRow, gAboriginalCol + 1).setValue(aboriginal);
+      } else {
+        aboriginalSkipped++;
+      }
+    }
+
+    if (gAdjustmentsCol >= 0) {
+      if (!String(targetRowValues[gAdjustmentsCol] || "").trim()) {
+        groupsSheet.getRange(targetRow, gAdjustmentsCol + 1).setValue(adjustments);
+      } else {
+        adjustmentsSkipped++;
+      }
+    }
 
     grpMarkRow_(
       responseSheet,
@@ -114,7 +150,10 @@ function ssSyncGroupAcceptances() {
     matched++;
   }
 
-  ss.toast(`${matched} matched | ${notMatched} not found | ${duplicates} duplicates`);
+  ss.toast(
+    `${matched} matched | ${notMatched} not found | ${duplicates} duplicates | ` +
+    `${aboriginalSkipped} Aboriginal-students values kept as-is | ${adjustmentsSkipped} Adjustments values kept as-is`
+  );
 }
 
 /*************************************************************
@@ -293,12 +332,3 @@ function grpClean_(value) {
     .replace(/\s+/g, " ");
 }
 
-function grpColumn_(letter) {
-  let col = 0;
-
-  for (let i = 0; i < letter.length; i++) {
-    col = col * 26 + letter.charCodeAt(i) - 64;
-  }
-
-  return col;
-}
