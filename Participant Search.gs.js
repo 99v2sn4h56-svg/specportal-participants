@@ -26,25 +26,6 @@ function openParticipantSearchSidebar() {
 }
 
 /*************************************************************
- MANUAL REFRESH
-*************************************************************/
-
-function refreshParticipantSearchIndex() {
-  clearParticipantSearchCache_();
-  HeadshotAssetService.invalidate("participant");
-
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const records = buildParticipantRecords_(ss);
-
-  putParticipantRecordsCache_(records);
-  setupParticipantSearchSheet_();
-
-  SpreadsheetApp.getUi().alert(
-    `Participant Search refreshed.\n\n${records.length} searchable records loaded.`
-  );
-}
-
-/*************************************************************
  SEARCH
 *************************************************************/
 

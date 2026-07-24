@@ -17,7 +17,3 @@ function mobileSearch(query) {
   return searchParticipantsForTiles(filters);
 }
 
-function mobileOpenRecord(record) {
-  writeSelectedParticipant(record);
-  return true;
-}

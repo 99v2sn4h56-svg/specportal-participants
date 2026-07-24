@@ -4,14 +4,6 @@
  * Business logic lives here; ImportCentre.html is only the UI layer.
  */
 
-function openIndividualAcceptanceImportCentre() {
-  openImportCentre_("individual");
-}
-
-function openGroupAcceptanceImportCentre() {
-  openImportCentre_("group");
-}
-
 function openAcceptanceImportCentre() {
   openImportCentre_("auto");
 }
