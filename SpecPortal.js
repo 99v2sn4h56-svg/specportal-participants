@@ -58,11 +58,6 @@ function doPost(e) {
   }
 }
 
-function portalListFormDefinitions() {
-  requirePortalCapability_("Operations.View");
-  return FormResponseService.listDefinitions();
-}
-
 function portalGetFormsWorkspaceData(formId) {
   return PerformanceTelemetryService.measureJourney("forms-loading", () => {
     requirePortalCapability_("Operations.View");
@@ -115,16 +110,6 @@ function portalExecuteCommunicationCommand(commandName, input) {
   return CommunicationService.execute(String(commandName || ""), input || {});
 }
 
-function portalGetCommunicationProviderStatus() {
-  requirePortalCapability_("Communications.View");
-  return CommunicationService.getProviderStatus();
-}
-
-function portalGetShowRunData() {
-  requirePortalCapability_("Operations.View");
-  return ShowRunService.getData();
-}
-
 function openSpecPortalOnOpen_() {
   openSpecPortalHome();
 }
@@ -152,40 +137,6 @@ function portalGetAuthorizationModel() {
     sources: SourceRegistryService.getForUser(user),
     adminMode: !!user.isAdmin
   };
-}
-
-function portalGetPlatformRegistry() {
-  requirePortalCapability_("Administration.View");
-  const user = UserContextService.getCurrent();
-  return {
-    entities: Object.keys(EntityModelService.TYPES).map(key => EntityModelService.TYPES[key]),
-    relationships: RelationshipService.getModel(),
-    sources: SourceRegistryService.getForUser(user),
-    capabilities: AuthorizationService.getModel(),
-    generatedAt: new Date().toISOString()
-  };
-}
-
-function portalGetStableIdMigrationReport() {
-  requirePortalCapability_("Operations.Admin");
-  return StableIdMigrationService.dryRun();
-}
-
-function portalGetWorkflowArchitecture() {
-  requirePortalCapability_("Operations.View");
-  return WorkflowService.getArchitecture();
-}
-
-function portalDryRunWorkflow(workflowId, inputs) {
-  return WorkflowService.execute(workflowId, inputs || {}, { dryRun: true, trigger: { type: "Manual" } });
-}
-
-function portalExecuteWorkflow(workflowId, inputs) {
-  return WorkflowService.execute(workflowId, inputs || {}, { trigger: { type: "Manual" } });
-}
-
-function portalGetOperationsConsole() {
-  return OperationsConsoleService.getData();
 }
 
 function portalGetProductionExceptions() {
@@ -269,21 +220,6 @@ function portalUpdateMyStaffProfile(profile) {
   return StaffProfileService.updateMyProfile(profile || {});
 }
 
-function portalPublishPlatformEvent(eventType, payload) {
-  requirePortalCapability_("Workflow.Admin");
-  return WorkflowService.publishEvent(eventType, payload || {}, { source: "SpecPortal gateway" });
-}
-
-function portalEnqueueJob(jobType, payload) {
-  requirePortalCapability_("Jobs.Run");
-  return JobService.enqueue(jobType, payload || {});
-}
-
-function portalRunNextJob() {
-  requirePortalCapability_("Workflow.Admin");
-  return JobService.runNext();
-}
-
 function requirePortalCapability_(capability) {
   return UserContextService.requireCapability(capability);
 }
@@ -341,10 +277,6 @@ function scopeValuesMatch_(candidates, allowed) {
     .some(value => allowed.includes(value));
 }
 
-function portalApplyStableIdMigration(request) {
-  return StableIdMigrationService.apply(request);
-}
-
 function portalPlatformSearch(query, options) {
   return PerformanceTelemetryService.measureJourney("participant-search", () => {
     const context = UserContextService.getCurrent();
@@ -396,16 +328,6 @@ function portalGetDashboardProjection() {
   return portalGetSpecCentralConfig();
 }
 
-function portalSearchParticipants(query) {
-  requirePortalCapability_("Participants.View");
-  return ParticipantService.search(query);
-}
-
-function portalGetAllParticipants() {
-  const user = requirePortalCapability_("Participants.View");
-  return ParticipantProjectionService.getList(user).participants;
-}
-
 function portalGetProductionOverview() {
   const user = requirePortalCapability_("Participants.View");
   const started = Date.now();
@@ -419,46 +341,8 @@ function portalGetProductionOverview() {
   }
 }
 
-function portalGetAllGroups() {
-  requirePortalCapability_("Participants.View");
-  return ParticipantService.getGroups();
-}
-
-function portalGetSchoolsMasterData() {
-  requirePortalCapability_("Participants.View");
-  return ParticipantService.getSchoolsMasterData();
-}
-
-function portalGetSchoolProfile(schoolName) {
-  requirePortalCapability_("Participants.View");
-  return ParticipantService.getSchoolProfile(schoolName);
-}
-
-function portalGetStudentPhotos() {
-  requirePortalCapability_("Participants.View");
-  return {};
-}
-
-function portalGetPhotoDiagnostics() {
-  requirePortalCapability_("Participants.View");
-  return ProfilePhotoService.getPhotoDiagnostics();
-}
-
 function portalResolveSecureImages(requests) {
   return HeadshotAssetService.resolveMany(requests || []);
-}
-
-function portalResolveHeadshots(requests) {
-  return HeadshotAssetService.resolveMany(requests || []);
-}
-
-function portalGetSecureImageHealth() {
-  return SecureImageService.getHealth();
-}
-
-function portalRefreshPhotoCache() {
-  requirePortalCapability_("Participants.View");
-  return ProfilePhotoService.refreshStudentPhotos();
 }
 
 /** Admin-only headshot operations. These never expose Drive file IDs. */
@@ -478,8 +362,8 @@ function adminRefreshHeadshotAssets() {
   return { refreshedAt: new Date().toISOString(), assets: refreshed };
 }
 
-// TEMPORARY -- inspecting the T-shirt order form's response sheet structure
-// before building a completion-status integration. Remove once resolved.
+// TEMPORARY -- verifying headshot resolution for a single entity while
+// diagnosing photo-loading issues. Remove once resolved.
 function adminTestHeadshotResolution(entityType, stableEntityId) {
   requirePortalCapability_("Administration.View");
   return HeadshotAssetService.testResolution(entityType, stableEntityId);
@@ -521,23 +405,8 @@ function portalGetGroupContactEmails() {
   return ParticipantProjectionService.getGroupContactEmails(requirePortalCapability_("Participants.View"));
 }
 
-function portalGetActiveAttendanceProjection(options) {
-  requirePortalCapability_("Attendance.View");
-  return AttendanceProjectionService.getActive(options || {});
-}
-
-function portalPeekActiveAttendanceProjection() {
-  requirePortalCapability_("Attendance.View");
-  return AttendanceProjectionService.peek();
-}
-
 function portalGetParticipantDetail(studentKey) {
   return PerformanceTelemetryService.measureJourney("participant-passport", () => ParticipantProjectionService.getDetail(studentKey, requirePortalCapability_("Participants.View")), { route: "participants", phase: "detail", projection: "participant-detail", records: 1 });
-}
-
-function portalWarmStartupProjections() {
-  requirePortalCapability_("Data.Sync");
-  return ParticipantProjectionService.warm();
 }
 
 /** Trigger-safe shared warming. Install only after an administrator opts in. */
@@ -550,29 +419,6 @@ function warmSpecCentralSharedProjections() {
 
 function warmSpecCentralActiveAttendanceProjection() {
   return AttendanceProjectionService.warm();
-}
-
-function installSpecCentralProjectionWarmer() {
-  requirePortalCapability_("Settings.Admin");
-  const handlers = ["warmSpecCentralSharedProjections", "warmSpecCentralActiveAttendanceProjection"];
-  ScriptApp.getProjectTriggers().filter(trigger => handlers.includes(trigger.getHandlerFunction())).forEach(trigger => ScriptApp.deleteTrigger(trigger));
-  ScriptApp.newTrigger("warmSpecCentralSharedProjections").timeBased().everyMinutes(10).create();
-  ScriptApp.newTrigger("warmSpecCentralActiveAttendanceProjection").timeBased().everyMinutes(5).create();
-  return { installed: true, schedules: [{ handler: "warmSpecCentralSharedProjections", intervalMinutes: 10 }, { handler: "warmSpecCentralActiveAttendanceProjection", intervalMinutes: 5 }] };
-}
-
-function portalAdvanceCacheEpoch(reason) {
-  requirePortalCapability_("Settings.Admin");
-  return PlatformControlService.advanceCacheEpoch(reason);
-}
-
-function toSafePortalParticipant_(participant, photoIndex) {
-  const value = Object.assign({}, participant || {});
-  const photoKey = String(value.name || [value.firstName, value.lastName].filter(Boolean).join(" ")).replace(/\.[^.]+$/, "").replace(/\s*-\s*Headshot$/i, "").replace(/[\-_]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-  value.hasPhoto = !!(value.photoId || value.photoUrl || (photoIndex && photoIndex[photoKey]));
-  delete value.photoId;
-  delete value.photoUrl;
-  return value;
 }
 
 function portalGetStaffProductionTeam() {
@@ -603,17 +449,6 @@ function portalGetStaffProfile(staffId) {
   const profile = result && result.profile || {};
   profile.formResponses = FormResponseService.responsesForProfile("staff", profile.id || profile.staffId || safeId, profile.email || "");
   return result;
-}
-
-function portalGetRehearsals() {
-  const user = requirePortalCapability_("Calendar.View");
-  return filterEventsForUser_(TimelineService.getTimelineEvents({ rehearsalsOnly: true }), user);
-}
-
-function portalRefreshRehearsals() {
-  const user = requirePortalCapability_("Calendar.View");
-  RehearsalService.refresh();
-  return filterEventsForUser_(TimelineService.getTimelineEvents({ rehearsalsOnly: true }), user);
 }
 
 function portalGetCalendarData() {
@@ -650,19 +485,6 @@ function portalExecuteEventWorkflowCommand(commandName, input) {
   return EventWorkflowService.execute(String(commandName || ""), input || {});
 }
 
-function portalGetCommandArchitecture() {
-  return CommandService.getArchitecture();
-}
-
-function portalExecuteCommand(request) {
-  return CommandService.execute(request || {});
-}
-
-function portalGetAttendanceConfig() {
-  requirePortalCapability_("Attendance.View");
-  return AttendanceService.getConfig();
-}
-
 function portalGetAttendanceSummary() {
   requirePortalCapability_("Attendance.View");
   return AttendanceService.getSummary();
@@ -676,16 +498,6 @@ function portalPeekAttendanceSummary() {
 function portalGetAttendanceEvents() {
   requirePortalCapability_("Attendance.View");
   return AttendanceService.getEvents();
-}
-
-function portalGetAttendanceEvent(identifier) {
-  requirePortalCapability_("Attendance.View");
-  return AttendanceService.getEvent(identifier);
-}
-
-function portalGetAttendanceHealth() {
-  requirePortalCapability_("Attendance.View");
-  return AttendanceService.getHealth();
 }
 
 function portalIssueAttendanceCheckinToken(sessionId) {
@@ -741,10 +553,6 @@ function portalGetParticipantSchedule(studentKey) {
   return participant
     ? { ok: true, generatedAt: new Date().toISOString(), data: RelationshipService.getRehearsalsForParticipant(key).map(toSafeEventReference_) }
     : { ok: true, generatedAt: new Date().toISOString(), data: [] };
-}
-
-function portalGetProjectManagementData() {
-  return ProjectManagementService.getDashboardData();
 }
 
 function portalGetOperationsData() {
