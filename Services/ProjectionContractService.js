@@ -19,7 +19,13 @@ const ProjectionContractService = (() => {
     "schools", "years", "disciplines", "categories", "items", "regions", "directorates",
     "statuses", "participationTypes", "segments", "schoolGroups", "genders"
   ]);
-  const GROUP_FIELDS = Object.freeze(["id", "groupId", "school", "segment", "item", "category", "groupName", "acceptedCount", "allocatedCount", "count", "acceptanceStatus", "teacherName", "secondTeacherName", "classroom"]);
+  // Kept in sync with ParticipantProjectionService.js's toGroupItem_ pick_()
+  // whitelist -- that function decides what actually goes INTO a group
+  // projection, this one validates it. teacherEmail/teacherMobile/
+  // teacherRole/notes were added to toGroupItem_ (Group Profile contact
+  // details + Notes section) without updating this separate list, which
+  // broke School Groups/By School in production (PROJECTION_VALIDATION_FAILED).
+  const GROUP_FIELDS = Object.freeze(["id", "groupId", "school", "segment", "item", "category", "groupName", "acceptedCount", "allocatedCount", "count", "acceptanceStatus", "teacherName", "teacherEmail", "teacherMobile", "teacherRole", "secondTeacherName", "classroom", "notes"]);
   const FORBIDDEN_LIST_FIELD = /(^|_)(email|phone|mobile|parent|teacher|medical|support|note|form|audit|photoid|photourl|drive|raw)(_|$)/i;
 
   function contract(name) {
