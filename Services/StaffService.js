@@ -11,24 +11,31 @@ const StaffService = (() => {
 
   function getAll() {
     if (staffCache_) return staffCache_;
-    staffCache_ = PerformanceCacheService.getOrLoad("staff:all", 5 * 60, () => {
-    try {
-      const sourceConfig = SourceRegistryService.getSourceConfig("staff");
-      const sheets = SpreadsheetApp.openById(sourceConfig.spreadsheetId).getSheets();
-      const directorySheet = findSheetByNames_(sheets, ["staff list", "staff production team"]);
-      const accessSheet = findSheetByNames_(sheets, ["speccentral", "seccentral"]);
-      const fallback = !directorySheet ? findStaffSource_(sheets) : null;
-      const directory = directorySheet ? readStaffSheet_(directorySheet, "Staff List") : readStaffRows_(fallback && fallback.values || [], fallback && fallback.headerRowIndex || 0, "Staff source");
-      const access = accessSheet && accessSheet !== directorySheet ? readStaffSheet_(accessSheet, "SpecCentral") : [];
-      const allocations = readEventAllocations_(findSheetByNames_(sheets, ["staff event allocation"]));
-      staffCache_ = mergeStaffCollections_(directory, access, allocations)
-        .filter(record => record.staffId || record.email || record.name);
-      return staffCache_;
-    } catch (err) {
-      Logger.log("StaffService.getAll failed: " + (err && err.message ? err.message : err));
-      return [];
-    }
-    });
+    // Same stale-while-revalidate pattern settled on for participants this
+    // session: a short freshness window but a much longer hard-expiry retain
+    // window, since refresh() already explicitly invalidates this key on any
+    // real staff-data change -- so a long safety-net TTL doesn't risk
+    // serving very stale data, it just avoids a guaranteed cold rebuild
+    // (three sequential sheet reads) for whoever's request happens to land
+    // right after the old short TTL lapsed.
+    const loader = () => {
+      try {
+        const sourceConfig = SourceRegistryService.getSourceConfig("staff");
+        const sheets = SpreadsheetApp.openById(sourceConfig.spreadsheetId).getSheets();
+        const directorySheet = findSheetByNames_(sheets, ["staff list", "staff production team"]);
+        const accessSheet = findSheetByNames_(sheets, ["speccentral", "seccentral"]);
+        const fallback = !directorySheet ? findStaffSource_(sheets) : null;
+        const directory = directorySheet ? readStaffSheet_(directorySheet, "Staff List") : readStaffRows_(fallback && fallback.values || [], fallback && fallback.headerRowIndex || 0, "Staff source");
+        const access = accessSheet && accessSheet !== directorySheet ? readStaffSheet_(accessSheet, "SpecCentral") : [];
+        const allocations = readEventAllocations_(findSheetByNames_(sheets, ["staff event allocation"]));
+        return mergeStaffCollections_(directory, access, allocations)
+          .filter(record => record.staffId || record.email || record.name);
+      } catch (err) {
+        Logger.log("StaffService.getAll failed: " + (err && err.message ? err.message : err));
+        return [];
+      }
+    };
+    staffCache_ = PerformanceCacheService.getOrLoadStaleWhileRevalidate("staff:all", 5 * 60, 3 * 60 * 60, loader).value;
     return staffCache_;
   }
 
@@ -132,7 +139,7 @@ const StaffService = (() => {
   }
 
   function readStaffSheet_(sheet, sourceName) {
-    const values = sheet.getDataRange().getDisplayValues();
+    const values = sheet.getDataRange().getValues();
     return readStaffRows_(values, findHeaderRow_(values), sourceName);
   }
 
@@ -211,7 +218,7 @@ const StaffService = (() => {
   function readEventAllocations_(sheet) {
     const result = {};
     if (!sheet) return result;
-    const values = sheet.getDataRange().getDisplayValues();
+    const values = sheet.getDataRange().getValues();
     if (!values.length) return result;
     const header = findHeaderRow_(values), indexes = buildAllocationIndexes_(values[header]);
     values.slice(header + 1).forEach(row => {
@@ -377,7 +384,26 @@ const StaffService = (() => {
 
   function getCell_(row, index) {
     if (index < 0) return "";
-    return String(row[index] || "").trim();
+    return stringifyStaffCell_(row[index]);
+  }
+
+  // getValues() (unlike getDisplayValues()) returns raw typed cells -- a
+  // Date-typed cell would otherwise stringify to its full JS toString()
+  // dump (e.g. "Wed Jan 15 2026 00:00:00 GMT+1100 ..."). Reconstructs the
+  // kind of display text getDisplayValues() used to give directly, for the
+  // date/time columns readEventAllocations_ reads. Sheets represents a
+  // time-only cell as a Date on its epoch (30 Dec 1899); that's the
+  // heuristic used to tell "time" apart from "date"/"datetime" below.
+  function stringifyStaffCell_(value) {
+    if (value === null || value === undefined || value === "") return "";
+    if (Object.prototype.toString.call(value) === "[object Date]") {
+      const timeZone = Session.getScriptTimeZone();
+      const isEpochDate = value.getFullYear() === 1899;
+      const hasTimeComponent = value.getHours() || value.getMinutes() || value.getSeconds();
+      if (isEpochDate) return hasTimeComponent ? Utilities.formatDate(value, timeZone, "h:mm a") : "";
+      return Utilities.formatDate(value, timeZone, hasTimeComponent ? "d/MM/yyyy h:mm a" : "d/MM/yyyy");
+    }
+    return String(value).trim();
   }
 
   function splitList_(value) { return String(value || "").split(/[,;\n]+/).map(item => item.trim()).filter(Boolean); }

@@ -51,7 +51,10 @@ const ProductionExceptionService = (() => {
       if (!(event.staff || []).length) rows.push(issue_("Timeline", "No staff allocation", id, event.title, "Medium", "Assign responsible staff in Timeline."));
       const hasSelections = [].concat(event.categories || [], event.schoolGroups || [], event.studentGroups || [], event.individualStudents || []).some(Boolean);
       if (hasSelections) {
-        const impact = safe_(() => RelationshipService.getAffectedParticipantsWithReasons(event.id), { participants: [], unresolvedSelections: [] });
+        // Passing the event object (not event.id) skips RelationshipService's
+        // internal re-lookup, which would otherwise re-scan the entire
+        // events array to relocate an event this loop already has in hand.
+        const impact = safe_(() => RelationshipService.getAffectedParticipantsWithReasons(event), { participants: [], unresolvedSelections: [] });
         (impact.unresolvedSelections || []).forEach(message => rows.push(issue_("Timeline", "Unresolved participant or group selection", id, event.title, "High", String(message || "Review the Timeline selection values."))));
       }
       if (event.eventType === "Rehearsal" && !sessions.some(session => attendanceMatches_(event, session))) rows.push(issue_("Attendance", "Scheduled rehearsal has no Attendance session", id, event.title, "High", "Create or sync the Attendance session using the existing Attendance workflow."));

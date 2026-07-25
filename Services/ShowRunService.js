@@ -20,7 +20,7 @@ const ShowRunService = (() => {
     const spreadsheet = SpreadsheetApp.openById(source.spreadsheetId);
     const sheet = spreadsheet.getSheets().find(item => Number(item.getSheetId()) === Number(source.sheetId));
     if (!sheet) throw new Error(`Show Run sheet ${source.sheetId} was not found.`);
-    return parseValues(sheet.getDataRange().getDisplayValues(), Object.assign({}, source, { sheetName: sheet.getName() }));
+    return parseValues(sheet.getDataRange().getValues(), Object.assign({}, source, { sheetName: sheet.getName() }));
   }
 
   function parseValues(values, source) {
@@ -101,7 +101,23 @@ const ShowRunService = (() => {
   function indexHeaders_(headers) { const result = {}; headers.forEach((header, index) => { const key = normalise_(header); if (key && result[key] == null) result[key] = index; }); return result; }
   function find_(indexes, aliases) { for (let index = 0; index < aliases.length; index += 1) { const key = normalise_(aliases[index]); if (indexes[key] != null) return indexes[key]; } return -1; }
   function value_(row, indexes, aliases) { const index = find_(indexes, aliases); return index < 0 ? "" : cell_(row, index); }
-  function cell_(row, index) { return String(row && row[index] != null ? row[index] : "").trim(); }
+  // getValues() (unlike getDisplayValues()) returns raw typed cells --
+  // fields like "duration" or "key start" could be Date/time-formatted in
+  // the sheet, which would otherwise stringify to a full JS toString() dump
+  // instead of e.g. "3:45". Same defensive handling as StaffService.js /
+  // RehearsalService.js's equivalent conversions this session.
+  function cell_(row, index) {
+    if (!row || row[index] == null) return "";
+    const value = row[index];
+    if (Object.prototype.toString.call(value) === "[object Date]") {
+      const timeZone = Session.getScriptTimeZone();
+      const isEpochDate = value.getFullYear() === 1899;
+      const hasTimeComponent = value.getHours() || value.getMinutes() || value.getSeconds();
+      if (isEpochDate) return hasTimeComponent ? Utilities.formatDate(value, timeZone, "m:ss") : "";
+      return Utilities.formatDate(value, timeZone, hasTimeComponent ? "d/MM/yyyy h:mm a" : "d/MM/yyyy");
+    }
+    return String(value).trim();
+  }
   function normalise_(value) { return EntityModelService.normaliseKey(value); }
 
   return { getData, getItems, refresh, parseValues };

@@ -103,7 +103,7 @@ const RehearsalService = (() => {
     const ss = SpreadsheetApp.openById(source.spreadsheetId);
     const sheet = ss.getSheets().find(item => item.getSheetId() === Number(source.sheetId)) || ss.getSheetByName(source.sheetName);
     if (!sheet) throw new Error("Configured Timeline sheet was not found.");
-    const values = sheet.getDataRange().getDisplayValues();
+    const values = sheet.getDataRange().getValues();
 
     if (values.length < 2) {
       return [];
@@ -134,12 +134,29 @@ const RehearsalService = (() => {
     return 0;
   }
 
+  // getValues() (unlike getDisplayValues()) returns raw typed cells -- a
+  // Date-typed date/time cell would otherwise stringify to its full JS
+  // toString() dump. Reconstructs display text matching getDisplayValues()'s
+  // output closely enough for parseTimelineDate_'s existing string parser
+  // (day-first, e.g. "15/01/2026") and for direct display to users.
+  function stringifyTimelineCell_(value) {
+    if (value === null || value === undefined || value === "") return "";
+    if (Object.prototype.toString.call(value) === "[object Date]") {
+      const timeZone = Session.getScriptTimeZone();
+      const isEpochDate = value.getFullYear() === 1899;
+      const hasTimeComponent = value.getHours() || value.getMinutes() || value.getSeconds();
+      if (isEpochDate) return hasTimeComponent ? Utilities.formatDate(value, timeZone, "h:mm a") : "";
+      return Utilities.formatDate(value, timeZone, hasTimeComponent ? "d/MM/yyyy h:mm a" : "d/MM/yyyy");
+    }
+    return String(value).trim();
+  }
+
   function buildRehearsal_(headers, row, rowNumber) {
     const raw = {};
 
     headers.forEach((header, index) => {
       if (header) {
-        raw[header] = row[index] || "";
+        raw[header] = stringifyTimelineCell_(row[index]);
       }
     });
 

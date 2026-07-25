@@ -44,13 +44,23 @@ const RelationshipService = (() => {
       .filter(event => participantMatchesEvent(participant, event));
   }
 
-  function getAffectedParticipants(eventId) {
-    const event = findTimelineEvent_(eventId);
+  // Accepts either an eventId (looked up the usual way) or an already-in-hand
+  // event object -- callers iterating TimelineService.getTimelineEvents()
+  // themselves (e.g. ProductionExceptionService's per-event exception scan)
+  // otherwise forced a redundant full re-scan of the same events array, once
+  // per event, just to relocate an object they already had.
+  function resolveEvent_(eventOrId) {
+    if (eventOrId && typeof eventOrId === "object") return eventOrId;
+    return findTimelineEvent_(eventOrId);
+  }
+
+  function getAffectedParticipants(eventOrId) {
+    const event = resolveEvent_(eventOrId);
     return event ? ParticipantService.getAll().filter(participant => participantMatchesEvent(participant, event)) : [];
   }
 
-  function getAffectedParticipantsWithReasons(eventId) {
-    const event = findTimelineEvent_(eventId);
+  function getAffectedParticipantsWithReasons(eventOrId) {
+    const event = resolveEvent_(eventOrId);
     if (!event) return { participants: [], unresolvedSelections: [], matchSummary: {} };
     const all = ParticipantService.getAll();
     const selections = (event.individualStudents || []).map(EntityModelService.normaliseKey).filter(Boolean);

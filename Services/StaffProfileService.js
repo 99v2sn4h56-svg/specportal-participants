@@ -30,7 +30,11 @@ const StaffProfileService = (() => {
       ensureHeadings_(source);
       const indexes = indexes_(source.headers);
       const rowNumber = findOwnRow_(source, indexes.email, user.email);
-      const before = readEditable_(source.sheet, rowNumber, indexes);
+      // source.values already holds the whole sheet (loaded once in
+      // openSource_ above) -- reading these 5 "before" values via fresh
+      // sheet.getRange(...).getDisplayValue() calls was 5 avoidable API
+      // round trips for data already sitting in memory.
+      const before = readEditable_(source.values[rowNumber - 1], indexes);
       Object.keys(EDITABLE).forEach(field => {
         const next = field === "photo" && !input.photo ? before.photo : input[field];
         source.sheet.getRange(rowNumber, indexes[field] + 1).setValue(cellText_(next));
@@ -114,9 +118,9 @@ const StaffProfileService = (() => {
     return matches[0];
   }
 
-  function readEditable_(sheet, rowNumber, indexes) {
+  function readEditable_(row, indexes) {
     const result = {};
-    Object.keys(EDITABLE).forEach(field => { result[field] = String(sheet.getRange(rowNumber, indexes[field] + 1).getDisplayValue() || ""); });
+    Object.keys(EDITABLE).forEach(field => { result[field] = String((row && row[indexes[field]]) || ""); });
     return result;
   }
 

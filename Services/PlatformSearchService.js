@@ -10,8 +10,20 @@ const PlatformSearchService = (() => {
     const canViewCalendar = UserContextService.hasCapability("Calendar.View");
     const canViewAttendance = UserContextService.hasCapability("Attendance.View");
     const canViewStaff = UserContextService.hasCapability("Operations.View");
-    const participants = canViewParticipants ? filterParticipantsForUser_(PerformanceCacheService.getOrLoad("participants:all", 30 * 60, () => ParticipantService.getAll()), user) : [];
-    const groups = canViewParticipants ? filterGroupsForUser_(PerformanceCacheService.getOrLoad("participants:groups", 30 * 60, () => ParticipantService.getGroups()), user) : [];
+    // ParticipantService.getAll()/getGroups() already cache themselves
+    // (stale-while-revalidate, under these exact same "participants:all" /
+    // "participants:groups" keys). Wrapping them in a second, independent
+    // PerformanceCacheService.getOrLoad(...) call under the identical key
+    // string was a real bug, not just redundant work: both writers hash to
+    // the same physical cache slot, but store different shapes -- a plain
+    // array here vs. ParticipantService's SWR envelope object. Whichever
+    // format was already cached (almost always the SWR envelope, since
+    // ParticipantService's own callers run far more often) got returned
+    // as-is, so filterParticipantsForUser_/filterGroupsForUser_ below would
+    // call .filter() on a non-array envelope and throw. Calling these
+    // directly uses ParticipantService's own correct caching instead.
+    const participants = canViewParticipants ? filterParticipantsForUser_(ParticipantService.getAll(), user) : [];
+    const groups = canViewParticipants ? filterGroupsForUser_(ParticipantService.getGroups(), user) : [];
     const timeline = canViewCalendar ? filterEventsForUser_(TimelineService.getCalendarData().events || [], user) : [];
     participants.forEach(item => add_(results, text, "participant", item.id, item.name, [item.school, item.item, item.category, item.teacherName]));
     ParticipantService.getActiveSchoolsData(participants, groups)
