@@ -626,6 +626,10 @@
                 App.profileLine("Teacher mobile", App.formatPhoneNumber(group.teacherMobile)),
                 App.profileLine("Role at school", group.teacherRole)
               ]) +
+              // Same comma/semicolon/newline-splitting chip renderer already
+              // used for participant notes -- a comma-separated Notes cell
+              // on the spreadsheet becomes one chip per note here.
+              App.renderProfileSection("Notes", [App.renderParticipantNoteChips(group.notes)]) +
               App.renderProfileSection("Students", students.map(App.renderParticipantListItem)) +
             '</div>' +
           '</div>';
