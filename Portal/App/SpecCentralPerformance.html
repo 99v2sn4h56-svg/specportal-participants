@@ -135,6 +135,16 @@
           scroll: App.state.routeScroll || {}
         };
         try { sessionStorage.setItem("specCentralModuleStateV1", JSON.stringify(state)); } catch (err) {}
+        // Separate localStorage key (not bundled into the sessionStorage
+        // blob above) for App.init()'s bootstrap route fallback when
+        // location.hash comes back empty on a full page reload. SpecCentral
+        // runs inside Apps Script's sandboxed iframe, and sessionStorage set
+        // there did not survive a real browser refresh in testing --
+        // localStorage is origin-scoped rather than session-scoped, and this
+        // codebase already relies on it surviving reloads elsewhere (e.g.
+        // "specParticipantExplorerMode"), so it's the proven-reliable choice
+        // here specifically.
+        try { localStorage.setItem("specCentralLastRoute", App.routeForState(App.state.currentPage)); } catch (err) {}
       },
 
       queueModuleStatePersist: function () { clearTimeout(App.state.moduleStatePersistTimer); App.state.moduleStatePersistTimer = setTimeout(App.persistModuleState, 150); },
@@ -197,16 +207,31 @@
         if (App.state.preloadInFlight[module]) return App.state.preloadInFlight[module];
         var started = performance.now(), request;
         if (module === "participants") {
-          // Only warms the cheap, paginated first page here -- the complete
-          // unfiltered participant list is deliberately NOT preloaded on
-          // every session. ensurePortalDataLoaded() already fetches it
-          // lazily, in the background, the moment something that actually
-          // needs the full roster (search, cross-entity navigation) asks
-          // for it. Eagerly loading it here for every dashboard visit --
-          // including staff who never open Participants -- cost a ~250KB+
-          // background request nobody asked for.
+          // Warms the cheap paginated first page immediately (unchanged
+          // behaviour). Individuals now paginates/sorts/searches entirely
+          // client-side once the complete list is loaded (see
+          // renderParticipantExplorer), which is instant -- but only once
+          // that complete list has actually arrived. Previously that only
+          // happened lazily on first click into Participants, paying the
+          // full-list fetch cost right when the user was waiting on it.
+          // Kicking it off here too, still idle/background/best-effort,
+          // means it's usually already warm by the time someone clicks in.
+          // Fire-and-forget and NOT chained into the tracked `request`
+          // below -- module-preload telemetry still reflects just the
+          // cheap first-page fetch, not this larger background one.
           if (App.state.participantFirstPageReady || App.restorePriorityParticipantCache()) request = App.state.participantFirstPageData && App.state.participantFirstPageData.requestMeta && App.state.participantFirstPageData.requestMeta.isStale ? App.loadParticipantFirstPage(true, "preload-" + trigger, true) : Promise.resolve(App.state.participantFirstPageData);
           else request = App.loadParticipantFirstPage(false, "preload-" + trigger, false);
+          // App.services.request already dedupes concurrent calls for the
+          // same key ("portalData"), so no extra in-flight guard is needed
+          // here beyond checking it hasn't already completed.
+          if (!App.state.participantListComplete) App.loadPortalData(false).catch(function () {});
+          // loadPortalData() above does NOT include groups -- School Groups
+          // reads from App.state.groups, populated separately by
+          // loadParticipantGroups(). Same idle/background treatment so that
+          // tab is warm by the time someone clicks it too, not just
+          // Individuals. loadParticipantGroups() already guards against a
+          // duplicate in-flight/completed load internally.
+          if (!App.state.participantGroupsReady) App.loadParticipantGroups(false).catch(function () {});
         } else if (module === "attendance") {
           request = App.services.request("attendanceSummaryPreload", "portalPeekAttendanceSummary", { cacheMs: 60000, timeoutMs: 15000 }).then(function (result) { if (result && result.ok) App.setClientCacheEntry("attendanceSummary", result, 60000, "cache-only-preload"); return result; });
         } else request = Promise.resolve(null);

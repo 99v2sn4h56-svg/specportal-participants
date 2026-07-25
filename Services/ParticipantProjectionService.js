@@ -37,7 +37,14 @@ const ParticipantProjectionService = (() => {
       if (!snapshot) throw error;
       cached = { value: snapshot, meta: { cache: "durable-snapshot", cacheStatus: "durable-snapshot", durationMs: Date.now() - started, isStale: true, generatedAt: snapshot.generatedAt || "", expiresAt: "" } };
     }
-    if (cached.meta.cache !== "hit" || !readPageSnapshot_(logicalKey)) writePageSnapshot_(logicalKey, cached.value);
+    // writePageSnapshot_ -> PlatformStoreService.putLarge already reads and
+    // dedupes the whole snapshot collection internally (filters out any
+    // existing record with this id before writing the new one), so calling
+    // readPageSnapshot_ here first -- as a "does it already exist" gate --
+    // was a second full read of the same deliberately-uncached durable
+    // store for no benefit. Gating on the fast cache hit alone is enough:
+    // skip the snapshot write only when nothing changed.
+    if (cached.meta.cache !== "hit") writePageSnapshot_(logicalKey, cached.value);
     const response = withRequestMeta_(cached.value, cached.meta);
     PerformanceTelemetryService.record("participants.page.request", Date.now() - started, { cache: cached.meta.cache, records: (response.participants || []).length, payloadBytes: estimateBytes_(response), projection: "participant-list-page-v2", isStale: !!cached.meta.isStale });
     return response;
@@ -182,6 +189,17 @@ const ParticipantProjectionService = (() => {
   function warmShared() {
     const started = Date.now();
     // Canonical source cache is built once, then all shared projections reuse it.
+    // NOT passing {refresh:true} here (reverted -- see git history for the
+    // brief attempt). Forcing getAll()/getGroups() to rebuild on every
+    // ~10-minute warmer cycle, stacked on top of the dashboard/page1/filters
+    // refreshes this function already does, made real request latency
+    // dramatically WORSE (canonical-participants p95 hit 75s, dashboard
+    // rebuild hit 65s) -- all serialized through the one shared
+    // LockService.getScriptLock() every cache rebuild and every telemetry
+    // write both contend for. The actual fix for participants:all/groups
+    // hard-expiring is a much longer retain window (see PAGE_FRESH_SECONDS
+    // usage below and the *_RETAIN_SECONDS constants), not more frequent
+    // forced rebuilds.
     const canonical = ParticipantService.getPortalData();
     const dashboard = rebuildDashboardSnapshot({ refresh: true });
     const productionScope = { isAdmin: false, scope: { type: "production", values: [] }, capabilities: ["Participants.View"] };
@@ -230,14 +248,27 @@ const ParticipantProjectionService = (() => {
     // deliberately excludes from LIST_FIELDS. Only the resulting page slice is
     // ever sanitised through toListItem_ below -- the full match set (filtered)
     // never leaves this function.
+    // TEMPORARY timing breakdown -- pagination ("next page") is reported as
+    // slow. Each distinct page/filter/sort/search combination is its own
+    // cache key (see getPage's logicalKey), so navigating to a page number
+    // for the first time in a session always runs this function cold. These
+    // sub-timers, surfaced together by adminMeasureParticipantPageBuild(),
+    // show whether the cost is the sheet read, the filter/sort pass over the
+    // whole dataset, or headshot resolution. Remove once resolved.
+    const t0 = Date.now();
     const visibleRecords = filterParticipantsForUser_(ParticipantService.getAll(), actor);
+    const t1 = Date.now();
     const filtered = applyQuery_(visibleRecords, request);
+    const t2 = Date.now();
     const start = (request.page - 1) * request.pageSize;
     const pageRecords = filtered.slice(start, start + request.pageSize);
     // Never block the participant route on a full Drive folder scan. Explicit
     // photo references and a previously warmed index are enough for first paint.
     const headshots = HeadshotAssetService.getMetadataManyFast("participant", pageRecords);
+    const t3 = Date.now();
     const participants = pageRecords.map(item => toListItem_(item, headshots[String(item.studentKey || item.id || "")]));
+    const t4 = Date.now();
+    Logger.log("buildPage_ timing: getAll+scope=" + (t1 - t0) + "ms, filter+sort(" + visibleRecords.length + " rows)=" + (t2 - t1) + "ms, headshots(" + pageRecords.length + " records)=" + (t3 - t2) + "ms, mapToListItem=" + (t4 - t3) + "ms, total=" + (t4 - t0) + "ms");
     const response = {
       participants,
       pagination: { page: request.page, pageSize: request.pageSize, total: filtered.length, totalPages: Math.max(1, Math.ceil(filtered.length / request.pageSize)) },
@@ -300,7 +331,14 @@ const ParticipantProjectionService = (() => {
     }
     return value;
   }
-  function toGroupItem_(item) { return pick_(item, ["id", "groupId", "school", "segment", "item", "category", "groupName", "acceptedCount", "allocatedCount", "count", "acceptanceStatus", "teacherName", "secondTeacherName", "classroom"]); }
+  // teacherEmail/teacherMobile/teacherRole/notes: the main app's Group
+  // Profile (SpecCentralProfiles.html renderGroupProfile) already renders
+  // these fields, but they were silently blank there because this whitelist
+  // dropped them before reaching the browser -- only the "Open Spec Portal"
+  // sidebar had them, via its own separate raw-data re-merge in
+  // portalGetPortalData(). Adding them here fixes the main app directly
+  // instead of needing another workaround like that one.
+  function toGroupItem_(item) { return pick_(item, ["id", "groupId", "school", "segment", "item", "category", "groupName", "acceptedCount", "allocatedCount", "count", "acceptanceStatus", "teacherName", "teacherEmail", "teacherMobile", "teacherRole", "secondTeacherName", "classroom", "notes"]); }
   function toSchoolItem_(item) { return pick_(item, ["id", "schoolId", "code", "schoolName", "name", "directorate", "region"]); }
   // Uses the no-scan fast path deliberately: participant detail (name, parent
   // contacts, etc.) must never wait on a live Drive folder scan. The profile

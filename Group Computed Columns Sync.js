@@ -303,15 +303,26 @@ function syncGroupComputedColumns() {
 }
 
 /**
- * One-time setup -- installs a 5-minute recurring trigger for
- * syncGroupComputedColumns(), matching the participants cache TTL. Safe to
- * run again; clears any existing trigger for this handler first.
+ * One-time setup -- installs a recurring trigger for
+ * syncGroupComputedColumns(). Safe to run again; clears any existing
+ * trigger for this handler first.
+ *
+ * Originally every 5 minutes (matching the participants cache TTL), but
+ * that was too frequent: each run makes several large-range Sheets API
+ * calls (full getFormulas()/getValues() reads across GROUPS(YES) and
+ * Schools Master Dataset, plus up to 6 setValues() writes), and running
+ * that volume every 5 minutes coincided with real SpecCentral requests
+ * seeing multi-minute stalls (participants.dataset.request recorded a
+ * 256s max) that no timeout/lock-wait cap in our own code can explain --
+ * consistent with Google's own Sheets API rate-limiting throttling
+ * unrelated concurrent calls against the same spreadsheet. 30 minutes
+ * matches the already-safe Show Run sync cadence.
  */
 function installGroupComputedColumnsSyncTrigger() {
   const ui = SpreadsheetApp.getUi();
   ScriptApp.getProjectTriggers()
     .filter(trigger => trigger.getHandlerFunction() === "syncGroupComputedColumns")
     .forEach(trigger => ScriptApp.deleteTrigger(trigger));
-  ScriptApp.newTrigger("syncGroupComputedColumns").timeBased().everyMinutes(5).create();
-  ui.alert("Group Computed Columns auto-sync installed -- refreshes automatically every 5 minutes.");
+  ScriptApp.newTrigger("syncGroupComputedColumns").timeBased().everyMinutes(30).create();
+  ui.alert("Group Computed Columns auto-sync installed -- refreshes automatically every 30 minutes.");
 }

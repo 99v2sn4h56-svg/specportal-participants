@@ -101,12 +101,35 @@
           App.renderSchoolExplorerTable(schools);
           return;
         }
-        var pageQuery = App.participantExplorerPageQuery();
-        if (App.state.participantExplorerPageSignature !== pageQuery.signature) {
-          var pageResults = document.getElementById("participantResults"), pageStatus = document.getElementById("participantStatus");
-          if (pageStatus) pageStatus.textContent = "Loading matching participants…";
-          if (pageResults) pageResults.innerHTML = App.loadingState("Loading participant page");
-          App.loadParticipantExplorerPage(false).then(App.renderParticipantExplorer).catch(function (error) { if (pageResults) pageResults.innerHTML = App.emptyState("Participant data unavailable", App.getErrorMessage(error)); });
+        // culturalIdentity/loteNote/supportNeededNote/medicalNote/firstTimeNote
+        // match against notes/medical/cultural-identity fields
+        // ProjectionContractService deliberately never sends to the browser
+        // (see FORBIDDEN_LIST_FIELD) -- only these five still need a
+        // per-request round trip to filter server-side against the raw
+        // record. Every other field the explorer uses (name, school,
+        // category, item, year, status, etc.) is already in the
+        // browser-safe list projection, so once the complete list has
+        // loaded, paging/sorting/searching/filtering on those is pure
+        // client-side -- no server round trip per page, same as the
+        // Groups/Schools tabs (which is why those already feel instant).
+        var piiFilterKeys = ["culturalIdentity", "loteNote", "supportNeededNote", "medicalNote", "firstTimeNote"];
+        var activeFilters = App.state.participantExplorerFilters || {};
+        var needsServerFilter = piiFilterKeys.some(function (key) { return !!activeFilters[key]; });
+
+        if (needsServerFilter) {
+          var pageQuery = App.participantExplorerPageQuery();
+          if (App.state.participantExplorerPageSignature !== pageQuery.signature) {
+            var pageResults = document.getElementById("participantResults"), pageStatus = document.getElementById("participantStatus");
+            if (pageStatus) pageStatus.textContent = "Loading matching participants…";
+            if (pageResults) pageResults.innerHTML = App.loadingState("Loading participant page");
+            App.loadParticipantExplorerPage(false).then(App.renderParticipantExplorer).catch(function (error) { if (pageResults) pageResults.innerHTML = App.emptyState("Participant data unavailable", App.getErrorMessage(error)); });
+            return;
+          }
+        } else if (!App.state.participantListComplete) {
+          var listResults = document.getElementById("participantResults"), listStatus = document.getElementById("participantStatus");
+          if (listStatus) listStatus.textContent = "Loading participant database…";
+          if (listResults) listResults.innerHTML = App.loadingState("Loading participant database");
+          App.loadPortalData(false).then(App.renderParticipantExplorer).catch(function (error) { if (listResults) listResults.innerHTML = App.emptyState("Participant data unavailable", App.getErrorMessage(error)); });
           return;
         }
         var filtered = App.getFilteredParticipants();
@@ -401,7 +424,7 @@
 
     getParticipantColumns: function (includeHidden) { var columns = [["name", "Name"], ["school", "School"], ["category", "Category"], ["item", "Item"], ["year", "Yr"], ["region", "Region"], ["status", "Status"]]; return includeHidden ? columns : columns.filter(function (column) { return !(App.state.participantHiddenColumns || []).includes(column[0]); }); },
     participantCopyIcon_: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M2 6l10 7 10-7"></path></svg>',
-    participantOpenIcon_: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>',
+    participantOpenIcon_: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
     renderParticipantRowActions: function (copyOnclick, openOnclick) {
       return '<div class="participantRowActions">' +
         '<button class="participantIconButton" type="button" title="Copy emails" aria-label="Copy emails" onclick="' + copyOnclick + '">' + App.participantCopyIcon_ + '</button>' +
@@ -411,7 +434,12 @@
     renderParticipantTable: function (participants) {
       var el = document.getElementById("participantResults"), status = document.getElementById("participantStatus"), pagination = document.getElementById("participantPagination"); if (!el) return;
       var defaultSize = window.matchMedia && window.matchMedia("(max-width: 700px)").matches ? 20 : 50, size = App.state.participantExplorerPageSize || defaultSize, serverPage = App.state.participantExplorerPageData && App.state.participantExplorerPageSignature === App.participantExplorerPageQuery().signature && App.state.participantExplorerPageData.pagination, pages = serverPage ? Number(serverPage.totalPages || 1) : Math.max(1, Math.ceil(participants.length / size)), page = serverPage ? Number(serverPage.page || 1) : Math.min(App.state.participantExplorerPage || 1, pages), rows = serverPage ? participants : participants.slice((page - 1) * size, page * size), total = serverPage ? Number(serverPage.total || 0) : participants.length, columns = App.getParticipantColumns();
-      App.state.participantExplorerPage = page; App.state.participantExplorerPageSize = size; App.state.participantExplorerCurrentRows = rows;
+      // rowIndex in the onclick handlers below is a GLOBAL index (page-1)*size+index
+      // for client-side pagination (matching the pattern renderParticipantGroupTable
+      // already uses) -- currentRows must be the full filtered array, not just this
+      // page's slice, or "Open profile"/"Copy emails" silently resolve the wrong
+      // row (or nothing at all) on page 2+.
+      App.state.participantExplorerPage = page; App.state.participantExplorerPageSize = size; App.state.participantExplorerCurrentRows = participants;
       if (status) status.textContent = total + " matching participants · page " + page + " of " + pages;
       el.innerHTML = rows.length ? '<div class="participantTableWrap"><table class="participantExplorerTable"><thead><tr>' + columns.map(function (column) { var sort = App.state.participantExplorerSort || {}; return '<th class="participantColumn participantColumn-' + column[0] + '"><button type="button" onclick="App.sortParticipantExplorer(\'' + column[0] + '\')">' + App.escapeHtml(column[1]) + (sort.key === column[0] ? (sort.direction === "asc" ? " ↑" : " ↓") : "") + '</button></th>'; }).join("") + '<th class="participantColumn participantColumn-open">Actions</th></tr></thead><tbody>' + rows.map(function (participant, index) {
         var values = App.getParticipantExplorerValues(participant), rowIndex = serverPage ? index : (page - 1) * size + index;

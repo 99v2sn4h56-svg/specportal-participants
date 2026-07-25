@@ -88,7 +88,7 @@ ParticipantService.getSchoolsMasterSheet = function () {
 /**
  * Returns every participant as an array of objects.
  */
-ParticipantService.getAll = function () {
+ParticipantService.getAll = function (options) {
   const requestStarted = Date.now();
   const loadFromSheet_ = () => {
 
@@ -258,7 +258,7 @@ ParticipantService.getAll = function () {
     // burning ~10s polling first. This is the same fix already applied to
     // getDetail()/getGroups() projections; getAll() -- the single most
     // depended-on read in the whole app -- had never been migrated to it.
-    result = PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:all", 5 * 60, 30 * 60, () => loadWithEmptyGuard_("participants:all", loadFromSheet_));
+    result = PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:all", 5 * 60, 3 * 60 * 60, () => loadWithEmptyGuard_("participants:all", loadFromSheet_), options || {});
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     result = { value: loadFromSheet_(), meta: { cache: "busy-direct-fallback" } };
@@ -327,7 +327,7 @@ ParticipantService.search = function (query) {
 /**
  * Returns every group entry as an array of objects.
  */
-ParticipantService.getGroups = function () {
+ParticipantService.getGroups = function (options) {
   const loadFromSheet_ = () => {
   const sheet = this.getGroupsSheet();
   if (!sheet) return [];
@@ -377,6 +377,7 @@ ParticipantService.getGroups = function () {
   const principalFirstIndex = getIndex(["Principal's first name", "Principal first name"]);
   const principalLastIndex = getIndex(["Principal's surname", "Principal surname"]);
   const principalEmailIndex = getIndex(["Principal's email", "Principal email"]);
+  const notesIndex = getIndex(["Notes", "Additional comments"]);
 
   return values.slice(1)
     .filter(row => row.some(cell => cell !== "" && cell !== null))
@@ -412,12 +413,13 @@ ParticipantService.getGroups = function () {
       schoolEmail: row[schoolEmailIndex] || "",
       schoolPhone: row[schoolPhoneIndex] || "",
       principalName: [row[principalFirstIndex], row[principalLastIndex]].filter(Boolean).join(" "),
-      principalEmail: row[principalEmailIndex] || ""
+      principalEmail: row[principalEmailIndex] || "",
+      notes: row[notesIndex] || ""
     }));
   };
   try {
     // Same thundering-herd fix as getAll() above -- see that comment.
-    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:groups", 5 * 60, 30 * 60, () => loadWithEmptyGuard_("participants:groups", loadFromSheet_)).value;
+    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:groups", 5 * 60, 3 * 60 * 60, () => loadWithEmptyGuard_("participants:groups", loadFromSheet_), options || {}).value;
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     return loadFromSheet_();
@@ -427,7 +429,7 @@ ParticipantService.getGroups = function () {
 /**
  * Returns the schools master data used by Spec Portal.
  */
-ParticipantService.getSchoolsMasterData = function () {
+ParticipantService.getSchoolsMasterData = function (options) {
   const loadFromSheet_ = () => {
     const sheet = this.getSchoolsMasterSheet();
     if (!sheet) return [];
@@ -447,7 +449,7 @@ ParticipantService.getSchoolsMasterData = function () {
   };
   try {
     // Same thundering-herd fix as getAll() above -- see that comment.
-    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:schools", 5 * 60, 30 * 60, () => loadWithEmptyGuard_("participants:schools", loadFromSheet_)).value;
+    return PerformanceCacheService.getOrLoadStaleWhileRevalidate("participants:schools", 5 * 60, 3 * 60 * 60, () => loadWithEmptyGuard_("participants:schools", loadFromSheet_), options || {}).value;
   } catch (error) {
     if (!/CACHE_REBUILD_BUSY/.test(String(error && error.message || ""))) throw error;
     return loadFromSheet_();
@@ -674,9 +676,9 @@ ParticipantService.getSchoolProfile = function (schoolName) {
 /**
  * Returns all data needed to initialise Spec Portal in one server call.
  */
-ParticipantService.getPortalData = function () {
-  const participants = this.getAll();
-  const groups = this.getGroups();
+ParticipantService.getPortalData = function (options) {
+  const participants = this.getAll(options);
+  const groups = this.getGroups(options);
 
   return {
     participants,
