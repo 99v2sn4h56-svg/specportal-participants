@@ -1701,25 +1701,25 @@
     @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto!important; animation-duration:.01ms!important; transition-duration:.01ms!important; } }
 
     /* SC-UX-001 refined application shell and operations centre */
-    .appShell { min-height:100vh; grid-template-columns:280px minmax(0,1fr); transition:grid-template-columns .2s ease; }
+    .appShell { min-height:100vh; grid-template-columns:224px minmax(0,1fr); transition:grid-template-columns .2s ease; }
     .appSidebar { top:0; height:100vh; padding:14px; }
     .sidebarBrand { min-height:142px; display:grid; place-items:center; margin:0 0 8px; }
     .sidebarHome { display:grid; place-items:center; border:0; border-radius:20px; padding:4px; background:transparent; cursor:pointer; }
     .sidebarHome:hover { background:rgba(255,255,255,.07); transform:translateY(-1px); }
     .sidebarHome:focus-visible { outline:3px solid var(--yellow); outline-offset:3px; }
-    .sidebarLogo { width:240px; height:132px; object-fit:contain; filter:drop-shadow(0 7px 14px rgba(0,0,0,.22)); }
+    .sidebarLogo { width:192px; height:106px; object-fit:contain; filter:drop-shadow(0 7px 14px rgba(0,0,0,.22)); }
     .sidebarLogoFallback { display:none; width:52px; height:52px; place-items:center; border-radius:15px; color:var(--navy); background:var(--yellow); font-weight:900; }
     body.sidebarCollapsed .appShell { grid-template-columns:82px minmax(0,1fr); }
     body.sidebarCollapsed .appSidebar { display:block; padding:12px 9px; }
     .navSectionLabel { margin:17px 10px 7px; color:rgba(255,255,255,.48); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
-    .navItem { min-height:43px; margin-bottom:4px; padding:9px 10px; border-radius:11px; }
+    .navItem { min-height:43px; margin-bottom:4px; padding:9px 10px; border-radius:11px; font-size:14px; }
     .navItem::before { flex:0 0 27px; width:27px; height:27px; }
     .navItem span { overflow:hidden; text-overflow:ellipsis; }
     .navGroupToggle b { margin-left:auto; transition:transform .16s ease; }
     body.operationsNavCollapsed .navGroupToggle b { transform:rotate(-90deg); }
     .navChildren { display:grid; gap:2px; margin:2px 0 8px 38px; padding-left:9px; border-left:1px solid rgba(255,255,255,.16); }
     .navChildren[hidden] { display:none; }
-    .navChildren button { border:0; border-radius:9px; padding:8px 9px; color:rgba(255,255,255,.72); background:transparent; font-size:11px; text-align:left; }
+    .navChildren button { border:0; border-radius:9px; padding:8px 9px; color:rgba(255,255,255,.72); background:transparent; font-size:9px; text-align:left; }
     .navChildren button:hover:not(:disabled) { color:#fff; background:rgba(255,255,255,.12); }
     .navChildren button:disabled { cursor:not-allowed; opacity:.35; }
     body.sidebarCollapsed .navSectionLabel, body.sidebarCollapsed .navItem span, body.sidebarCollapsed .navGroupToggle b, body.sidebarCollapsed .navChildren { display:none; }
