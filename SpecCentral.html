@@ -49,6 +49,7 @@
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/FormBuilder').getContent(); ?>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/Pages/Communications').getContent(); ?>
 
+  <script>window.SPEC_CENTRAL_LAST_ROUTE = <?!= JSON.stringify(portalGetLastRoute()) ?>;</script>
   <?!= HtmlService.createHtmlOutputFromFile('Portal/App/SpecCentralBootstrap').getContent(); ?>
 </body>
 </html>

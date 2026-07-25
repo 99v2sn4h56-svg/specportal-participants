@@ -232,7 +232,24 @@
             App.renderBootstrapGate("Access unavailable", "Your account does not currently have access to the SpecCentral dashboard.");
             return;
           }
-          App.navigateRoute(location.hash || "#home", { replace: true, initial: true });
+          // location.hash is sometimes empty here even when the user was on a
+          // real route before reloading. Both sessionStorage and localStorage
+          // were tried as a client-side fallback and neither survived a real
+          // browser refresh in testing -- SpecCentral runs inside Apps
+          // Script's sandboxed iframe, which apparently doesn't preserve
+          // either across a genuine reload. window.SPEC_CENTRAL_LAST_ROUTE is
+          // rendered server-side (see SpecCentral.html + portalGetLastRoute
+          // in SpecPortal.js, backed by PropertiesService.getUserProperties)
+          // and is unaffected by that, so it's the reliable fallback source.
+          var bootstrapFallbackRoute = "#home";
+          try {
+            if (window.SPEC_CENTRAL_LAST_ROUTE) bootstrapFallbackRoute = window.SPEC_CENTRAL_LAST_ROUTE;
+            else {
+              var savedLastRoute = localStorage.getItem("specCentralLastRoute");
+              if (savedLastRoute) bootstrapFallbackRoute = savedLastRoute;
+            }
+          } catch (err) {}
+          App.navigateRoute(location.hash || bootstrapFallbackRoute, { replace: true, initial: true });
           App.loadConfig().finally(function () {
             if (App.state.currentPage === "dashboard") App.markDashboardUsable();
             App.prefetchLikelyData();
@@ -553,6 +570,13 @@
         if (page === "communications" && App.renderCommunicationsPage) App.renderCommunicationsPage();
         if (!options.fromBrowser || page !== requestedPage) App.updateBrowserRoute(!!options.replace || page !== requestedPage);
         App.persistModuleState();
+        // Fire-and-forget: keeps window.SPEC_CENTRAL_LAST_ROUTE (rendered
+        // server-side on the next page load) in sync with wherever the user
+        // actually navigates, once per page change rather than on every
+        // filter/search keystroke. No .catch() needed -- portalSaveLastRoute
+        // never throws, and a missed save just means the next reload falls
+        // back one step further, not an error the user would see.
+        App.services.request("saveLastRoute:" + Date.now(), "portalSaveLastRoute", { args: [App.routeForState(page)], timeoutMs: 8000 });
         App.restoreCurrentScrollPosition();
         App.maybeRevalidateCurrentPage();
         App.recordPerformance("route:" + page, routeStarted, { cachedPage: !activation.firstRender });
@@ -2343,7 +2367,7 @@
       renderOperationsTimeline: function (events) {
         var canEdit = App.canEditTimeline();
         var actions = '<button class="quickLink compact" type="button" onclick="App.navigate(\'calendar\')">Open calendar view</button>' + (canEdit ? '<button class="quickLink compact primaryAction" type="button" onclick="App.openTimelineEditor()">New event</button>' : "");
-        return '<div class="operationsWorkspaceHeader"><div><h4>Authoritative Timeline</h4><span>' + events.length + ' scheduled records · ' + (canEdit ? "Administrator editing enabled" : "Read only") + '</span></div><div class="toolbarActions">' + actions + '</div></div><div class="operationsFilterBar"><input id="operationsTimelineSearch" class="participantSearch" type="search" placeholder="Search event, venue, area, staff or assignment..." oninput="App.filterOperationsTimeline(this.value)"><select id="operationsTimelineType" class="filterSelect" onchange="App.filterOperationsTimeline()"><option value="">All classifications</option><option>Rehearsal</option><option>Operational Event</option></select></div><div id="operationsTimelineList" class="operationsEventGrid timelineManagementGrid">' + (events.length ? events.slice().sort(App.sortEvents).map(App.renderTimelineManagementCard).join("") : App.emptyState("Timeline is empty", "No Timeline events are currently visible.")) + '</div>';
+        return '<div class="operationsWorkspaceHeader"><div><h4>Authoritative Timeline</h4><span>' + events.length + ' scheduled records · ' + (canEdit ? "Administrator editing enabled" : "Read only") + '</span></div><div class="toolbarActions">' + actions + '</div></div><div class="operationsFilterBar"><input id="operationsTimelineSearch" class="participantSearch" type="search" placeholder="Search event, venue, area, staff or assignment..." oninput="App.queueOperationsTimelineFilter()"><select id="operationsTimelineType" class="filterSelect" onchange="App.filterOperationsTimeline()"><option value="">All classifications</option><option>Rehearsal</option><option>Operational Event</option></select></div><div id="operationsTimelineList" class="operationsEventGrid timelineManagementGrid">' + (events.length ? events.slice().sort(App.sortEvents).map(App.renderTimelineManagementCard).join("") : App.emptyState("Timeline is empty", "No Timeline events are currently visible.")) + '</div>';
       },
 
       renderTimelineManagementCard: function (event) {
@@ -2410,6 +2434,15 @@
 
       runTimelineMutation: function (serverFunction, command, message) {
         App.notify("Timeline editing is not enabled.");
+      },
+
+      // Debounced like queueParticipantExplorer/runUniversalSearch's callers
+      // elsewhere in the app -- filterOperationsTimeline() re-filters/sorts
+      // the whole Timeline list and rebuilds the card grid's innerHTML on
+      // every call, which was firing on every single keystroke.
+      queueOperationsTimelineFilter: function () {
+        clearTimeout(App.state.operationsTimelineFilterTimer);
+        App.state.operationsTimelineFilterTimer = setTimeout(function () { App.filterOperationsTimeline(); }, 150);
       },
 
       filterOperationsTimeline: function (query) {

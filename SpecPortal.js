@@ -58,6 +58,39 @@ function doPost(e) {
   }
 }
 
+/**
+ * Per-user "last route" memory, read directly into SpecCentral.html at
+ * render time (see the <script>window.SPEC_CENTRAL_LAST_ROUTE=...</script>
+ * line there) so App.init() can restore the user's last page on a real
+ * browser reload. Deliberately NOT going through requirePortalCapability_ or
+ * any other check that could throw -- this runs inline as part of the very
+ * first page render, before any client JS exists, so any exception here
+ * would break the whole page rather than just navigation. PropertiesService
+ * getUserProperties() is scoped to the calling user automatically, so no
+ * separate access check is meaningful here anyway. Client-side
+ * sessionStorage/localStorage were both tried first and did not survive a
+ * real reload of the sandboxed iframe SpecCentral runs in -- this
+ * server-side property is unaffected by that and is the reliable path.
+ */
+function portalGetLastRoute() {
+  try {
+    return String(PropertiesService.getUserProperties().getProperty("SC_LAST_ROUTE_V1") || "");
+  } catch (error) {
+    return "";
+  }
+}
+
+function portalSaveLastRoute(route) {
+  try {
+    const value = String(route || "").slice(0, 200);
+    if (/^#[A-Za-z0-9/_-]*$/.test(value)) PropertiesService.getUserProperties().setProperty("SC_LAST_ROUTE_V1", value);
+  } catch (error) {
+    // Best-effort only -- a failed route-memory write must never surface as
+    // a user-facing error or block navigation.
+  }
+  return { ok: true };
+}
+
 function portalGetFormsWorkspaceData(formId) {
   return PerformanceTelemetryService.measureJourney("forms-loading", () => {
     requirePortalCapability_("Operations.View");
@@ -369,6 +402,35 @@ function adminRefreshParticipantData() {
   ["participants:all", "participants:groups", "participants:schools"].forEach(PerformanceCacheService.remove);
   ParticipantProjectionService.invalidate(UserContextService.getCurrent());
   return { refreshedAt: new Date().toISOString() };
+}
+
+/**
+ * TEMPORARY diagnostic -- "next page" of Individuals is reported slow.
+ * Every distinct page/filter/sort/search combination is its own cache
+ * entry (see ParticipantProjectionService.getPage's logicalKey), so the
+ * FIRST visit to any given page number in a session is always a genuine
+ * cold rebuild -- exactly what forceRefresh:true reproduces here for page
+ * 2. buildPage_ itself now logs a getAll/filter+sort/headshots/map timing
+ * breakdown (see ParticipantProjectionService.js) that will appear in this
+ * same execution's log, right after the overall duration below. Remove
+ * once resolved.
+ */
+function adminMeasureParticipantPageBuild() {
+  requirePortalCapability_("Administration.View");
+  const user = UserContextService.getCurrent();
+  const query = { page: 2, pageSize: 50, search: "", filters: {}, sortKey: "name", sortDirection: "asc" };
+  const started = Date.now();
+  const result = ParticipantProjectionService.getPage(query, user, { refresh: true });
+  const durationMs = Date.now() - started;
+  const summary = {
+    generatedAt: new Date().toISOString(),
+    durationMs,
+    cache: result.requestMeta && result.requestMeta.cache,
+    participantsReturned: (result.participants || []).length,
+    pagination: result.pagination
+  };
+  Logger.log("adminMeasureParticipantPageBuild: " + JSON.stringify(summary, null, 2));
+  return summary;
 }
 
 /**
