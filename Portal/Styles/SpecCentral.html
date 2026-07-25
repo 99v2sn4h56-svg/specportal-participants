@@ -49,45 +49,8 @@
       text-transform: uppercase;
     }
 
-    .appShell {
-      min-height: calc(100vh - 94px);
-      display: grid;
-      grid-template-columns: 260px minmax(0, 1fr);
-    }
-
-    body.sidebarCollapsed .appShell {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    body.sidebarCollapsed .appSidebar {
-      display: none;
-    }
-
-    .appSidebar {
-      position: sticky;
-      top: 0;
-      height: calc(100vh - 94px);
-      padding: 18px;
-      background: linear-gradient(180deg, var(--navy), #163f75);
-      color: #fff;
-      overflow-y: auto;
-    }
-
     .sidebarSection {
       margin-bottom: 18px;
-    }
-
-    .navItem {
-      position: relative;
-      width: 100%;
-      border: 0;
-      border-radius: 14px;
-      padding: 12px 13px;
-      margin-bottom: 8px;
-      text-align: left;
-      color: rgba(255,255,255,.86);
-      background: transparent;
-      font-weight: 700;
     }
 
     .navItem.active,
@@ -103,20 +66,6 @@
 
     .appMain {
       min-width: 0;
-    }
-
-    .topBar {
-      position: sticky;
-      top: 0;
-      z-index: 3;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      padding: 18px 24px;
-      background: rgba(245, 248, 253, .88);
-      border-bottom: 1px solid rgba(228, 234, 243, .9);
-      backdrop-filter: blur(12px);
     }
 
     .pageTitle {
@@ -1392,12 +1341,6 @@
         linear-gradient(135deg, var(--blue), var(--sky));
     }
 
-    .scProfileHero.staff {
-      background:
-        radial-gradient(circle at 82% 8%, rgba(239,80,156,.32), transparent 34%),
-        linear-gradient(135deg, var(--blue), var(--magenta));
-    }
-
     .scProfileKicker {
       margin-bottom: 8px;
       font-size: 12px;
@@ -1639,8 +1582,6 @@
     :root { --focus-ring: 0 0 0 4px rgba(18,86,207,.16); --surface-hover:#f7f9fd; }
     button, .panel, .moduleCard, .dateItem, .resultCard { transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease; }
     button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-    .navItem { display:flex; align-items:center; gap:10px; }
-    .navItem::before { content:attr(data-icon); width:25px; height:25px; display:grid; place-items:center; border-radius:8px; background:rgba(255,255,255,.12); font-size:10px; font-weight:900; }
     .topBarActions { display:flex; align-items:center; gap:10px; width:min(520px,100%); justify-content:flex-end; }
     .commandTrigger { width:min(430px,100%); display:flex; align-items:center; justify-content:space-between; border:1px solid var(--border); border-radius:14px; padding:11px 14px; color:var(--muted); background:#fff; box-shadow:var(--softShadow); text-align:left; }
     .commandTrigger:hover { border-color:#9ab5e8; transform:translateY(-1px); }
@@ -1701,8 +1642,8 @@
     @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto!important; animation-duration:.01ms!important; transition-duration:.01ms!important; } }
 
     /* SC-UX-001 refined application shell and operations centre */
-    .appShell { min-height:100vh; grid-template-columns:224px minmax(0,1fr); transition:grid-template-columns .2s ease; }
-    .appSidebar { top:0; height:100vh; padding:14px; }
+    .appShell { min-height:100vh; display:grid; grid-template-columns:224px minmax(0,1fr); transition:grid-template-columns .2s ease; }
+    .appSidebar { position:sticky; top:0; height:100vh; padding:14px; background:linear-gradient(180deg,var(--navy),#163f75); color:#fff; overflow-y:auto; }
     .sidebarBrand { min-height:142px; display:grid; place-items:center; margin:0 0 8px; }
     .sidebarHome { display:grid; place-items:center; border:0; border-radius:20px; padding:4px; background:transparent; cursor:pointer; }
     .sidebarHome:hover { background:rgba(255,255,255,.07); transform:translateY(-1px); }
@@ -1712,8 +1653,8 @@
     body.sidebarCollapsed .appShell { grid-template-columns:82px minmax(0,1fr); }
     body.sidebarCollapsed .appSidebar { display:block; padding:12px 9px; }
     .navSectionLabel { margin:17px 10px 7px; color:rgba(255,255,255,.48); font-size:9px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
-    .navItem { min-height:43px; margin-bottom:4px; padding:9px 10px; border-radius:11px; font-size:14px; }
-    .navItem::before { flex:0 0 27px; width:27px; height:27px; }
+    .navItem { position:relative; width:100%; border:0; text-align:left; color:rgba(255,255,255,.86); background:transparent; font-weight:700; display:flex; align-items:center; gap:10px; min-height:43px; margin-bottom:4px; padding:9px 10px; border-radius:11px; font-size:14px; }
+    .navItem::before { content:attr(data-icon); display:grid; place-items:center; border-radius:8px; background:rgba(255,255,255,.12); font-size:10px; font-weight:900; flex:0 0 27px; width:27px; height:27px; }
     .navItem span { overflow:hidden; text-overflow:ellipsis; }
     .navGroupToggle b { margin-left:auto; transition:transform .16s ease; }
     body.operationsNavCollapsed .navGroupToggle b { transform:rotate(-90deg); }
@@ -1737,8 +1678,7 @@
     .dashboardCountdown { display:grid; grid-template-columns:auto auto; align-content:center; align-items:baseline; justify-content:center; gap:2px 9px; min-height:74px; padding:10px 14px; border:1px solid rgba(255,255,255,.28); border-radius:16px; background:rgba(255,255,255,.12); text-align:center; }
     .dashboardCountdown strong { color:#fff; font-size:38px; line-height:1; }
     .dashboardCountdown span { color:#fff; font-size:13px; font-weight:900; }
-    .dashboardCountdown small { margin-top:5px; color:rgba(255,255,255,.78); font-size:9px; font-weight:700; }
-    .dashboardCountdown small { grid-column:1/-1; margin-top:0; }
+    .dashboardCountdown small { margin-top:0; color:rgba(255,255,255,.78); font-size:9px; font-weight:700; grid-column:1/-1; }
     .briefingList { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin:20px 0 0; padding:0; list-style:none; }
     .briefingList li { display:flex; align-items:baseline; gap:8px; padding:11px 13px; border:1px solid rgba(255,255,255,.24); border-radius:14px; background:rgba(255,255,255,.12); }
     .briefingList strong { font-size:22px; line-height:1; }
@@ -1938,7 +1878,7 @@
     .workspaceMemoryCard span { color:var(--blue); font-size:8px; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
     .workspaceMemoryCard strong, .workspaceMemoryCard small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .workspaceMemoryCard small { color:var(--muted); }
-    .topBar { display:block; padding:0; }
+    .topBar { position:sticky; top:0; z-index:3; align-items:center; justify-content:space-between; gap:16px; background:rgba(245,248,253,.88); border-bottom:1px solid rgba(228,234,243,.9); backdrop-filter:blur(12px); display:block; padding:0; }
     .workspaceTopRow { display:grid; grid-template-columns:64px minmax(360px,680px) minmax(320px,1fr); align-items:center; justify-content:space-between; gap:22px; min-height:72px; padding:10px 24px; }
     .topBarBrand { display:flex; align-items:center; gap:13px; }
     .topBarSidebarToggle { width:42px; height:42px; display:grid; place-items:center; flex:0 0 42px; border:1px solid var(--border); border-radius:13px; color:var(--navy); background:#fff; box-shadow:var(--softShadow); transition:transform .2s ease,background .2s ease; }
